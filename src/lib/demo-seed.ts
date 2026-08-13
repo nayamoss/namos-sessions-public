@@ -1,0 +1,2 @@
+import type { ScheduledItem } from "@/lib/agenda-conflicts";
+export function demoAgendaSeed(): ScheduledItem[] { return [{ id: "session-a", roomId: "main-hall", trackId: "keynote", speakerIds: ["speaker-ada"], startTime: 1760018400000, endTime: 1760022000000 }, { id: "session-b", roomId: "main-hall", trackId: "engineering", speakerIds: ["speaker-grace"], startTime: 1760020200000, endTime: 1760023800000 }, { id: "session-c", roomId: "studio", trackId: "engineering", speakerIds: ["speaker-ada"], startTime: 1760020200000, endTime: 1760023800000 }]; }

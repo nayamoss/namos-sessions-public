@@ -1,0 +1,272 @@
+import { v } from "convex/values";
+import { mutation, query, assertEventAccess } from "./functions";
+import { assertOrganizerOrOwnsSpeaker } from "./speakers";
+
+const agendaItemFields = {
+  eventId: v.id("events"),
+  submissionId: v.optional(v.id("submissions")),
+  title: v.string(),
+  roomId: v.id("rooms"),
+  trackId: v.optional(v.id("tracks")),
+  startTime: v.number(),
+  endTime: v.number(),
+  speakerIds: v.array(v.id("speakers")),
+  videoUrl: v.optional(v.string()),
+  locationDetails: v.optional(v.string()),
+  isPublished: v.boolean(),
+};
+
+type ConflictReason = "room_overlap" | "speaker_overlap" | "speaker_unavailable" | "track_overlap";
+
+function rangesOverlap(
+  first: { startTime: number; endTime: number },
+  second: { startTime: number; endTime: number },
+) {
+  return first.startTime < second.endTime && second.startTime < first.endTime;
+}
+
+export function conflictRows<T extends { _id: unknown; roomId: unknown; trackId?: unknown; speakerIds: unknown[]; startTime: number; endTime: number }>(items: T[]) {
+  const conflicts: { itemA: T["_id"]; itemB: T["_id"]; reason: ConflictReason }[] = [];
+
+  for (let index = 0; index < items.length; index += 1) {
+    for (let nextIndex = index + 1; nextIndex < items.length; nextIndex += 1) {
+      const first = items[index];
+      const second = items[nextIndex];
+      if (!rangesOverlap(first, second)) continue;
+
+      if (first.roomId === second.roomId) {
+        conflicts.push({
+          itemA: first._id,
+          itemB: second._id,
+          reason: "room_overlap",
+        });
+      }
+      if (
+        first.speakerIds.some((speakerId) =>
+          second.speakerIds.includes(speakerId),
+        )
+      ) {
+        conflicts.push({
+          itemA: first._id,
+          itemB: second._id,
+          reason: "speaker_overlap",
+        });
+      }
+      if (first.trackId !== undefined && first.trackId === second.trackId) {
+        conflicts.push({ itemA: first._id, itemB: second._id, reason: "track_overlap" });
+      }
+    }
+  }
+
+  return conflicts;
+}
+
+function unavailableSlotKeys(
+  startTime: number,
+  endTime: number,
+  timeZone: string,
+) {
+  const values = new Set<string>();
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "numeric",
+    hourCycle: "h23",
+  });
+  for (let cursor = startTime; cursor < endTime; cursor += 30 * 60_000) {
+    const parts = formatter.formatToParts(cursor);
+    const number = (type: string) =>
+      Number(parts.find((part) => part.type === type)?.value);
+    const hour = number("hour");
+    const date = Date.UTC(number("year"), number("month") - 1, number("day"));
+    values.add(`${date}:hour:${hour}`);
+    values.add(`${date}:part:${hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening"}`);
+  }
+  return values;
+}
+
+export const list = query({
+  args: { eventId: v.id("events") },
+  handler: async (ctx, args) => {
+    await assertEventAccess(ctx, args.eventId);
+    return ctx.db
+      .query("agenda_items")
+      .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+      .collect();
+  },
+});
+
+// The speaker portal uses a deliberately narrow projection so speakers can only read their
+// own published sessions without requiring organizer access to the entire event schedule.
+export const listForSpeaker = query({
+  args: { eventId: v.id("events"), speakerId: v.id("speakers") },
+  handler: async (ctx, args) => {
+    await assertOrganizerOrOwnsSpeaker(ctx, args.eventId, args.speakerId);
+    const [items, rooms, tracks] = await Promise.all([
+      ctx.db.query("agenda_items").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("rooms").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("tracks").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+    ]);
+    const roomNames = new Map(rooms.map((room) => [room._id, room.name]));
+    const trackNames = new Map(tracks.map((track) => [track._id, track.name]));
+    return items
+      .filter((item) => item.isPublished && item.speakerIds.includes(args.speakerId))
+      .map((item) => ({
+        ...item,
+        roomName: roomNames.get(item.roomId) ?? "Room to be announced",
+        trackName: item.trackId ? trackNames.get(item.trackId) : undefined,
+      }));
+  },
+});
+
+export const get = query({
+  args: { eventId: v.id("events"), id: v.id("agenda_items") },
+  handler: async (ctx, args) => {
+    await assertEventAccess(ctx, args.eventId);
+    const item = await ctx.db.get(args.id);
+    return item?.eventId === args.eventId ? item : null;
+  },
+});
+
+export const detectConflicts = query({
+  args: { eventId: v.id("events") },
+  handler: async (ctx, args) => {
+    await assertEventAccess(ctx, args.eventId);
+    const [items, event, availability] = await Promise.all([
+      ctx.db
+        .query("agenda_items")
+        .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+        .collect(),
+      ctx.db.get(args.eventId),
+      ctx.db
+        .query("speaker_availability")
+        .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+        .collect(),
+    ]);
+    const conflicts = conflictRows(items) as {
+      itemA: (typeof items)[number]["_id"];
+      itemB: (typeof items)[number]["_id"];
+      reason: ConflictReason;
+      speakerId?: (typeof items)[number]["speakerIds"][number];
+    }[];
+    if (!event) return conflicts;
+    for (const item of items) {
+      const blocked = unavailableSlotKeys(
+        item.startTime,
+        item.endTime,
+        event.timezone,
+      );
+      for (const speakerId of item.speakerIds) {
+        const record = availability.find(
+          (entry) => entry.speakerId === speakerId,
+        );
+        if (
+          record?.unavailable.some((entry) =>
+            entry.hour !== undefined
+              ? blocked.has(`${entry.date}:hour:${entry.hour}`)
+              : entry.part !== undefined && blocked.has(`${entry.date}:part:${entry.part}`),
+          )
+        )
+          conflicts.push({
+            itemA: item._id,
+            itemB: item._id,
+            reason: "speaker_unavailable",
+            speakerId,
+          });
+      }
+    }
+    return conflicts;
+  },
+});
+
+export const save = mutation({
+  args: { id: v.optional(v.id("agenda_items")), ...agendaItemFields },
+  handler: async (ctx, args) => {
+    await assertEventAccess(ctx, args.eventId);
+    if (args.startTime >= args.endTime)
+      throw new Error("An agenda item must end after it starts.");
+    if (!args.title.trim()) throw new Error("An agenda item needs a title.");
+
+    const room = await ctx.db.get(args.roomId);
+    if (!room || room.eventId !== args.eventId)
+      throw new Error("Select a room belonging to this event.");
+
+    if (args.trackId) {
+      const track = await ctx.db.get(args.trackId);
+      if (!track || track.eventId !== args.eventId)
+        throw new Error("Select a track belonging to this event.");
+    }
+
+    const speakerIds = [...new Set(args.speakerIds)];
+    const speakers = await Promise.all(
+      speakerIds.map((speakerId) => ctx.db.get(speakerId)),
+    );
+    if (
+      speakers.some((speaker) => !speaker || speaker.eventId !== args.eventId)
+    ) {
+      throw new Error("Every scheduled speaker must belong to this event.");
+    }
+
+    const now = Date.now();
+    const { id, ...fields } = args;
+    const normalizedFields = {
+      ...fields,
+      speakerIds,
+      title: fields.title.trim(),
+      videoUrl: fields.videoUrl?.trim() || undefined,
+      locationDetails: fields.locationDetails?.trim() || undefined,
+    };
+    if (id) {
+      const existing = await ctx.db.get(id);
+      if (!existing || existing.eventId !== args.eventId) throw new Error("Agenda item not found for this event.");
+      const calendarChanged = existing.title !== normalizedFields.title
+        || existing.roomId !== normalizedFields.roomId
+        || existing.startTime !== normalizedFields.startTime
+        || existing.endTime !== normalizedFields.endTime
+        || existing.videoUrl !== normalizedFields.videoUrl
+        || existing.locationDetails !== normalizedFields.locationDetails;
+      await ctx.db.patch(id, {
+        ...normalizedFields,
+        calendarUid: existing.calendarUid ?? `sessionboard-${id}`,
+        calendarSequence: calendarChanged ? (existing.calendarSequence ?? 0) + 1 : (existing.calendarSequence ?? 0),
+        updatedAt: now,
+      });
+      return id;
+    }
+    const newId = await ctx.db.insert("agenda_items", { ...normalizedFields, calendarSequence: 0, createdAt: now, updatedAt: now });
+    await ctx.db.patch(newId, { calendarUid: `sessionboard-${newId}` });
+    return newId;
+  },
+});
+
+export const remove = mutation({
+  args: { eventId: v.id("events"), id: v.id("agenda_items") },
+  handler: async (ctx, args) => {
+    await assertEventAccess(ctx, args.eventId);
+    const item = await ctx.db.get(args.id);
+    if (!item || item.eventId !== args.eventId)
+      throw new Error("Agenda item not found for this event.");
+    await ctx.db.delete(args.id);
+  },
+});
+
+export const publishSchedule = mutation({
+  args: { eventId: v.id("events") },
+  handler: async (ctx, args) => {
+    await assertEventAccess(ctx, args.eventId);
+    const items = await ctx.db
+      .query("agenda_items")
+      .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+      .collect();
+    const now = Date.now();
+    await Promise.all(
+      items
+        .filter((item) => !item.isPublished)
+        .map((item) =>
+          ctx.db.patch(item._id, { isPublished: true, updatedAt: now }),
+        ),
+    );
+  },
+});

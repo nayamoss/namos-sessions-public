@@ -1,0 +1,904 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import {
+  ChevronDown,
+  ChevronUp,
+  Download,
+  MoreHorizontal,
+  Plus,
+  Search,
+} from "lucide-react";
+import { AppLayout } from "@/components/AppLayout";
+import { useCurrentEvent } from "@/components/EventContext";
+import { ContentToolbar } from "@/components/shared/ContentToolbar";
+import { DataGrid, type DataGridColumn } from "@/components/shared/DataGrid";
+import { DetailPane } from "@/components/shared/DetailPane";
+import { StatusTabs } from "@/components/shared/StatusTabs";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { useRepo } from "@/data/repo";
+import type {
+  Comm,
+  CommPreview,
+  CommSendRecipientResult,
+  Evaluation,
+  Event,
+  FieldDefinition,
+  Speaker,
+  Submission,
+  SubmissionForm,
+  SubmissionStatus,
+  Tag,
+  TagId,
+} from "@/data/types";
+import { filterSubmissionsByStatus } from "@/lib/submission-filters";
+import { weightedTotal } from "@/lib/evaluation-score";
+import {
+  ABSTRACT_GRID_PREFERENCES_KEY,
+  defaultAbstractGridPreferences,
+  moveAbstractGridColumn,
+  normalizeAbstractGridPreferences,
+  toggleAbstractGridColumn,
+  type AbstractGridPreferences,
+} from "@/lib/abstract-grid-preferences";
+
+type AbstractRow = {
+  id: string;
+  status: SubmissionStatus;
+  source: string;
+  title: string;
+  description: string;
+  speaker: string;
+  track: string;
+  tagIds: TagId[];
+  tags: Tag[];
+  email?: string;
+  speakerId?: string;
+  rating?: number;
+  notified: boolean;
+};
+
+type SubmissionDocument = Submission & {
+  title?: string;
+  speakerId?: string;
+  answers?: Record<string, unknown>;
+};
+
+type CommDocument = Comm & { submissionId?: string; status?: string };
+type AbstractDraft = {
+  formId: string;
+  title: string;
+  description: string;
+  status: SubmissionStatus;
+};
+
+const abstractColumnKeys = [
+  "status",
+  "source",
+  "title",
+  "description",
+  "speaker",
+  "track",
+  "tags",
+  "rating",
+  "notified",
+  "decision",
+] as const;
+const abstractColumnLabels: Record<
+  (typeof abstractColumnKeys)[number],
+  string
+> = {
+  status: "Status",
+  source: "Source",
+  title: "Title",
+  description: "Description",
+  speaker: "Speaker",
+  track: "Track",
+  tags: "Tags",
+  rating: "Rating",
+  notified: "Notified",
+  decision: "Decision email",
+};
+
+const statusLabels: Record<SubmissionStatus, string> = {
+  draft: "Draft",
+  pending: "Pending",
+  accept_queue: "Accept Queue",
+  accepted: "Accepted",
+  decline_queue: "Decline Queue",
+  declined: "Declined",
+  withdrawn: "Withdrawn",
+};
+const editableStatuses: SubmissionStatus[] = [
+  "accepted",
+  "accept_queue",
+  "pending",
+  "decline_queue",
+  "declined",
+];
+
+// Dynamic-form answers aren't flat: `fieldValues` is keyed by opaque generated field ids, with
+// a parallel `fieldLabels` map from id to the human label an organizer configured (e.g. "Abstract").
+// A submission's `answers` object only has a handful of real flat keys (email, from the account
+// step) — everything else must be resolved id -> label -> value. Try flat keys first (cheap, and
+// covers the account-step fields), then fall back to a case-insensitive label match.
+export function valueFromAnswers(
+  answers: Record<string, unknown> | undefined,
+  keys: string[],
+  preferredFieldIds: string[] = [],
+) {
+  for (const key of keys) {
+    const value = answers?.[key];
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  const fieldLabels = answers?.fieldLabels;
+  const fieldValues = answers?.fieldValues;
+  if (isRecord(fieldLabels) && isRecord(fieldValues)) {
+    // New public submissions persist the exact opaque field id that the CFP renderer used for
+    // its abstract body. Form labels are organizer copy, never an application contract.
+    for (const fieldId of preferredFieldIds) {
+      const value = fieldValues[fieldId];
+      if (typeof value === "string" && value.trim()) return value;
+    }
+    const wanted = new Set(keys.map((key) => key.toLowerCase()));
+    for (const [fieldId, label] of Object.entries(fieldLabels)) {
+      if (typeof label !== "string" || !wanted.has(label.toLowerCase()))
+        continue;
+      const value = fieldValues[fieldId];
+      if (typeof value === "string" && value.trim()) return value;
+    }
+  }
+  return "";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isValidEmail(value: string | undefined) {
+  return Boolean(value && /^\S+@\S+\.\S+$/.test(value));
+}
+
+function legacyAbstractFieldIds(
+  form: SubmissionForm | undefined,
+  fieldsById: Map<string, FieldDefinition>,
+) {
+  const ids =
+    form?.sections?.find((section) => section.key === "abstract")
+      ?.fieldIds ?? [];
+  // Existing submissions predate abstractFieldId. Their form section is stable, and rich-text
+  // fields are the intended abstract body regardless of the organizer's visible label.
+  return ids.filter((id) => fieldsById.get(id)?.type === "wysiwyg");
+}
+
+export function createRows({
+  submissions,
+  speakers,
+  evaluations,
+  forms,
+  fields,
+  comms,
+  tags,
+}: {
+  submissions: SubmissionDocument[];
+  speakers: Speaker[];
+  evaluations: Evaluation[];
+  forms: SubmissionForm[];
+  fields: FieldDefinition[];
+  comms: CommDocument[];
+  tags: Tag[];
+}) {
+  const speakersById = new Map(
+    speakers.map((speaker) => [speaker.id, speaker.name]),
+  );
+  const formNames = new Map(forms.map((form) => [form.id, form.name]));
+  const formsById = new Map(forms.map((form) => [form.id, form]));
+  const fieldsById = new Map(fields.map((field) => [field.id, field]));
+  const tagsById = new Map(tags.map((tag) => [tag.id, tag]));
+  const scoresBySubmission = new Map<string, number[]>();
+  evaluations.forEach((evaluation) => {
+    // A scorecard review (issue #56) records no single score — its rating is the weighted total
+    // over the criteria it was scored against. A legacy review still contributes its `score`.
+    const total =
+      weightedTotal(
+        evaluation.criteria,
+        evaluation.criteriaScores,
+        evaluation.scoringScaleMax ?? 5,
+      ) ?? evaluation.score;
+    if (typeof total !== "number") return;
+    const scores = scoresBySubmission.get(evaluation.submissionId) ?? [];
+    scores.push(total);
+    scoresBySubmission.set(evaluation.submissionId, scores);
+  });
+  const notifiedSubmissionIds = new Set(
+    comms
+      .filter((comm) => comm.status === "sent")
+      .map((comm) => comm.submissionId)
+      .filter((id): id is string => Boolean(id)),
+  );
+
+  return submissions.map((submission) => {
+    const answers = submission.answers;
+    const storedAbstractFieldId = typeof answers?.abstractFieldId === "string" ? answers.abstractFieldId : undefined;
+    const abstractFieldIds = storedAbstractFieldId ? [storedAbstractFieldId] : legacyAbstractFieldIds(formsById.get(submission.formId), fieldsById);
+    const scores = scoresBySubmission.get(submission.id) ?? [];
+    const speakerId = submission.speakerId ?? submission.speakerIds[0];
+    return {
+      id: submission.id,
+      status: submission.status,
+      source: formNames.get(submission.formId) ?? "Submission form",
+      title:
+        submission.title?.trim() ||
+        valueFromAnswers(answers, ["title", "sessionTitle"]) ||
+        "Untitled submission",
+      description:
+        valueFromAnswers(
+          answers,
+          ["abstract", "description", "summary"],
+          abstractFieldIds,
+        ) || "—",
+      speaker: speakerId
+        ? (speakersById.get(speakerId as never) ?? "Unknown speaker")
+        : "Unassigned",
+      speakerId,
+      email: valueFromAnswers(answers, ["email", "contactEmail"]),
+      track: valueFromAnswers(answers, ["track", "topic"]) || "—",
+      tagIds: submission.tagIds,
+      tags: submission.tagIds.flatMap((tagId) => tagsById.get(tagId) ?? []),
+      rating: scores.length
+        ? scores.reduce((total, score) => total + score, 0) / scores.length
+        : undefined,
+      notified: notifiedSubmissionIds.has(submission.id),
+    } satisfies AbstractRow;
+  });
+}
+
+function downloadCsv(rows: AbstractRow[]) {
+  const quote = (value: string | number | boolean | undefined) =>
+    `"${String(value ?? "").replaceAll('"', '""')}"`;
+  const csv = [
+    [
+      "Status",
+      "Source",
+      "Title",
+      "Description",
+      "Speaker",
+      "Track",
+      "Tags",
+      "Rating",
+      "Notified",
+    ],
+    ...rows.map((row) => [
+      statusLabels[row.status],
+      row.source,
+      row.title,
+      row.description,
+      row.speaker,
+      row.track,
+      row.tags.map((tag) => tag.name).join("; "),
+      row.rating ?? "",
+      row.notified ? "Yes" : "No",
+    ]),
+  ]
+    .map((row) => row.map(quote).join(","))
+    .join("\n");
+  const url = URL.createObjectURL(
+    new Blob([csv], { type: "text/csv;charset=utf-8" }),
+  );
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = "abstracts.csv";
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function TagsCell({
+  row,
+  library,
+  saving,
+  onChange,
+}: {
+  row: AbstractRow;
+  library: Tag[];
+  saving: boolean;
+  onChange: (tagIds: TagId[]) => void;
+}) {
+  const selected = new Set(row.tagIds);
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-auto min-h-8 max-w-full justify-start px-2 py-1"
+          disabled={saving}
+          onClick={(click) => click.stopPropagation()}
+        >
+          <span className="truncate">
+            {row.tags.length
+              ? row.tags.map((tag) => tag.name).join(", ")
+              : "Add tags"}
+          </span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="w-64 space-y-2 p-3"
+        onClick={(click) => click.stopPropagation()}
+      >
+        <div>
+          <p className="text-sm font-medium">Assign tags</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Changes save immediately for this submission.
+          </p>
+        </div>
+        <div className="max-h-64 space-y-1 overflow-y-auto">
+          {library.map((tag) => (
+            <label
+              key={tag.id}
+              className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted"
+            >
+              <Checkbox
+                checked={selected.has(tag.id)}
+                disabled={saving}
+                onCheckedChange={(checked) =>
+                  onChange(
+                    checked === true
+                      ? [...row.tagIds, tag.id]
+                      : row.tagIds.filter((tagId) => tagId !== tag.id),
+                  )
+                }
+              />
+              <span
+                className="h-2.5 w-2.5 shrink-0 rounded-full bg-muted-foreground"
+                style={tag.color ? { backgroundColor: tag.color } : undefined}
+                aria-hidden="true"
+              />
+              <span className="truncate">{tag.name}</span>
+            </label>
+          ))}
+          {!library.length && (
+            <p className="px-2 py-3 text-sm text-muted-foreground">
+              Add tags in Settings → Library first.
+            </p>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function loadColumnPreferences() {
+  const fallback = defaultAbstractGridPreferences(abstractColumnKeys);
+  try {
+    return normalizeAbstractGridPreferences(
+      JSON.parse(
+        window.localStorage.getItem(ABSTRACT_GRID_PREFERENCES_KEY) ?? "null",
+      ),
+      abstractColumnKeys,
+    );
+  } catch {
+    return fallback;
+  }
+}
+
+function ColumnsControl({
+  preferences,
+  onChange,
+}: {
+  preferences: AbstractGridPreferences;
+  onChange: (next: AbstractGridPreferences) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const matches = preferences.order.filter((key) =>
+    abstractColumnLabels[key as keyof typeof abstractColumnLabels]
+      .toLowerCase()
+      .includes(query.trim().toLowerCase()),
+  );
+  const visibleCount = preferences.order.length - preferences.hidden.length;
+  const update = (next: AbstractGridPreferences) =>
+    onChange(normalizeAbstractGridPreferences(next, abstractColumnKeys));
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          aria-label="Choose abstract columns"
+        >
+          Columns{" "}
+          <span className="text-muted-foreground">
+            {visibleCount}/{abstractColumnKeys.length}
+          </span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 space-y-3 p-3">
+        <div>
+          <p className="text-sm font-medium">Columns</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Choose visible columns and set their order for this browser.
+          </p>
+        </div>
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Label className="sr-only" htmlFor="abstract-columns-search">
+            Search columns
+          </Label>
+          <Input
+            id="abstract-columns-search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            className="h-9 pl-9"
+            placeholder="Search columns"
+          />
+        </div>
+        <div
+          className="max-h-72 space-y-1 overflow-y-auto"
+          aria-label="Selected columns"
+        >
+          {matches.map((key) => {
+            const position = preferences.order.indexOf(key);
+            const visible = !preferences.hidden.includes(key);
+            return (
+              <div
+                key={key}
+                className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted"
+              >
+                <Checkbox
+                  id={`abstract-column-${key}`}
+                  checked={visible}
+                  onCheckedChange={() =>
+                    update(toggleAbstractGridColumn(preferences, key))
+                  }
+                  aria-label={`Show ${abstractColumnLabels[key as keyof typeof abstractColumnLabels]}`}
+                />
+                <Label
+                  htmlFor={`abstract-column-${key}`}
+                  className="min-w-0 flex-1 cursor-pointer text-sm"
+                >
+                  {
+                    abstractColumnLabels[
+                      key as keyof typeof abstractColumnLabels
+                    ]
+                  }
+                </Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() =>
+                    update(moveAbstractGridColumn(preferences, key, -1))
+                  }
+                  disabled={position === 0}
+                  aria-label={`Move ${abstractColumnLabels[key as keyof typeof abstractColumnLabels]} earlier`}
+                >
+                  <ChevronUp />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() =>
+                    update(moveAbstractGridColumn(preferences, key, 1))
+                  }
+                  disabled={position === preferences.order.length - 1}
+                  aria-label={`Move ${abstractColumnLabels[key as keyof typeof abstractColumnLabels]} later`}
+                >
+                  <ChevronDown />
+                </Button>
+              </div>
+            );
+          })}
+          {!matches.length && (
+            <p className="px-2 py-3 text-sm text-muted-foreground">
+              No columns match that search.
+            </p>
+          )}
+        </div>
+        <div className="flex items-center justify-between pt-3">
+          <span className="text-xs text-muted-foreground">
+            {visibleCount} visible
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setQuery("");
+              update(defaultAbstractGridPreferences(abstractColumnKeys));
+            }}
+          >
+            Reset to default
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+export default function Abstracts() {
+  const repo = useRepo();
+  const { event: activeEvent } = useCurrentEvent();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [event, setEvent] = useState<Event>();
+  const [rows, setRows] = useState<AbstractRow[]>([]);
+  const [forms, setForms] = useState<SubmissionForm[]>([]);
+  const [tagLibrary, setTagLibrary] = useState<Tag[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string>();
+  const [status, setStatus] = useState<SubmissionStatus | "all">("all");
+  const [query, setQuery] = useState("");
+  const [sendingId, setSendingId] = useState<string>();
+  const [preparingId, setPreparingId] = useState<string>();
+  const [decisionPreview, setDecisionPreview] = useState<CommPreview>();
+  const [decisionResults, setDecisionResults] = useState<CommSendRecipientResult[]>([]);
+  const [taggingId, setTaggingId] = useState<string>();
+  const [decisionFeedback, setDecisionFeedback] = useState<string>();
+  const [addOpen, setAddOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState<string>();
+  const [draft, setDraft] = useState<AbstractDraft>({
+    formId: "",
+    title: "",
+    description: "",
+    status: "pending",
+  });
+  const [columnPreferences, setColumnPreferences] =
+    useState<AbstractGridPreferences>(loadColumnPreferences);
+
+  const updateColumnPreferences = useCallback(
+    (next: AbstractGridPreferences) => {
+      const normalized = normalizeAbstractGridPreferences(
+        next,
+        abstractColumnKeys,
+      );
+      setColumnPreferences(normalized);
+      try {
+        window.localStorage.setItem(
+          ABSTRACT_GRID_PREFERENCES_KEY,
+          JSON.stringify(normalized),
+        );
+      } catch {
+        /* Browser storage can be disabled; keep the in-memory choice. */
+      }
+    },
+    [],
+  );
+
+  const loadRows = useCallback(async () => {
+    setLoading(true);
+    setLoadError(undefined);
+    try {
+      const event = activeEvent;
+      if (!event) {
+        setEvent(undefined);
+        setRows([]);
+        setForms([]);
+        setTagLibrary([]);
+        return;
+      }
+      setEvent(event);
+      const scope = { eventId: event.id };
+      const [submissions, speakers, evaluations, forms, fields, comms, tags] =
+        await Promise.all([
+          repo.submissions.list(scope),
+          repo.speakers.list(scope),
+          repo.evaluations.list(scope),
+          repo.forms.list(scope),
+          repo.forms.listFields(),
+          repo.comms.list(scope),
+          repo.tags.list(scope),
+        ]);
+      setForms(forms);
+      setTagLibrary(tags);
+      setRows(
+        createRows({
+          submissions: submissions as SubmissionDocument[],
+          speakers,
+          evaluations,
+          forms,
+          fields,
+          comms: comms as CommDocument[],
+          tags,
+        }),
+      );
+    } catch (error) {
+      setRows([]);
+      setLoadError(
+        error instanceof Error ? error.message : "Could not load abstracts.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [activeEvent, repo]);
+
+  useEffect(() => {
+    void loadRows();
+  }, [loadRows]);
+
+  const visibleRows = useMemo(
+    () =>
+      filterSubmissionsByStatus(rows, status).filter((row) =>
+        `${row.title} ${row.speaker} ${row.description} ${row.tags.map((tag) => tag.name).join(" ")}`
+          .toLowerCase()
+          .includes(query.toLowerCase()),
+      ),
+    [query, rows, status],
+  );
+  const selectedRow = useMemo(
+    () => rows.find((row) => row.id === searchParams.get("selected")),
+    [rows, searchParams],
+  );
+  const updateStatus = async (id: string, nextStatus: SubmissionStatus) => {
+    const current = rows.find((row) => row.id === id);
+    if (!current || current.status === nextStatus) return;
+    setRows((previous) =>
+      previous.map((row) =>
+        row.id === id
+          ? {
+              ...row,
+              status: nextStatus,
+              notified: nextStatus === "accepted" ? row.notified : false,
+            }
+          : row,
+      ),
+    );
+    try {
+      if (nextStatus === "accepted" || nextStatus === "declined")
+        await repo.submissions.decide(id, nextStatus);
+      else await repo.submissions.setStatus(id, nextStatus);
+    } catch (error) {
+      setRows((previous) =>
+        previous.map((row) => (row.id === id ? current : row)),
+      );
+      setLoadError(
+        error instanceof Error
+          ? error.message
+          : "Could not update the abstract status.",
+      );
+    }
+  };
+  const updateTags = async (id: string, tagIds: TagId[]) => {
+    if (!event || taggingId) return;
+    const current = rows.find((row) => row.id === id);
+    if (!current) return;
+    const uniqueTagIds = [...new Set(tagIds)];
+    const nextTags = tagLibrary.filter((tag) => uniqueTagIds.includes(tag.id));
+    setTaggingId(id);
+    setLoadError(undefined);
+    setRows((previous) =>
+      previous.map((row) =>
+        row.id === id ? { ...row, tagIds: uniqueTagIds, tags: nextTags } : row,
+      ),
+    );
+    try {
+      await repo.submissions.setTags({
+        eventId: event.id,
+        submissionId: id as Submission["id"],
+        tagIds: uniqueTagIds,
+      });
+    } catch (error) {
+      setRows((previous) =>
+        previous.map((row) => (row.id === id ? current : row)),
+      );
+      setLoadError(
+        error instanceof Error
+          ? error.message
+          : "Could not update the abstract tags.",
+      );
+    } finally {
+      setTaggingId(undefined);
+    }
+  };
+  const prepareDecision = async (row: AbstractRow) => {
+    if (!event || (row.status !== "accepted" && row.status !== "declined")) return;
+    setPreparingId(row.id); setDecisionFeedback(undefined); setDecisionPreview(undefined); setDecisionResults([]);
+    const next = new URLSearchParams(searchParams); next.set("selected", row.id); setSearchParams(next);
+    try { setDecisionPreview(await repo.comms.previewDecision({ eventId: event.id, submissionId: row.id })); }
+    catch (cause) { setDecisionFeedback(cause instanceof Error ? `Could not prepare decision: ${cause.message}` : "Could not prepare the decision email."); }
+    finally { setPreparingId(undefined); }
+  };
+  const sendDecision = async (row: AbstractRow, recipientSpeakerIds?: string[]) => {
+    if (!event || !decisionPreview) return;
+    setSendingId(row.id); setDecisionFeedback(undefined);
+    try {
+      const outcome = await repo.comms.sendDecision({ eventId: event.id, submissionId: row.id, recipientSpeakerIds });
+      setDecisionResults((current) => recipientSpeakerIds?.length ? [...current.filter((result) => !recipientSpeakerIds.includes(result.speakerId ?? "")), ...outcome.results] : outcome.results);
+      if (outcome.sent) setRows(current => current.map(item => item.id === row.id ? { ...item, notified: true } : item));
+      if (outcome.status === "sent") { setDecisionFeedback(`Decision sent to ${outcome.sent} recipient${outcome.sent === 1 ? "" : "s"}.`); return; }
+      const firstProblem = outcome.results.find(result => result.error || result.reason);
+      setDecisionFeedback(`Decision delivery finished with ${outcome.failed} failed and ${outcome.skipped} skipped.${firstProblem ? ` ${firstProblem.error ?? firstProblem.reason}` : ""}`);
+    } catch (cause) { setDecisionFeedback(cause instanceof Error ? `Decision email failed: ${cause.message}` : "Decision email could not be sent."); }
+    finally { setSendingId(undefined); }
+  };
+  const openAddAbstract = () => {
+    setAddError(undefined);
+    setDraft({
+      formId: forms[0]?.id ?? "",
+      title: "",
+      description: "",
+      status: "pending",
+    });
+    setAddOpen(true);
+  };
+  const createAbstract = async () => {
+    if (!event) return;
+    if (!draft.formId) {
+      setAddError("Create or select an abstract submission form first.");
+      return;
+    }
+    if (!draft.title.trim()) {
+      setAddError("A title is required.");
+      return;
+    }
+    setAdding(true);
+    setAddError(undefined);
+    try {
+      await repo.submissions.createAdmin({
+        eventId: event.id,
+        formId: draft.formId,
+        title: draft.title,
+        description: draft.description || undefined,
+        status: draft.status,
+      });
+      setAddOpen(false);
+      await loadRows();
+    } catch (error) {
+      setAddError(
+        error instanceof Error
+          ? error.message
+          : "Could not create the abstract.",
+      );
+    } finally {
+      setAdding(false);
+    }
+  };
+  const tabs = (
+    [
+      "all",
+      "accepted",
+      "accept_queue",
+      "pending",
+      "decline_queue",
+      "declined",
+      "withdrawn",
+      "draft",
+    ] as const
+  ).map((value) => ({
+    value,
+    label: value === "all" ? "All Abstracts" : statusLabels[value],
+    count:
+      value === "all"
+        ? rows.length
+        : rows.filter((row) => row.status === value).length,
+  }));
+  const allColumns: DataGridColumn<AbstractRow>[] = [
+    { key: "status", width: "11rem", header: "Status", cell: row => editableStatuses.includes(row.status) ? <Select value={row.status} onValueChange={value => void updateStatus(row.id, value as SubmissionStatus)}><SelectTrigger className="h-8 w-36"><SelectValue /></SelectTrigger><SelectContent>{editableStatuses.map(option => <SelectItem key={option} value={option}>{statusLabels[option]}</SelectItem>)}</SelectContent></Select> : <span className="inline-flex h-8 w-36 items-center px-3 text-sm text-muted-foreground">{statusLabels[row.status]}</span> },
+    { key: "source", width: "10rem", header: "Source", cell: row => <span className="whitespace-nowrap text-muted-foreground">{row.source}</span> },
+    { key: "title", width: "20rem", header: "Title", cell: row => <span className="font-medium">{row.title}</span> },
+    { key: "description", width: "18rem", header: "Description", cell: row => <span className="line-clamp-2 min-w-64 text-muted-foreground">{row.description}</span> },
+    { key: "speaker", width: "10rem", header: "Speaker", cell: row => row.speaker },
+    { key: "track", width: "8rem", header: "Track", cell: row => <span className="text-muted-foreground">{row.track}</span> },
+    { key: "tags", width: "12rem", header: "Tags", cell: row => <TagsCell row={row} library={tagLibrary} saving={Boolean(taggingId)} onChange={tagIds => void updateTags(row.id, tagIds)} /> },
+    { key: "rating", width: "6rem", header: "Rating", cell: row => row.rating?.toFixed(1) ?? "—" },
+    { key: "notified", width: "7rem", header: "Notified", cell: row => row.notified ? "Yes" : "No" },
+    { key: "decision", width: "9rem", header: "Decision email", cell: row => row.status === "accepted" || row.status === "declined" ? <Button type="button" variant="outline" size="sm" disabled={preparingId === row.id} onClick={click => { click.stopPropagation(); void prepareDecision(row); }}>{preparingId === row.id ? "Preparing…" : "Send decision"}</Button> : <span className="text-muted-foreground">Decide first</span> },
+  ];
+  const byColumnKey = new Map(allColumns.map((column) => [column.key, column]));
+  const columns = columnPreferences.order
+    .filter((key) => !columnPreferences.hidden.includes(key))
+    .map((key) => byColumnKey.get(key))
+    .filter((column): column is DataGridColumn<AbstractRow> => Boolean(column));
+
+  const addDetail = <DetailPane title="Add abstract" onClose={() => setAddOpen(false)}><p className="-mt-3 text-sm text-muted-foreground">Create an organizer-owned row for this event’s review queue. No speaker is added automatically.</p><div className="space-y-5"><div className="space-y-2"><Label htmlFor="abstract-source">Source form</Label><Select value={draft.formId} onValueChange={formId => setDraft(current => ({ ...current, formId }))}><SelectTrigger id="abstract-source"><SelectValue placeholder="Choose a submission form" /></SelectTrigger><SelectContent>{forms.map(form => <SelectItem key={form.id} value={form.id}>{form.name}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label htmlFor="abstract-title">Title</Label><Input id="abstract-title" value={draft.title} onChange={change => setDraft(current => ({ ...current, title: change.target.value }))} placeholder="Session title" /></div><div className="space-y-2"><Label htmlFor="abstract-status">Status</Label><Select value={draft.status} onValueChange={status => setDraft(current => ({ ...current, status: status as SubmissionStatus }))}><SelectTrigger id="abstract-status"><SelectValue /></SelectTrigger><SelectContent>{(["draft", "pending", "accept_queue", "accepted", "decline_queue", "declined", "withdrawn"] as SubmissionStatus[]).map(option => <SelectItem key={option} value={option}>{statusLabels[option]}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label htmlFor="abstract-description">Description</Label><Textarea id="abstract-description" value={draft.description} onChange={change => setDraft(current => ({ ...current, description: change.target.value }))} placeholder="What is this session about?" /></div>{addError && <p role="alert" className="text-sm text-destructive">{addError}</p>}<div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setAddOpen(false)} disabled={adding}>Cancel</Button><Button type="button" variant="outline" onClick={() => void createAbstract()} disabled={adding}>{adding ? "Adding…" : "Add abstract"}</Button></div></div></DetailPane>;
+  const closeSelected = () => { const next = new URLSearchParams(searchParams); next.delete("selected"); setSearchParams(next); setDecisionPreview(undefined); setDecisionResults([]); };
+  const selectedDetail = selectedRow ? <DetailPane title={selectedRow.title} onClose={closeSelected}>
+    <dl className="space-y-4 text-sm"><div><dt className="text-muted-foreground">Status</dt><dd className="mt-1 font-medium">{statusLabels[selectedRow.status]}</dd></div><div><dt className="text-muted-foreground">Speaker</dt><dd className="mt-1">{selectedRow.speaker}</dd></div><div><dt className="text-muted-foreground">Abstract</dt><dd className="mt-1 whitespace-pre-wrap">{selectedRow.description}</dd></div><div><dt className="text-muted-foreground">Track</dt><dd className="mt-1">{selectedRow.track}</dd></div><div><dt className="text-muted-foreground">Tags</dt><dd className="mt-1">{selectedRow.tags.map(tag => tag.name).join(", ") || "—"}</dd></div></dl>
+    {decisionPreview && <section className="mt-6 space-y-4 rounded-lg bg-background p-4" aria-labelledby="decision-preview-heading">
+      <div><h3 id="decision-preview-heading" className="text-sm font-semibold">Review decision email</h3><p className="mt-1 text-xs text-muted-foreground">{decisionPreview.templateName ? `Using “${decisionPreview.templateName}”.` : "Using the built-in branded template."}</p></div>
+      <div className="space-y-1 text-sm"><p className="font-medium">{decisionPreview.subject}</p><p className="whitespace-pre-wrap text-muted-foreground">{decisionPreview.body}</p></div>
+      <div className="text-sm"><p className="font-medium">Recipients ({decisionPreview.recipients.length})</p><ul className="mt-1 space-y-2 text-muted-foreground">{decisionPreview.recipients.map(recipient => { const result = decisionResults.find(entry => entry.speakerId === recipient.speakerId); return <li key={recipient.speakerId}><span>{recipient.name} · {recipient.email || "No email on file"}</span>{result && <span className={result.status === "sent" ? "ml-2 text-success" : "ml-2 text-destructive"}>{result.status === "sent" ? "Sent" : result.error ?? result.reason ?? "Skipped"}</span>}</li>; })}</ul></div>
+      <p className="text-xs text-muted-foreground">{decisionPreview.calendarAttached ? `Calendar invite attached${decisionPreview.scheduleTime ? ` for ${decisionPreview.scheduleTime}` : ""}.` : "No calendar invite will be attached."}</p>
+      <div className="flex flex-wrap justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setDecisionPreview(undefined)} disabled={sendingId === selectedRow.id}>{decisionResults.length ? "Close" : "Cancel"}</Button>{decisionResults.some(result => result.status === "failed") && <Button type="button" variant="outline" onClick={() => void sendDecision(selectedRow, decisionResults.filter(result => result.status === "failed" && result.speakerId).map(result => result.speakerId!))} disabled={sendingId === selectedRow.id}>Retry failed</Button>}<Button type="button" onClick={() => void sendDecision(selectedRow)} disabled={sendingId === selectedRow.id || (decisionResults.length > 0 && decisionResults.every(result => result.status === "sent")) || !decisionPreview.recipients.some(recipient => isValidEmail(recipient.email))}>{sendingId === selectedRow.id ? "Sending…" : decisionResults.length ? "Send again" : `Send to ${decisionPreview.recipients.length}`}</Button></div>
+    </section>}
+  </DetailPane> : undefined;
+  return (
+    <AppLayout title="Abstracts" detail={addOpen ? addDetail : selectedDetail}>
+      <div className="space-y-3">
+        {loadError && (
+          <p role="alert" className="text-sm text-destructive">
+            {loadError}
+          </p>
+        )}
+        {decisionFeedback && (
+          <p role="status" className="text-sm text-muted-foreground">
+            {decisionFeedback}
+          </p>
+        )}
+        <StatusTabs
+          ariaLabel="Submission statuses"
+          value={status}
+          onValueChange={(value) =>
+            setStatus(value as SubmissionStatus | "all")
+          }
+          tabs={tabs}
+        />
+        <ContentToolbar
+          ariaLabel="Abstract controls"
+          search={
+            <div className="relative min-w-0">
+              <Label className="sr-only" htmlFor="abstract-search">
+                Search abstracts
+              </Label>
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                id="abstract-search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                className="h-8 pl-9"
+                placeholder="Search abstracts"
+              />
+            </div>
+          }
+          utilities={
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => downloadCsv(visibleRows)}
+                disabled={loading}
+              >
+                <Download className="mr-1 h-4 w-4" />
+                Export CSV
+              </Button>
+              <ColumnsControl
+                preferences={columnPreferences}
+                onChange={updateColumnPreferences}
+              />
+              <Button variant="outline" size="sm">
+                Sort
+              </Button>
+              <Button variant="outline" size="sm">
+                Filter
+              </Button>
+              <Button variant="outline" size="sm" aria-label="More options">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </>
+          }
+          primaryAction={
+            <Button variant="accent" size="sm" onClick={openAddAbstract}>
+              <Plus className="mr-1 h-4 w-4" />
+              Add Abstract
+            </Button>
+          }
+        />
+        <DataGrid
+          rows={visibleRows}
+          columns={columns}
+          empty="No abstracts match this view."
+          loading={loading}
+          paginated
+        />
+      </div>
+    </AppLayout>
+  );
+}

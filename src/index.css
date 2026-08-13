@@ -1,0 +1,193 @@
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Compact density: scales every rem-based Tailwind dimension (spacing, sizing,
+   radius) app-wide from one lever. Stays relative to the browser's default font
+   size, so a user who raises it still gets larger UI — it is not a px pin.
+   The --text-* tokens below are corrected back up so labels land at the 12-13px
+   industry floor instead of compounding down to ~8.8px. */
+html {
+  font-size: 80%;
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+
+    /* Compact type scale — wired to Tailwind's text-* utilities in tailwind.config.ts.
+       rem values are pre-multiplied for the 80% root above; comments are the real px. */
+    --text-xs: 0.9375rem; /* 12px */
+    --text-sm: 1.015625rem; /* 13px */
+    --text-base: 1.09375rem; /* 14px */
+    --text-lg: 1.25rem; /* 16px */
+    --text-xl: 1.40625rem; /* 18px */
+    --text-2xl: 1.640625rem; /* 21px */
+    --text-3xl: 2.03125rem; /* 26px */
+    --text-4xl: 2.34375rem; /* 30px */
+
+    /* Takumi palette — electric blue with soft, blue-tinted neutrals */
+    --background: 220 33% 98%;
+    --foreground: 222 24% 14%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 24% 14%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 24% 14%;
+
+    --primary: 216 100% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 24% 96%;
+    --secondary-foreground: 222 24% 14%;
+
+    --muted: 220 20% 93%;
+    --muted-foreground: 220 10% 42%;
+
+    --accent: 216 100% 96%;
+    --accent-foreground: 216 90% 30%;
+
+    --destructive: 4 64% 56%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 0% / 0;             /* transparent — separation uses fill color, not borders */
+    --input: 0 0% 0% / 0;
+    --ring: 216 100% 50%;
+
+    --radius: 0.5rem;
+
+    --success: 152 35% 38%;
+    --success-foreground: 0 0% 100%;
+    --warning: 36 75% 42%;
+    --warning-foreground: 0 0% 100%;
+    --info: 216 100% 45%;
+    --info-foreground: 0 0% 100%;
+
+    --surface-elevated: 0 0% 100%;
+    --surface-sunken: 220 33% 98%;
+
+    --sidebar-background: 0 0% 100%;   /* matches card/surface, distinct from page bg */
+    --sidebar-foreground: 222 24% 14%;
+    --sidebar-primary: 216 100% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 216 100% 96%;
+    --sidebar-accent-foreground: 216 90% 30%;
+    --sidebar-border: 0 0% 0% / 0;
+    --sidebar-ring: 216 100% 50%;
+
+    /* Legacy design-system vars for components still referencing them directly */
+    --bg: oklch(98% 0.008 255);
+    --surface: #FFFFFF;
+    --text: oklch(25% 0.025 255);
+    --accent-bg: oklch(96% 0.025 255);
+    --sage: oklch(55% 0.22 255);
+    --sage-bg: oklch(96% 0.025 255);
+    --sb: oklch(100% 0 0);
+    --sb-txt: oklch(56% 0 0);
+    --r: 8px;
+    --r-lg: 12px;
+  }
+
+  .dark {
+    color-scheme: dark;
+    --background: 222 20% 8%;
+    --foreground: 220 24% 94%;
+    --card: 222 18% 11%;
+    --card-foreground: 220 24% 94%;
+    --popover: 222 18% 11%;
+    --popover-foreground: 220 24% 94%;
+    --primary: 216 100% 55%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 222 14% 17%;
+    --secondary-foreground: 220 24% 94%;
+    --muted: 222 14% 17%;
+    --muted-foreground: 220 12% 68%;
+    --accent: 216 55% 20%;
+    --accent-foreground: 214 100% 86%;
+    --destructive: 4 45% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 0% / 0;
+    --input: 0 0% 0% / 0;
+    --ring: 216 100% 62%;
+    --sidebar-background: 222 18% 11%;
+    --sidebar-foreground: 220 24% 94%;
+    --sidebar-primary: 216 100% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 216 55% 20%;
+    --sidebar-accent-foreground: 214 100% 86%;
+    --sidebar-border: 0 0% 0% / 0;
+    --sidebar-ring: 216 100% 62%;
+
+    --bg: oklch(20% 0.025 255);
+    --surface: oklch(24% 0.025 255);
+    --text: oklch(94% 0.012 255);
+    --accent-bg: oklch(30% 0.075 255);
+    --sage: oklch(66% 0.22 255);
+    --sage-bg: oklch(30% 0.075 255);
+    --sb: oklch(20% 0.025 255);
+    --sb-txt: oklch(72% 0.018 255);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+
+  /* Global visual override: remove all solid borders across the app */
+  *,
+  *::before,
+  *::after {
+    border-style: none !important;
+  }
+
+  :where(input, textarea, select, [data-field-focus="true"]) {
+    transition: background-color 120ms ease, box-shadow 120ms ease;
+  }
+
+  :where(input, textarea, select, [data-field-focus="true"]):focus,
+  :where(input, textarea, select, [data-field-focus="true"]):focus-visible {
+    outline: none;
+    background-color: hsl(var(--background));
+    box-shadow: 0 0 0 2px hsl(var(--ring) / 0.28);
+  }
+
+  /* Thin, minimal scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(0 0% 0% / 0.15) transparent;
+  }
+  .dark * {
+    scrollbar-color: hsl(0 0% 100% / 0.18) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: hsl(0 0% 0% / 0.15);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(0 0% 0% / 0.3);
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  .dark ::-webkit-scrollbar-thumb {
+    background-color: hsl(0 0% 100% / 0.18);
+  }
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(0 0% 100% / 0.32);
+  }
+}

@@ -1,0 +1,2 @@
+export type CrossFieldLimit = { id: string; label: string; fieldIds: string[]; maxCombinedChars: number; perParticipant: boolean };
+export function evaluateCrossFieldLimits(values: Record<string, string | undefined>, limits: CrossFieldLimit[]) { return limits.map(limit => { const count = limit.fieldIds.reduce((total, id) => total + (values[id]?.length ?? 0), 0); return { ...limit, count, remaining: limit.maxCombinedChars - count, valid: count <= limit.maxCombinedChars }; }); }

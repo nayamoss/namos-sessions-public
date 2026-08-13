@@ -1,0 +1,1181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Kanrei — Audit-ready without the compliance team</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* EXACT Tailwind Plus oatmeal-olive-instrument palette */
+    --olive-50:  oklch(98.8% 0.003 106.5);
+    --olive-100: oklch(96.6% 0.005 106.5);
+    --olive-200: oklch(93% 0.007 106.5);
+    --olive-300: oklch(88% 0.011 106.6);
+    --olive-400: oklch(73.7% 0.021 106.9);
+    --olive-500: oklch(58% 0.031 107.3);
+    --olive-600: oklch(46.6% 0.025 107.3);
+    --olive-700: oklch(39.4% 0.023 107.4);
+    --olive-800: oklch(28.6% 0.016 107.4);
+    --olive-900: oklch(22.8% 0.013 107.4);
+    --olive-950: oklch(15.3% 0.006 107.1);
+
+    --cream-50:  var(--olive-50);
+    --cream-100: var(--olive-100);
+    --cream-200: var(--olive-200);
+    --cream-300: var(--olive-300);
+    --cream-400: var(--olive-400);
+    --cream-500: var(--olive-500);
+    --cream-600: var(--olive-600);
+
+    --bg: var(--olive-100);
+    --surface: #ffffff;
+    --surface-alt: var(--olive-50);
+    --text: var(--olive-950);
+    --text-muted: var(--olive-500);
+    --text-secondary: var(--olive-600);
+    --divider: var(--olive-200);
+    /* Matches Tailwind Plus oatmeal-olive preview exactly */
+    --accent: var(--olive-950);
+    --accent-hover: var(--olive-800);
+    --accent-inverse: #ffffff;
+    --accent-deep: var(--olive-950);
+    --accent-soft-bg: oklch(15.3% 0.006 107.1 / 0.10);
+    --accent-soft-hover: oklch(15.3% 0.006 107.1 / 0.15);
+    --check: var(--olive-700);
+
+    --font-display: 'Instrument Serif', Georgia, serif;
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--text);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  a { color: inherit; text-decoration: none; }
+  button { font-family: inherit; cursor: pointer; }
+
+  .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+  @media (min-width: 768px) { .container { padding: 0 48px; } }
+
+  .view { display: none; }
+  .view.active { display: block; }
+
+  /* ---------- NAV ---------- */
+  .nav {
+    position: sticky; top: 0; z-index: 50;
+    height: 72px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--divider);
+  }
+  .nav-inner {
+    max-width: 1200px; margin: 0 auto; padding: 0 24px;
+    height: 100%;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 24px;
+  }
+  @media (min-width: 768px) { .nav-inner { padding: 0 48px; } }
+  .brand {
+    font-family: var(--font-display);
+    font-size: 22px;
+    letter-spacing: -0.01em;
+    color: var(--text);
+    display: inline-flex; align-items: baseline;
+  }
+  .brand .dot { color: var(--accent); margin-left: 1px; }
+  .nav-links {
+    display: none;
+    gap: 28px;
+    font-size: 14px;
+    color: var(--text-secondary);
+  }
+  @media (min-width: 900px) { .nav-links { display: flex; } }
+  .nav-links a {
+    padding: 8px 0;
+    transition: color 0.15s ease;
+  }
+  .nav-links a:hover { color: var(--text); }
+  .nav-links a.active { color: var(--text); font-weight: 500; }
+  .nav-actions { display: flex; align-items: center; gap: 12px; }
+  .nav-signin {
+    font-size: 14px;
+    color: var(--text-secondary);
+    padding: 8px 4px;
+  }
+  .nav-signin:hover { color: var(--text); }
+
+  /* ---------- BUTTONS (Tailwind Plus oatmeal pill style) ---------- */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 8px 18px;
+    border-radius: 999px;
+    font-size: 14px;
+    line-height: 1.75;
+    font-weight: 500;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    transition: background 0.15s ease, color 0.15s ease;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: var(--accent-inverse);
+  }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-ghost {
+    background: transparent;
+    color: var(--text);
+  }
+  .btn-ghost:hover { background: var(--accent-soft-bg); }
+  .btn-soft {
+    background: var(--accent-soft-bg);
+    color: var(--text);
+  }
+  .btn-soft:hover { background: var(--accent-soft-hover); }
+  .btn-lg { padding: 10px 22px; font-size: 15px; }
+  .btn-sm { padding: 6px 14px; font-size: 13px; }
+  .btn svg { flex-shrink: 0; }
+
+  /* ---------- TYPOGRAPHY ---------- */
+  .eyebrow {
+    font-family: var(--font-sans);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+  h1, h2, h3, h4 { margin: 0; color: var(--text); }
+  .h-hero {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: clamp(44px, 7vw, 68px);
+    letter-spacing: -0.02em;
+    line-height: 1.05;
+  }
+  .h-section {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: clamp(34px, 4.6vw, 44px);
+    line-height: 1.1;
+    letter-spacing: -0.015em;
+  }
+  .h-page {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: clamp(40px, 5.6vw, 56px);
+    line-height: 1.08;
+    letter-spacing: -0.015em;
+  }
+  .lede {
+    font-size: 18px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+  }
+  .muted { color: var(--text-secondary); }
+  .small { font-size: 13px; color: var(--text-muted); }
+
+  /* ---------- SECTIONS ---------- */
+  .section { padding: 64px 0; }
+  @media (min-width: 768px) { .section { padding: 96px 0; } }
+  .section-sm { padding: 56px 0; }
+  @media (min-width: 768px) { .section-sm { padding: 80px 0; } }
+</style>
+</head>
+<body>
+<style>
+  /* ---------- HERO ---------- */
+  .hero { padding: 80px 0 64px; text-align: center; }
+  @media (min-width: 768px) { .hero { padding: 112px 0 96px; } }
+  .hero-inner { max-width: 820px; margin: 0 auto; }
+  .pill {
+    display: inline-flex; align-items: center;
+    background: var(--surface);
+    border: 1px solid var(--divider);
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-secondary);
+    margin-bottom: 28px;
+  }
+  .hero .lede { max-width: 640px; margin: 22px auto 32px; }
+  .cta-row { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+  .hero-note { margin-top: 20px; font-size: 13px; color: var(--text-muted); }
+
+  /* ---------- LOGO STRIP ---------- */
+  .logo-strip { padding: 48px 0 32px; text-align: center; }
+  .logo-strip .eyebrow { display: block; margin-bottom: 24px; }
+  .logos {
+    display: flex; flex-wrap: wrap; justify-content: center;
+    gap: 32px 48px;
+    color: var(--olive-400);
+    opacity: 0.9;
+  }
+  .logo { font-size: 18px; line-height: 1; white-space: nowrap; }
+  .logo-1 { font-family: var(--font-sans); font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase; font-size: 15px; }
+  .logo-2 { font-family: var(--font-display); font-style: italic; font-size: 22px; }
+  .logo-3 { font-family: var(--font-sans); font-weight: 800; font-size: 20px; letter-spacing: -0.02em; }
+  .logo-4 { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 14px; letter-spacing: 0.3em; text-transform: uppercase; }
+  .logo-5 { font-family: var(--font-display); font-weight: 400; font-size: 24px; letter-spacing: -0.01em; }
+  .logo-6 { font-family: var(--font-sans); font-weight: 500; font-size: 17px; letter-spacing: 0.02em; }
+
+  /* ---------- STEPS ---------- */
+  .section-head { max-width: 720px; margin: 0 0 56px; }
+  .section-head.center { margin-left: auto; margin-right: auto; text-align: center; }
+  .section-head .eyebrow { display: block; margin-bottom: 14px; }
+
+  .steps-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 40px;
+  }
+  @media (min-width: 768px) { .steps-grid { grid-template-columns: repeat(3, 1fr); gap: 48px; } }
+  .step-num {
+    font-family: var(--font-display);
+    font-size: 32px;
+    color: var(--olive-700);
+    line-height: 1;
+    margin-bottom: 18px;
+  }
+  .step-title {
+    font-family: var(--font-display);
+    font-size: 22px;
+    line-height: 1.2;
+    margin-bottom: 10px;
+    color: var(--text);
+  }
+  .step-body { font-size: 15px; color: var(--text-secondary); line-height: 1.6; margin: 0; }
+
+  /* ---------- FEATURE GRID ---------- */
+  .feature-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  @media (min-width: 640px) { .feature-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (min-width: 960px) { .feature-grid { grid-template-columns: repeat(3, 1fr); gap: 20px; } }
+  .feature-card {
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 28px;
+  }
+  .feature-icon {
+    width: 40px; height: 40px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #ffffff;
+    margin-bottom: 16px;
+  }
+  .feature-title {
+    font-family: var(--font-display);
+    font-size: 20px;
+    line-height: 1.2;
+    margin-bottom: 8px;
+    color: var(--text);
+  }
+  .feature-desc { font-size: 14px; line-height: 1.6; color: var(--text-secondary); margin: 0; }
+
+  /* ---------- FRAMEWORK STRIP ---------- */
+  .framework-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  @media (min-width: 640px) { .framework-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (min-width: 960px) { .framework-grid { grid-template-columns: repeat(4, 1fr); } }
+  .fw-card {
+    background: var(--surface);
+    padding: 32px;
+    border-radius: 12px;
+  }
+  .fw-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
+    font-weight: 600;
+    display: block;
+    margin-bottom: 14px;
+  }
+  .fw-name {
+    font-family: var(--font-display);
+    font-size: 28px;
+    line-height: 1;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+  .fw-count { font-size: 13px; color: var(--text-muted); margin-bottom: 16px; }
+  .fw-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-secondary); }
+  .fw-check svg { color: var(--check); }
+
+  /* ---------- TESTIMONIAL ---------- */
+  .testimonial { max-width: 780px; margin: 0 auto; text-align: center; }
+  .testimonial-quote {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: clamp(24px, 3.2vw, 32px);
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+    color: var(--text);
+    margin: 0 0 28px;
+  }
+  .testimonial-attr { display: inline-flex; align-items: center; gap: 12px; }
+  .avatar {
+    width: 40px; height: 40px; border-radius: 999px;
+    background: var(--cream-200);
+    color: var(--olive-700);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: var(--font-sans);
+  }
+  .attr-name { font-size: 14px; font-weight: 500; color: var(--text); display: block; text-align: left; line-height: 1.2; }
+  .attr-title { font-size: 13px; color: var(--text-muted); display: block; text-align: left; margin-top: 2px; }
+
+  /* ---------- PRICING ---------- */
+  .pricing-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    align-items: stretch;
+  }
+  @media (min-width: 960px) { .pricing-grid { grid-template-columns: repeat(3, 1fr); gap: 20px; } }
+  .price-card {
+    background: var(--surface);
+    padding: 32px;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+  .price-card.featured { background: var(--cream-200); }
+  .price-badge {
+    position: absolute;
+    top: 20px; right: 20px;
+    background: var(--accent);
+    color: var(--accent-inverse);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-weight: 600;
+  }
+  .price-tier {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-secondary);
+    margin-bottom: 14px;
+  }
+  .price-row { display: flex; align-items: baseline; gap: 6px; margin-bottom: 6px; }
+  .price-num {
+    font-family: var(--font-display);
+    font-size: 48px;
+    line-height: 1;
+    color: var(--text);
+  }
+  .price-period { font-size: 14px; color: var(--text-muted); }
+  .price-tag { font-size: 14px; color: var(--text-secondary); margin: 0 0 22px; }
+  .price-features {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex: 1;
+  }
+  .price-features li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+  .price-features li svg { color: var(--check); flex-shrink: 0; margin-top: 2px; }
+
+  /* ---------- BOTTOM CTA ---------- */
+  .bottom-cta {
+    background: var(--accent-deep);
+    padding: 96px 24px;
+    text-align: center;
+  }
+  @media (min-width: 768px) { .bottom-cta { padding: 96px 48px; } }
+  .bottom-cta h2 {
+    font-family: var(--font-display);
+    font-size: clamp(34px, 4.6vw, 44px);
+    line-height: 1.1;
+    color: var(--cream-100);
+    letter-spacing: -0.015em;
+    max-width: 720px;
+    margin: 0 auto 20px;
+  }
+  .bottom-cta p {
+    font-size: 17px;
+    color: var(--cream-300);
+    max-width: 560px;
+    margin: 0 auto 32px;
+    line-height: 1.6;
+  }
+  .btn-inverse {
+    background: var(--cream-100);
+    color: var(--text);
+  }
+  .btn-inverse:hover { background: var(--surface); }
+  .btn-dark-ghost {
+    background: transparent;
+    color: var(--cream-100);
+  }
+  .btn-dark-ghost:hover { background: rgba(255,255,255,0.1); }
+
+  /* ---------- FOOTER ---------- */
+  .footer-brand-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .footer-links-inline { display: flex; align-items: center; gap: 24px; }
+  .footer-links-inline a { font-size: 14px; color: var(--text-secondary); }
+  .footer-links-inline a:hover { color: var(--text); }
+  .footer {
+    background: var(--bg);
+    border-top: 1px solid var(--divider);
+    padding: 32px 0;
+    margin-top: 64px;
+  }
+  .footer-top {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 40px;
+    margin-bottom: 48px;
+  }
+  @media (min-width: 640px) { .footer-top { grid-template-columns: 2fr 1fr 1fr 1fr 1fr; } }
+  .footer-brand { max-width: 280px; }
+  .footer-brand .brand { margin-bottom: 12px; display: inline-block; }
+  .footer-brand p { font-size: 14px; color: var(--text-secondary); margin: 0; line-height: 1.5; }
+  .footer-col-title {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text);
+    margin-bottom: 18px;
+  }
+  .footer-links { display: flex; flex-direction: column; gap: 12px; }
+  .footer-links a { font-size: 14px; color: var(--text-secondary); }
+  .footer-links a:hover { color: var(--text); }
+  .footer-bottom {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+  @media (min-width: 640px) { .footer-bottom { flex-direction: row; align-items: center; } }
+  @media (min-width: 640px) { .footer-bottom { flex-direction: row; align-items: center; } }
+  .footer-copy { font-size: 13px; color: var(--text-muted); }
+  .socials { display: inline-flex; gap: 16px; color: var(--text-muted); }
+  .socials a { display: inline-flex; }
+  .socials a:hover { color: var(--text); }
+</style>
+<style>
+  /* ---------- PRICING PAGE ---------- */
+  .billing-toggle-wrap {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    justify-content: center;
+    margin-top: 36px;
+    flex-wrap: wrap;
+  }
+  .billing-toggle {
+    background: var(--cream-200);
+    border-radius: 999px;
+    padding: 4px;
+    display: inline-flex;
+  }
+  .billing-toggle button {
+    background: transparent;
+    color: var(--text-muted);
+    border: none;
+    padding: 8px 20px;
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background 0.2s ease, color 0.2s ease;
+  }
+  .billing-toggle button.active {
+    background: var(--surface);
+    color: var(--text);
+  }
+  .save-pill {
+    background: oklch(55% 0.12 145 / 0.15);
+    color: oklch(35% 0.12 145);
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  /* ---------- COMPARISON TABLE ---------- */
+  .compare-wrap { overflow-x: auto; }
+  .compare {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 720px;
+  }
+  .compare th, .compare td {
+    padding: 16px 20px;
+    text-align: center;
+    font-size: 14px;
+    vertical-align: middle;
+    border: none;
+  }
+  .compare th:first-child, .compare td:first-child { text-align: left; }
+  .compare thead th {
+    background: var(--cream-200);
+    font-weight: 600;
+    color: var(--text);
+    font-size: 13px;
+  }
+  .compare thead th:first-child { border-top-left-radius: 12px; border-bottom-left-radius: 12px; }
+  .compare thead th:last-child { border-top-right-radius: 12px; border-bottom-right-radius: 12px; }
+  .compare tbody tr:nth-child(even) td { background: var(--cream-50); }
+  .compare td:first-child { font-weight: 500; color: var(--text); }
+  .compare td.muted-cell { color: var(--olive-400); }
+  .compare svg.check-inline { color: var(--check); display: inline-block; vertical-align: middle; }
+  .compare tr.group-row td {
+    padding: 28px 20px 8px;
+    background: transparent !important;
+    border-top: 1px solid var(--divider);
+  }
+  .compare tr.group-row td .group-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+
+  /* ---------- FAQ ---------- */
+  .faq-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 48px;
+  }
+  @media (min-width: 900px) { .faq-grid { grid-template-columns: 340px 1fr; gap: 80px; } }
+  .faq-intro p { font-size: 16px; color: var(--text-secondary); line-height: 1.6; margin: 16px 0 24px; }
+  .faq-intro a { color: var(--text); text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+  .faq-list { display: flex; flex-direction: column; }
+  details.faq-item {
+    border-top: 1px solid var(--divider);
+    padding: 20px 0;
+  }
+  details.faq-item:last-child { border-bottom: 1px solid var(--divider); }
+  details.faq-item summary {
+    list-style: none;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--text);
+  }
+  details.faq-item summary::-webkit-details-marker { display: none; }
+  .faq-plus {
+    width: 18px; height: 18px;
+    position: relative;
+    flex-shrink: 0;
+    color: var(--text);
+    transition: transform 0.2s ease;
+  }
+  .faq-plus::before, .faq-plus::after {
+    content: '';
+    position: absolute;
+    background: currentColor;
+    transition: transform 0.2s ease;
+  }
+  .faq-plus::before {
+    top: 50%; left: 0;
+    width: 100%; height: 1.5px;
+    transform: translateY(-50%);
+  }
+  .faq-plus::after {
+    top: 0; left: 50%;
+    width: 1.5px; height: 100%;
+    transform: translateX(-50%);
+  }
+  details.faq-item[open] .faq-plus { transform: rotate(45deg); }
+  details.faq-item .faq-body {
+    margin-top: 14px;
+    font-size: 15px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    max-width: 620px;
+  }
+
+  .page-lede { max-width: 600px; margin: 20px auto 0; text-align: center; font-size: 17px; color: var(--text-secondary); }
+</style>
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-inner">
+    <a href="#" class="brand" onclick="event.preventDefault(); window.nav('landing', this);">
+      kanrei<span class="dot">.</span>
+    </a>
+    <div class="nav-links" id="nav-links">
+      <a href="#" data-page="landing" onclick="event.preventDefault(); window.nav('landing', this);">Product</a>
+      <a href="#" data-page="pricing" onclick="event.preventDefault(); window.nav('pricing', this);">Pricing</a>
+      <a href="#" onclick="event.preventDefault();">Security</a>
+      <a href="#" onclick="event.preventDefault();">Docs</a>
+    </div>
+    <div class="nav-actions">
+      <a href="#" class="nav-signin" onclick="event.preventDefault();">Sign in</a>
+      <a href="#" class="btn btn-primary btn-sm" onclick="event.preventDefault();">
+        Get started
+        <svg width="14" height="14" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"></path></svg>
+      </a>
+    </div>
+  </div>
+</nav>
+
+<!-- LANDING VIEW -->
+<main id="view-landing" class="view active">
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-inner">
+        <span class="pill">SOC 2 &middot; HIPAA &middot; ISO 27001 &middot; GDPR</span>
+        <h1 class="h-hero">Get audit-ready without the compliance team.</h1>
+        <p class="lede">Kanrei continuously monitors your cloud, code, and devices against SOC 2, HIPAA, and ISO 27001. AI drafts your policies, collects evidence, and answers auditor questions — so you can ship.</p>
+        <div class="cta-row">
+          <a href="#" class="btn btn-primary" onclick="event.preventDefault();">
+            Get started
+            <svg width="14" height="14" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"></path></svg>
+          </a>
+          <a href="#" class="btn btn-ghost" onclick="event.preventDefault();">Book a demo</a>
+        </div>
+        <p class="hero-note">No setup fee. Guided onboarding included.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section class="section">
+    <div class="container">
+      <div class="section-head">
+        <span class="eyebrow">How it works</span>
+        <h2 class="h-section" style="margin-top:14px;">From zero to audit-ready, in weeks not quarters.</h2>
+      </div>
+      <div class="steps-grid">
+        <div>
+          <div class="step-num">01</div>
+          <h3 class="step-title">Connect your stack</h3>
+          <p class="step-body">One-click integrations with AWS, GCP, GitHub, Google Workspace, Okta, and 40+ more.</p>
+        </div>
+        <div>
+          <div class="step-num">02</div>
+          <h3 class="step-title">Automate evidence collection</h3>
+          <p class="step-body">Kanrei continuously scans your infrastructure and pulls evidence on your schedule.</p>
+        </div>
+        <div>
+          <div class="step-num">03</div>
+          <h3 class="step-title">Pass your audit</h3>
+          <p class="step-body">Generate reports, respond to auditors, and close findings — all from one dashboard.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURE GRID -->
+  <section class="section">
+    <div class="container">
+      <div class="section-head">
+        <span class="eyebrow">Platform</span>
+        <h2 class="h-section" style="margin-top:14px;">Every piece of your compliance program, in one place.</h2>
+      </div>
+      <div class="feature-grid">
+
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="9"></circle>
+              <circle cx="12" cy="12" r="5"></circle>
+              <circle cx="12" cy="12" r="1.5" fill="currentColor"></circle>
+            </svg>
+          </div>
+          <h3 class="feature-title">Continuous monitoring</h3>
+          <p class="feature-desc">Real-time scans across your cloud infrastructure, alerting on drift the moment it happens.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M8 3h7l4 4v13a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"></path>
+              <path d="M15 3v4h4"></path>
+              <path d="M10 12h7M10 16h5"></path>
+            </svg>
+          </div>
+          <h3 class="feature-title">AI policy generation</h3>
+          <p class="feature-desc">Draft SOC 2, HIPAA, and ISO policies customized to your stack in minutes, not weeks.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 7a1 1 0 0 1 1-1h4l2 2h9a1 1 0 0 1 1 1v2H3V7z"></path>
+              <path d="M4 11h16l-1 8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1l-1-8z"></path>
+            </svg>
+          </div>
+          <h3 class="feature-title">Evidence orchestrator</h3>
+          <p class="feature-desc">Automated evidence collection runs on a schedule. No more manual screenshot Fridays.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 20V10M10 20V4M16 20v-8M22 20H2"></path>
+            </svg>
+          </div>
+          <h3 class="feature-title">Auditor-ready reports</h3>
+          <p class="feature-desc">Export audit-grade reports with every finding, remediation, and evidence artifact linked.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3l8 3v5c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-3z"></path>
+              <path d="M9.5 12l2 2 3.5-3.5"></path>
+            </svg>
+          </div>
+          <h3 class="feature-title">Vendor risk management</h3>
+          <p class="feature-desc">Track subprocessors, collect questionnaires, monitor third-party posture automatically.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="4" y="10" width="16" height="11" rx="2"></rect>
+              <path d="M8 10V7a4 4 0 0 1 8 0v3"></path>
+            </svg>
+          </div>
+          <h3 class="feature-title">Trust center</h3>
+          <p class="feature-desc">Public page showing your compliance posture, customizable per prospect.</p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- FRAMEWORK COVERAGE -->
+  <section class="section-sm">
+    <div class="container">
+      <div class="section-head center">
+        <h2 class="h-section">Every framework your auditors care about.</h2>
+      </div>
+      <div class="framework-grid">
+        <div class="fw-card">
+          <span class="fw-label">Type II</span>
+          <div class="fw-name">SOC 2</div>
+          <div class="fw-count">150 controls</div>
+          <span class="fw-check">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>
+            Fully automated
+          </span>
+        </div>
+        <div class="fw-card">
+          <span class="fw-label">Privacy rule</span>
+          <div class="fw-name">HIPAA</div>
+          <div class="fw-count">54 controls</div>
+          <span class="fw-check">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>
+            Fully automated
+          </span>
+        </div>
+        <div class="fw-card">
+          <span class="fw-label">Infosec</span>
+          <div class="fw-name">ISO 27001</div>
+          <div class="fw-count">114 controls</div>
+          <span class="fw-check">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>
+            Fully automated
+          </span>
+        </div>
+        <div class="fw-card">
+          <span class="fw-label">Data protection</span>
+          <div class="fw-name">GDPR</div>
+          <div class="fw-count">99 articles</div>
+          <span class="fw-check">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>
+            Fully automated
+          </span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRICING PREVIEW -->
+  <section class="section">
+    <div class="container">
+      <div class="section-head center">
+        <span class="eyebrow">Pricing</span>
+        <h2 class="h-section" style="margin-top:14px;">Simple, transparent pricing.</h2>
+      </div>
+      <div class="pricing-grid">
+
+        <div class="price-card">
+          <div class="price-tier">Starter</div>
+          <div class="price-row">
+            <span class="price-num">$499</span>
+            <span class="price-period">/mo</span>
+          </div>
+          <p class="price-tag">For early-stage startups.</p>
+          <ul class="price-features">
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>1 compliance framework</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>10 integrations</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>AI policy drafts</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>Evidence collection</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>2 team seats</li>
+          </ul>
+          <a href="#" class="btn btn-soft" onclick="event.preventDefault();">Get started</a>
+        </div>
+
+        <div class="price-card featured">
+          <span class="price-badge">Most popular</span>
+          <div class="price-tier">Growth</div>
+          <div class="price-row">
+            <span class="price-num">$1,200</span>
+            <span class="price-period">/mo</span>
+          </div>
+          <p class="price-tag">For scaling companies.</p>
+          <ul class="price-features">
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>3 frameworks</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>Unlimited integrations</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>Trust center</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>Vendor management</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>10 team seats</li>
+          </ul>
+          <a href="#" class="btn btn-primary" onclick="event.preventDefault();">Get started</a>
+        </div>
+
+        <div class="price-card">
+          <div class="price-tier">Enterprise</div>
+          <div class="price-row">
+            <span class="price-num">Custom</span>
+          </div>
+          <p class="price-tag">For enterprises with custom needs.</p>
+          <ul class="price-features">
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>Unlimited frameworks</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>SSO &amp; SAML</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>Dedicated CSM</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>Custom SLAs</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>Unlimited seats</li>
+          </ul>
+          <a href="#" class="btn btn-soft" onclick="event.preventDefault();">Contact sales</a>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- BOTTOM CTA -->
+  <section class="bottom-cta">
+    <h2>Ready to automate your compliance program?</h2>
+    <p>Book a guided rollout to map your first framework and implementation timeline.</p>
+    <div class="cta-row">
+      <a href="#" class="btn btn-inverse" onclick="event.preventDefault();">
+        Get started
+        <svg width="14" height="14" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"></path></svg>
+      </a>
+      <a href="#" class="btn btn-dark-ghost" onclick="event.preventDefault();">Talk to sales</a>
+    </div>
+  </section>
+</main>
+
+<!-- PRICING VIEW -->
+<main id="view-pricing" class="view">
+
+  <!-- HERO LITE -->
+  <section class="hero" style="padding-top:72px; padding-bottom:40px;">
+    <div class="container">
+      <div class="hero-inner">
+        <span class="eyebrow" style="display:block; margin-bottom:18px;">Pricing</span>
+        <h1 class="h-page">Pricing that scales with you.</h1>
+        <p class="page-lede">Start with guided onboarding and upgrade as your scope grows.</p>
+        <div class="billing-toggle-wrap">
+          <div class="billing-toggle" role="tablist">
+            <button type="button" id="bill-monthly" onclick="window.setBilling('monthly')">Monthly</button>
+            <button type="button" id="bill-annual" class="active" onclick="window.setBilling('annual')">Annual</button>
+          </div>
+          <span class="save-pill">Save 20%</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FULL PRICING CARDS -->
+  <section class="section" style="padding-top:48px;">
+    <div class="container">
+      <div class="pricing-grid">
+
+        <div class="price-card">
+          <div class="price-tier">Starter</div>
+          <div class="price-row">
+            <span class="price-num" data-monthly="499" data-annual="399">$399</span>
+            <span class="price-period">/mo</span>
+          </div>
+          <p class="price-tag">For early-stage startups getting SOC 2 ready.</p>
+          <ul class="price-features">
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>1 compliance framework</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>10 integrations</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>AI policy drafts</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>Evidence collection</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>Email support</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>2 team seats</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>Basic audit reports</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>Slack alerts</li>
+          </ul>
+          <a href="#" class="btn btn-soft" onclick="event.preventDefault();">Get started</a>
+        </div>
+
+        <div class="price-card featured">
+          <span class="price-badge">Most popular</span>
+          <div class="price-tier">Growth</div>
+          <div class="price-row">
+            <span class="price-num" data-monthly="1200" data-annual="960">$960</span>
+            <span class="price-period">/mo</span>
+          </div>
+          <p class="price-tag">For scaling companies with multiple frameworks.</p>
+          <ul class="price-features">
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>3 frameworks</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>Unlimited integrations</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>AI compliance assistant</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>Custom controls</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>Trust center</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>Vendor management</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>Priority support</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>10 team seats</li>
+          </ul>
+          <a href="#" class="btn btn-primary" onclick="event.preventDefault();">Get started</a>
+        </div>
+
+        <div class="price-card">
+          <div class="price-tier">Enterprise</div>
+          <div class="price-row">
+            <span class="price-num">Custom</span>
+          </div>
+          <p class="price-tag">For enterprises with custom needs.</p>
+          <ul class="price-features">
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>Unlimited frameworks</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>SSO &amp; SAML</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>Dedicated CSM</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>Custom SLAs</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>Penetration testing</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>Audit-in-a-box</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>Unlimited seats</li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>Dedicated support</li>
+          </ul>
+          <a href="#" class="btn btn-soft" onclick="event.preventDefault();">Contact sales</a>
+        </div>
+
+      </div>
+    </div>
+  </section>
+  <!-- COMPARISON TABLE -->
+  <section class="section-sm">
+    <div class="container">
+      <div class="section-head center">
+        <h2 class="h-section">Compare plans.</h2>
+      </div>
+      <div class="compare-wrap">
+        <table class="compare">
+          <thead>
+            <tr>
+              <th>Feature</th>
+              <th>Starter</th>
+              <th>Growth</th>
+              <th>Enterprise</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="group-row"><td colspan="4"><span class="group-label">Frameworks</span></td></tr>
+            <tr><td>Frameworks included</td><td>1</td><td>3</td><td>Unlimited</td></tr>
+            <tr><td>Custom frameworks</td><td class="muted-cell">&mdash;</td><td>Add-on</td><td><svg class="check-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg></td></tr>
+
+            <tr class="group-row"><td colspan="4"><span class="group-label">Integrations</span></td></tr>
+            <tr><td>Integrations</td><td>10</td><td>Unlimited</td><td>Unlimited</td></tr>
+            <tr><td>Custom integrations</td><td class="muted-cell">&mdash;</td><td class="muted-cell">&mdash;</td><td><svg class="check-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg></td></tr>
+            <tr><td>API access</td><td class="muted-cell">&mdash;</td><td><svg class="check-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg></td><td><svg class="check-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg></td></tr>
+
+            <tr class="group-row"><td colspan="4"><span class="group-label">Team</span></td></tr>
+            <tr><td>Team seats</td><td>2</td><td>10</td><td>Unlimited</td></tr>
+            <tr><td>SSO &amp; SAML</td><td class="muted-cell">&mdash;</td><td class="muted-cell">&mdash;</td><td><svg class="check-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg></td></tr>
+            <tr><td>Role-based access</td><td><svg class="check-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg></td><td><svg class="check-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg></td><td><svg class="check-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg></td></tr>
+
+            <tr class="group-row"><td colspan="4"><span class="group-label">AI features</span></td></tr>
+            <tr><td>AI policy drafts</td><td><svg class="check-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg></td><td><svg class="check-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg></td><td><svg class="check-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg></td></tr>
+            <tr><td>AI auditor assistant</td><td class="muted-cell">&mdash;</td><td><svg class="check-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg></td><td><svg class="check-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg></td></tr>
+
+            <tr class="group-row"><td colspan="4"><span class="group-label">Reporting</span></td></tr>
+            <tr><td>Audit reports</td><td>Basic</td><td>Advanced</td><td>Custom</td></tr>
+            <tr><td>Trust center</td><td class="muted-cell">&mdash;</td><td><svg class="check-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg></td><td><svg class="check-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg></td></tr>
+            <tr><td>Vendor management</td><td class="muted-cell">&mdash;</td><td><svg class="check-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg></td><td><svg class="check-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg></td></tr>
+
+            <tr class="group-row"><td colspan="4"><span class="group-label">Support</span></td></tr>
+            <tr><td>Support channel</td><td>Email</td><td>Priority</td><td>24/7</td></tr>
+            <tr><td>Dedicated CSM</td><td class="muted-cell">&mdash;</td><td class="muted-cell">&mdash;</td><td><svg class="check-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg></td></tr>
+            <tr><td>SLA</td><td class="muted-cell">&mdash;</td><td>99.9%</td><td>Custom</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section class="section-sm">
+    <div class="container">
+      <div class="faq-grid">
+        <div class="faq-intro">
+          <span class="eyebrow">FAQ</span>
+          <h2 class="h-section" style="margin-top:14px;">Questions, answered.</h2>
+          <p>Still have questions? Contact support during onboarding.</p>
+        </div>
+        <div class="faq-list">
+
+          <details class="faq-item">
+            <summary>How does onboarding start?<span class="faq-plus" aria-hidden="true"></span></summary>
+            <div class="faq-body">Every plan starts with guided onboarding. We help connect your stack, align controls, and launch evidence collection for your selected frameworks.</div>
+          </details>
+
+          <details class="faq-item">
+            <summary>Which compliance frameworks do you support?<span class="faq-plus" aria-hidden="true"></span></summary>
+            <div class="faq-body">SOC 2 (Type I and II), HIPAA, ISO 27001, ISO 27701, GDPR, PCI DSS, NIST CSF, and CCPA out of the box. Enterprise customers can also add custom frameworks.</div>
+          </details>
+
+          <details class="faq-item">
+            <summary>How does pricing work as we add frameworks?<span class="faq-plus" aria-hidden="true"></span></summary>
+            <div class="faq-body">Starter includes 1 framework. Growth includes 3. Enterprise includes unlimited frameworks. You can add individual frameworks to Starter or Growth for a flat per-framework monthly fee.</div>
+          </details>
+
+          <details class="faq-item">
+            <summary>Do you integrate with our existing tools?<span class="faq-plus" aria-hidden="true"></span></summary>
+            <div class="faq-body">Kanrei integrates with AWS, GCP, Azure, GitHub, GitLab, Okta, Google Workspace, Microsoft 365, Jira, Slack, and 40+ more. Enterprise plans include custom integrations.</div>
+          </details>
+
+          <details class="faq-item">
+            <summary>Is there a setup fee?<span class="faq-plus" aria-hidden="true"></span></summary>
+            <div class="faq-body">No setup fees on Starter or Growth. Enterprise plans include white-glove onboarding with a dedicated customer success manager at no extra cost.</div>
+          </details>
+
+          <details class="faq-item">
+            <summary>Can we switch plans later?<span class="faq-plus" aria-hidden="true"></span></summary>
+            <div class="faq-body">Yes, any time. Upgrades are prorated from the day you switch. Downgrades take effect at your next billing cycle. No long-term contracts required.</div>
+          </details>
+
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BOTTOM CTA -->
+  <section class="bottom-cta">
+    <h2>Ready to automate your compliance program?</h2>
+    <p>Book a guided rollout to map your first framework and implementation timeline.</p>
+    <div class="cta-row">
+      <a href="#" class="btn btn-inverse" onclick="event.preventDefault();">
+        Get started
+        <svg width="14" height="14" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"></path></svg>
+      </a>
+      <a href="#" class="btn btn-dark-ghost" onclick="event.preventDefault();">Talk to sales</a>
+    </div>
+  </section>
+</main>
+
+<!-- FOOTER -->
+<footer class="footer">
+  <div class="container">
+    <div class="footer-bottom">
+      <div class="footer-brand-row">
+        <span class="brand">kanrei<span class="dot">.</span></span>
+        <span class="footer-copy">&copy; 2026 Kanrei</span>
+      </div>
+      <div class="footer-links-inline">
+        <a href="#" onclick="event.preventDefault(); window.nav('landing', null);">Home</a>
+        <a href="#" onclick="event.preventDefault(); window.nav('pricing', null);">Pricing</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function(){
+  function setActiveNav(page) {
+    var links = document.querySelectorAll('#nav-links a[data-page]');
+    for (var i = 0; i < links.length; i++) {
+      if (links[i].getAttribute('data-page') === page) {
+        links[i].classList.add('active');
+      } else {
+        links[i].classList.remove('active');
+      }
+    }
+  }
+
+  window.nav = function(page, clickedEl) {
+    var views = document.querySelectorAll('.view');
+    for (var i = 0; i < views.length; i++) { views[i].classList.remove('active'); }
+    var target = document.getElementById('view-' + page);
+    if (target) { target.classList.add('active'); }
+    setActiveNav(page);
+    try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { window.scrollTo(0, 0); }
+  };
+
+  function fmt(n) {
+    var s = String(n);
+    var parts = [];
+    while (s.length > 3) { parts.unshift(s.slice(-3)); s = s.slice(0, -3); }
+    parts.unshift(s);
+    return '$' + parts.join(',');
+  }
+
+  window.setBilling = function(mode) {
+    var monthlyBtn = document.getElementById('bill-monthly');
+    var annualBtn = document.getElementById('bill-annual');
+    if (mode === 'monthly') {
+      monthlyBtn.classList.add('active');
+      annualBtn.classList.remove('active');
+    } else {
+      annualBtn.classList.add('active');
+      monthlyBtn.classList.remove('active');
+    }
+    var priceEls = document.querySelectorAll('.price-num[data-monthly]');
+    for (var i = 0; i < priceEls.length; i++) {
+      var el = priceEls[i];
+      var val = (mode === 'monthly') ? el.getAttribute('data-monthly') : el.getAttribute('data-annual');
+      el.textContent = fmt(parseInt(val, 10));
+    }
+  };
+
+  // initialize active nav on load
+  document.addEventListener('DOMContentLoaded', function(){
+    setActiveNav('landing');
+  });
+})();
+</script>
+
+</body>
+</html>

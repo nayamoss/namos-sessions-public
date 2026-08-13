@@ -1,0 +1,2 @@
+import { Input } from "@/components/ui/input";
+export function CharCounterInput({ value, maxLength, onChange, ...props }: Omit<React.ComponentProps<typeof Input>, "value" | "onChange" | "maxLength"> & { value: string; maxLength: number; onChange: (value: string) => void }) { return <div className="space-y-1"><Input {...props} value={value} maxLength={maxLength} onChange={event => onChange(event.target.value)} /><p className="text-right text-xs text-muted-foreground">{value.length} / {maxLength}</p></div>; }

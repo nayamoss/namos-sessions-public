@@ -1,0 +1,383 @@
+import { useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { Link, useLocation } from "react-router-dom";
+import {
+  CalendarClock,
+  CalendarDays,
+  LayoutDashboard,
+  ClipboardList,
+  FileText,
+  ListTodo,
+  Mail,
+  PanelLeft,
+  Search,
+  Settings2,
+  Tags,
+  Users,
+  ShieldCheck,
+  KeyRound,
+  Handshake,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { NotificationBell } from "@/components/NotificationBell";
+import { AccountMenu } from "@/components/AccountMenu";
+import { SidebarProvider, useSidebarState } from "@/components/SidebarContext";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { CommandPalette } from "@/components/CommandPalette";
+import { GlobalKeyboardShortcuts } from "@/components/GlobalKeyboardShortcuts";
+import { EventSwitcher } from "@/components/EventSwitcher";
+import { OrgMenu } from "@/components/OrgMenu";
+import { useOptionalCurrentEvent } from "@/components/EventContext";
+import { RepoContext } from "@/data/repo";
+
+export type DashboardNavItem = {
+  to: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  end?: boolean;
+};
+
+export type DashboardNavSection = {
+  label: string;
+  items: DashboardNavItem[];
+};
+
+const navSections: DashboardNavSection[] = [
+  {
+    label: "Dashboard",
+    items: [
+      { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, end: true },
+    ],
+  },
+  {
+    label: "Program",
+    items: [
+      { to: "/program/forms", label: "Forms", icon: FileText },
+      { to: "/program/abstracts", label: "Abstracts", icon: ClipboardList },
+      { to: "/program/speakers", label: "Speakers", icon: Users },
+      { to: "/program/sponsors", label: "Sponsors", icon: Handshake },
+      { to: "/program/evaluation", label: "Evaluation", icon: ListTodo },
+      { to: "/program/agenda", label: "Agenda", icon: CalendarDays },
+      { to: "/program/readiness", label: "Readiness", icon: ShieldCheck },
+      { to: "/program/communications", label: "Communications", icon: Mail },
+      { to: "/program/availability", label: "Availability", icon: CalendarClock },
+    ],
+  },
+  {
+    label: "Portals",
+    items: [
+      { to: "/portals/forms", label: "Forms", icon: FileText },
+      { to: "/portals/tasks", label: "Tasks", icon: ListTodo },
+    ],
+  },
+  {
+    label: "Configure",
+    items: [
+      { to: "/settings/event", label: "Event settings", icon: Settings2 },
+      { to: "/settings/team", label: "Event team", icon: Users },
+      { to: "/settings/library", label: "Library", icon: Tags },
+      { to: "/settings/task-templates", label: "Task templates", icon: ClipboardList },
+      { to: "/settings/integrations", label: "Integrations", icon: Mail },
+      { to: "/settings/api", label: "API", icon: KeyRound },
+    ],
+  },
+];
+
+function AdminWorkspaceMenus({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
+  const repo = useContext(RepoContext);
+  if (!repo?.organizers?.getMine || !repo.events?.listMine) return null;
+  return <><OrgMenu collapsed={collapsed} onNavigate={onNavigate} /><EventSwitcher collapsed={collapsed} onNavigate={onNavigate} /></>;
+}
+
+function Navigation({
+  forceExpanded = false,
+  onNavigate,
+  sections,
+}: {
+  forceExpanded?: boolean;
+  onNavigate?: () => void;
+  sections: DashboardNavSection[];
+}) {
+  const location = useLocation();
+  const sidebar = useSidebarState();
+  const collapsed = forceExpanded ? false : sidebar.collapsed;
+
+  return (
+    <nav className={cn("space-y-6 py-4", collapsed ? "px-2" : "px-3")}>
+      {sections.map((section) => (
+        <section key={section.label}>
+          {!collapsed && (
+            <h2 className="px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              {section.label}
+            </h2>
+          )}
+          <div className={cn("space-y-1", !collapsed && "mt-1")}>
+            {section.items.map((item) => {
+              const active = item.end
+                ? location.pathname === item.to
+                : location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
+              return (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  title={collapsed ? item.label : undefined}
+                  aria-label={item.label}
+                  onClick={onNavigate}
+                  className={cn(
+                    "group relative flex items-center rounded-md text-sm font-medium transition-colors",
+                    collapsed ? "justify-center p-2" : "gap-3 px-3 py-2",
+                    active
+                      ? "bg-muted text-foreground"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  )}
+                >
+                  <item.icon className="h-4 w-4 shrink-0" />
+                  {!collapsed && <span className="truncate">{item.label}</span>}
+                  {collapsed && (
+                    <span className="pointer-events-none absolute left-full z-50 ml-2 whitespace-nowrap rounded-md bg-popover px-2 py-1 text-xs text-popover-foreground opacity-0 transition-opacity group-hover:opacity-100">
+                      {item.label}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      ))}
+    </nav>
+  );
+}
+
+function MobileSidebar({
+  accountContext,
+  homeHref,
+  sections,
+}: {
+  accountContext: "admin" | "portal";
+  homeHref: string;
+  sections: DashboardNavSection[];
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger asChild>
+        <button
+          type="button"
+          className="fixed left-0 top-0 z-40 flex h-14 w-14 items-center justify-center text-muted-foreground hover:text-foreground lg:hidden"
+          aria-label="Open navigation"
+        >
+          <PanelLeft className="h-4 w-4" />
+        </button>
+      </SheetTrigger>
+      <SheetContent side="left" className="flex w-72 flex-col gap-0 bg-card p-0">
+        <SheetTitle className="sr-only">Navigation</SheetTitle>
+        <div className="flex h-14 shrink-0 items-center px-6">
+          <Link to={homeHref} className="text-sm font-semibold tracking-tight" onClick={() => setOpen(false)}>
+            Namos Sessions
+          </Link>
+        </div>
+        {accountContext === "admin" && <AdminWorkspaceMenus collapsed={false} onNavigate={() => setOpen(false)} />}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <Navigation forceExpanded onNavigate={() => setOpen(false)} sections={sections} />
+        </div>
+        <div className="shrink-0 pt-2">
+          <AccountMenu collapsed={false} context={accountContext} />
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function DesktopSidebar({
+  accountContext,
+  homeHref,
+  sections,
+}: {
+  accountContext: "admin" | "portal";
+  homeHref: string;
+  sections: DashboardNavSection[];
+}) {
+  const { collapsed, toggleCollapsed } = useSidebarState();
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "/" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        toggleCollapsed();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [toggleCollapsed]);
+
+  return (
+    <aside
+      className={cn(
+        "fixed left-2.5 top-2.5 z-30 hidden h-[calc(100dvh-20px)] flex-col rounded-lg bg-card lg:flex",
+        collapsed ? "w-14" : "w-56",
+      )}
+    >
+      <div className="flex h-14 shrink-0 items-center px-3">
+        {collapsed ? (
+          <button
+            onClick={toggleCollapsed}
+            className="mx-auto rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+            title="Expand sidebar"
+            aria-label="Expand sidebar"
+          >
+            <PanelLeft className="h-4 w-4" />
+          </button>
+        ) : (
+          <div className="flex w-full items-center justify-between gap-2">
+            <Link
+              to={homeHref}
+              className="truncate text-sm font-semibold tracking-tight"
+            >
+              Namos Sessions
+            </Link>
+            <button
+              onClick={toggleCollapsed}
+              className="rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+              title="Collapse sidebar"
+              aria-label="Collapse sidebar"
+            >
+              <PanelLeft className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+      </div>
+      {accountContext === "admin" && <AdminWorkspaceMenus collapsed={collapsed} />}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <Navigation sections={sections} />
+      </div>
+      <div className="shrink-0 pt-2">
+        <AccountMenu collapsed={collapsed} context={accountContext} />
+      </div>
+    </aside>
+  );
+}
+
+function DashboardLayoutInner({
+  accountContext,
+  children,
+  detail,
+  headerEnd,
+  homeHref,
+  navSections,
+  title,
+}: {
+  accountContext: "admin" | "portal";
+  children: ReactNode;
+  detail?: ReactNode;
+  headerEnd?: ReactNode;
+  homeHref: string;
+  navSections: DashboardNavSection[];
+  title: string;
+}) {
+  const { collapsed } = useSidebarState();
+
+  return (
+    <div className="h-screen overflow-hidden bg-background text-foreground">
+      <DesktopSidebar accountContext={accountContext} homeHref={homeHref} sections={navSections} />
+      <MobileSidebar accountContext={accountContext} homeHref={homeHref} sections={navSections} />
+      <main
+        className={cn(
+          "flex h-screen min-w-0 flex-col overflow-hidden",
+          collapsed ? "lg:pl-[4.75rem]" : "lg:pl-[15.25rem]",
+        )}
+      >
+        <header className="flex h-14 shrink-0 items-center justify-between gap-4 pl-14 pr-4 md:pl-16 md:pr-6 lg:px-6 xl:px-8">
+          <div className="min-w-0"><PageHeader title={title} /></div>
+          {headerEnd}
+        </header>
+        <div className="flex min-h-0 min-w-0 flex-1 px-4 pb-4 md:px-6 md:pb-6 xl:px-8 xl:pb-8">
+          <section
+            aria-label="Page content"
+            className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto rounded-lg bg-card lg:flex-row lg:overflow-hidden"
+          >
+            <div className="min-w-0 flex-1 p-4 md:p-5 lg:overflow-y-auto">
+              {children}
+            </div>
+            {detail && (
+              <aside className="m-4 mt-0 w-auto shrink-0 rounded-lg bg-muted/60 p-6 lg:ml-0 lg:mt-4 lg:w-[400px] lg:overflow-y-auto">
+                {detail}
+              </aside>
+            )}
+          </section>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+export function DashboardLayout({
+  accountContext,
+  children,
+  detail,
+  headerEnd,
+  homeHref,
+  navSections,
+  title,
+}: {
+  accountContext: "admin" | "portal";
+  children: ReactNode;
+  detail?: ReactNode;
+  headerEnd?: ReactNode;
+  homeHref: string;
+  navSections: DashboardNavSection[];
+  title: string;
+}) {
+  return (
+    <SidebarProvider>
+      <DashboardLayoutInner accountContext={accountContext} detail={detail} headerEnd={headerEnd} homeHref={homeHref} navSections={navSections} title={title}>
+        {children}
+      </DashboardLayoutInner>
+    </SidebarProvider>
+  );
+}
+
+export function AppLayout({
+  children,
+  detail,
+  title,
+}: {
+  children: ReactNode;
+  detail?: ReactNode;
+  title: string;
+}) {
+  const current = useOptionalCurrentEvent()?.event;
+  const repo = useContext(RepoContext);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const openCommandPalette = useCallback(() => setCommandPaletteOpen(true), []);
+  const visibleNavSections = current ? navSections.map(section => ({ ...section, items: section.items.filter(item => item.to !== "/program/sponsors" || current.sponsorsEnabled).map(item => ({ ...item, to: `/events/${current.slug}${item.to}` })) })) : repo ? [] : navSections;
+
+  return (
+    <DashboardLayout
+      accountContext="admin"
+      detail={detail}
+      headerEnd={(
+        <>
+          <button
+            type="button"
+            onClick={openCommandPalette}
+            className="hidden items-center gap-2 rounded-md bg-muted px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground sm:flex"
+            aria-label="Open command palette"
+          >
+            <Search className="h-3.5 w-3.5" />
+            <span>Search</span>
+            <kbd className="rounded bg-background px-1.5 py-0.5 font-mono text-[10px]">⌘K</kbd>
+          </button>
+          <NotificationBell />
+        </>
+      )}
+      homeHref={current ? `/events/${current.slug}/dashboard` : "/events"}
+      navSections={visibleNavSections}
+      title={title}
+    >
+      {children}
+      <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen} />
+      <GlobalKeyboardShortcuts onOpenCommandPalette={openCommandPalette} />
+    </DashboardLayout>
+  );
+}

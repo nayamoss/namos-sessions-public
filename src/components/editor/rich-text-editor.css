@@ -1,0 +1,49 @@
+.tiptap {
+  @apply w-full min-h-64 p-3 rounded bg-white;
+  outline: none;
+}
+
+.tiptap:focus {
+  @apply ring-1 ring-primary/30;
+}
+
+.tiptap strong {
+  @apply font-bold;
+}
+
+.tiptap em {
+  @apply italic;
+}
+
+.tiptap code {
+  @apply bg-muted px-1.5 py-0.5 rounded text-sm font-mono;
+}
+
+.tiptap h2 {
+  @apply text-xl font-semibold mt-5 mb-2;
+}
+
+.tiptap h3 {
+  @apply text-lg font-semibold mt-4 mb-2;
+}
+
+.tiptap ul {
+  @apply list-disc list-inside my-2 ml-4;
+}
+
+.tiptap ol {
+  @apply list-decimal list-inside my-2 ml-4;
+}
+
+.tiptap blockquote {
+  @apply pl-4 italic text-muted-foreground my-3;
+}
+
+.tiptap p {
+  @apply my-2;
+}
+
+.tiptap p.is-editor-empty:first-child::before {
+  @apply text-muted-foreground pointer-events-none float-left h-0;
+  content: attr(data-placeholder);
+}

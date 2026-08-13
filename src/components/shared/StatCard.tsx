@@ -1,0 +1,2 @@
+import type { LucideIcon } from "lucide-react";
+export function StatCard({ label, value, icon: Icon }: { label: string; value: string | number; icon?: LucideIcon }) { return <section className="rounded-lg bg-card p-4"><div className="flex items-start justify-between"><p className="text-sm text-muted-foreground">{label}</p>{Icon && <Icon className="h-4 w-4 text-muted-foreground" />}</div><p className="mt-3 text-2xl font-bold">{value}</p></section>; }

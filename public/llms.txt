@@ -1,0 +1,35 @@
+# Sessionboard Clone
+
+> Open-source conference program management for CFPs, speakers, review, scheduling, and
+> communications.
+
+Sessionboard Clone is an open-source conference program management app. It supports the program-side workflow from collecting CFP submissions through abstract review, speaker coordination, agenda scheduling, and event communications.
+
+## Core Features
+
+- Public CFP submission forms with conditional fields, category routing, close dates, and validation
+- Abstract and session management with status-based review queues
+- Evaluation plans, reviewer assignments, scoring, and decision workflows
+- Speaker portals for profiles, bios, headshots, tasks, documents, and portal forms
+- Agenda scheduling across rooms with conflict detection for rooms, speakers, and availability
+- Templated speaker communications, submission confirmations, reminders, and calendar-invite previews
+- Speaker tracking dashboard for confirmation status and outstanding onboarding work
+- Repeatable seeded demo data, including scheduling conflicts
+
+## Product Boundaries
+
+- Covers conference program operations: submissions, abstracts, evaluation, agenda, speakers, and communications
+- Does not include payments, marketing, CRM, or a full CMS
+- Uses event-scoped records and role-based organizer, reviewer, and speaker access; it is not multi-tenant
+
+## Data Backends
+
+Feature code uses a backend adapter layer. The judged demo uses Convex for reliable seeded-demo uptime. Airtable is an optional, server-mediated backend: credentials stay server-side, Clerk identity is verified there, and event-admin access is explicitly allowlisted.
+
+## Tech Stack
+
+- React + TypeScript + Vite frontend
+- Convex or Airtable through a swappable data adapter
+- Clerk authentication
+- Cloudflare Pages Functions for server-mediated Airtable operations
+- Tailwind CSS and shadcn/ui components
