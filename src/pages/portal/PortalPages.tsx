@@ -19,7 +19,7 @@ import type { OnboardingTask, PublicSubmissionFormSummary, Speaker, Submission }
 import { formatPortalDate, listEditability, relativeEditTime, submissionEditCopy } from "@/lib/submission-editing";
 import { backendUnavailable } from "@/lib/backend";
 
-export function PortalAccessRequired() { const { loading } = usePortalIdentity(); return loading ? <SkeletonList rows={1} label="Loading speaker access…" /> : <section className="rounded-lg bg-card"><EmptyState title="Choose a speaker to continue" message="This demo portal is explicitly scoped to the speaker selected above." /></section>; }
+export function PortalAccessRequired() { const { loading } = usePortalIdentity(); return loading ? <SkeletonList rows={1} label="Loading speaker access…" /> : <section className="rounded-lg bg-card"><EmptyState title="No speaker profile found" message="We couldn't find a speaker profile linked to your account. Contact the event organizer to get your account connected." /></section>; }
 function TaskList({ compact = false }: { compact?: boolean }) {
   const repo = useRepo(); const { eventId, selectedSpeaker } = usePortalIdentity(); const [filter, setFilter] = useState("all"); const [tasks, setTasks] = useState<OnboardingTask[]>([]); const [error, setError] = useState<string>();
   const speakerId = selectedSpeaker?.id;
