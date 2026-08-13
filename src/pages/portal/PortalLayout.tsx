@@ -3,8 +3,6 @@ import { useLocation } from "react-router-dom";
 import { CalendarClock, CalendarDays, FileText, Home, ListTodo, UserRound } from "lucide-react";
 import { DashboardLayout, type DashboardNavSection } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SkeletonList } from "@/components/shared/SkeletonList";
 import { usePortalIdentity } from "./PortalIdentity";
 
@@ -35,7 +33,7 @@ function portalTitle(pathname: string) {
 
 export function PortalLayout({ children }: { children: ReactNode }) {
   const location = useLocation();
-  const { eventName, speakers, selectedSpeaker, loading, error, selectSpeaker, identityLockedByClerk, handoffMismatch } = usePortalIdentity();
+  const { eventName, selectedSpeaker, loading, error, identityLockedByClerk, handoffMismatch } = usePortalIdentity();
   const [mismatchDismissed, setMismatchDismissed] = useState(false);
 
   return (
@@ -53,29 +51,18 @@ export function PortalLayout({ children }: { children: ReactNode }) {
           </section>
         )}
         {/* Once the signed-in account resolves to a speaker, that identity is authoritative and
-            this picker stays hidden — it exists only for accounts that don't match a speaker yet. */}
+            this notice stays hidden. It only appears for accounts that don't match a speaker. */}
         {!identityLockedByClerk && (
-          <section className="rounded-lg bg-muted p-4" aria-label="Demo speaker selection">
-            <p className="text-sm font-medium">Demo impersonation</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              We couldn't match your signed-in account to a speaker for {eventName ?? "this event"}. Select one to continue.
-            </p>
+          <section className="rounded-lg bg-muted p-4" aria-label="No linked speaker profile">
+            <p className="text-sm font-medium">No speaker profile found</p>
             {error ? (
               <p role="alert" className="mt-2 text-sm text-destructive">{error}</p>
             ) : loading ? (
-              <SkeletonList rows={1} label="Loading available speakers…" />
-            ) : speakers.length ? (
-              <div className="mt-3 max-w-sm space-y-2">
-                <Label htmlFor="portal-speaker">Speaker</Label>
-                <Select value={selectedSpeaker?.id} onValueChange={selectSpeaker}>
-                  <SelectTrigger id="portal-speaker"><SelectValue placeholder="Choose a speaker" /></SelectTrigger>
-                  <SelectContent>
-                    {speakers.map((speaker) => <SelectItem key={speaker.id} value={speaker.id}>{speaker.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
+              <SkeletonList rows={1} label="Checking your speaker access…" />
             ) : (
-              <p className="mt-2 text-sm text-muted-foreground">No speakers are available for this event yet.</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                We couldn't find a speaker profile linked to your account for {eventName ?? "this event"}. Contact the event organizer to get your account connected.
+              </p>
             )}
           </section>
         )}
