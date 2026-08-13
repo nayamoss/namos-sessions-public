@@ -1,11 +1,12 @@
-import { mutation } from "./functions";
+import { internalMutation } from "./_generated/server";
 
 const eventSlug = "ai-engineer-sandbox-event";
 const seededAt = Date.UTC(2026, 8, 1, 12, 0);
 
 // Re-runnable demo fixture. It fills in missing fixture records without duplicating a
-// previously seeded event. Run with: npx convex run seed:demo
-export const demo = mutation({
+// previously seeded event. This function is internal so it can only be run by trusted
+// server-side code or the Convex CLI: `npm run seed:demo`.
+export const demo = internalMutation({
   args: {},
   handler: async (ctx) => {
     const now = Date.now();

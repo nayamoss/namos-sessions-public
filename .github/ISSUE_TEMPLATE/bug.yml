@@ -1,0 +1,70 @@
+name: Bug report
+description: Report a reproducible problem in Namos Sessions
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping improve Namos Sessions. Remove credentials and real attendee data from every example.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the behavior and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Provide the smallest reliable steps, including a route or fixture when useful.
+      placeholder: |
+        1. Go to …
+        2. Select …
+        3. Observe …
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - CFP and forms
+        - Submissions and review
+        - Agenda and scheduling
+        - Speaker portal and operations
+        - Communications
+        - Sponsors and integrations
+        - Public pages and embeds
+        - Setup, build, or documentation
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: A release or commit SHA
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Browser, operating system, backend, and relevant non-secret configuration.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Additional evidence
+      description: Add screenshots, recordings, or sanitized logs.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and discussions for duplicates.
+          required: true
+        - label: I removed credentials and real attendee data.
+          required: true
+        - label: This is not a security vulnerability; those are reported privately under SECURITY.md.
+          required: true
