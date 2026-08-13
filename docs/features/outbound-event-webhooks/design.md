@@ -68,7 +68,7 @@ dependency was `api_keys`/`projectPublicEvent()` existing, which they now do.
 | — | (Convex functions, not HTTP) | `webhooks.list/create/update/remove` (organizer-only), `webhookDeliveries.listForWebhook`, `webhookDeliveries.redeliver` | standard Convex query/mutation shapes |
 
 No new public HTTP route is needed for this feature — the new HTTP direction is *outbound*
-(Takumi Talks calling the organizer's URL), not inbound.
+(Namos Sessions calling the organizer's URL), not inbound.
 
 **Delivery mechanism:**
 ```ts
@@ -182,7 +182,7 @@ Payload shape (JSON body):
   same pattern as #93's `apiKeys.*`.
 - The webhook URL itself is not authenticated by us — the receiver (Airtable Automation,
   Zapier catch hook, the organizer's own endpoint) is responsible for verifying the
-  `X-Takumi-Signature` header if it wants to confirm the request really came from Takumi Talks.
+  `X-Takumi-Signature` header if it wants to confirm the request really came from Namos Sessions.
   This is standard for outbound webhooks and is documented on `/api-docs`, not a gap.
 
 ---

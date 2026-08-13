@@ -7,7 +7,7 @@
 
 ## Problem Statement
 [public-events-api](../public-events-api/plan.md) (issue #93) gives integrators a pull-only
-`GET /api/v1/events` — a caller has to poll it. There's no way for Takumi Talks to push a change
+`GET /api/v1/events` — a caller has to poll it. There's no way for Namos Sessions to push a change
 out the moment it happens. Naya's ask, 2026-08-12: *"if they want to send the data from Takumi
 Talks to Airtable... if they want to send the data to their website... right now they can't."*
 Getting event data into Airtable or a live website today means either polling the pull API on a
@@ -30,7 +30,7 @@ or Airtable base updates the moment I change an event, without polling.
 - GIVEN a webhook is registered, WHEN an event is created, updated, published, or archived,
   THEN my URL receives a POST within a few seconds, signed so I can verify it came from Takumi
   Talks.
-- GIVEN my endpoint is down or errors, WHEN a delivery fails, THEN Takumi Talks retries with
+- GIVEN my endpoint is down or errors, WHEN a delivery fails, THEN Namos Sessions retries with
   backoff and I can see the failure (status, response code, timestamp) in a delivery log — I am
   not silently dropped.
 - GIVEN I no longer want a webhook, WHEN I delete it, THEN no further deliveries are attempted.
@@ -65,7 +65,7 @@ to the pull endpoint **so that** I know push is available and don't build unnece
 - Per-organizer webhook rate limiting/quota — single-tenant, small volume; revisit if abused.
 - A generic "workflow builder" (field mapping UI, transforms) — the payload is fixed JSON;
   mapping into Airtable/Zapier/Make happens on their side, in their tool.
-- Inbound webhooks (Takumi Talks receiving pushes from Airtable/other tools) — not asked for.
+- Inbound webhooks (Namos Sessions receiving pushes from Airtable/other tools) — not asked for.
 
 ## Success Metrics
 - An organizer can register a webhook and see a real delivery in the log within 2 minutes of

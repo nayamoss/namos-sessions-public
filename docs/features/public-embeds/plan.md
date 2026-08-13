@@ -204,7 +204,7 @@ missing product surface.
   no event metadata.
 - **Loading:** skeleton shape matching chosen view when known; otherwise four neutral rows.
 - **Error:** `This embed could not be loaded. Refresh to try again.`.
-- **Footer:** `Powered by Takumi Talks` as muted text; no external branding asset dependency.
+- **Footer:** `Powered by Namos Sessions` as muted text; no external branding asset dependency.
 
 ### UI Spec: `EmbedRenderer`
 

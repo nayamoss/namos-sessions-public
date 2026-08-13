@@ -4,7 +4,7 @@
 
 **Estimate:** 6–8 hours
 
-**GitHub issue:** [#70](https://github.com/nayamoss/takumi-talks/issues/70)
+**GitHub issue:** [#70](https://github.com/nayamoss/namos-sessions/issues/70)
 
 **Requirements:** [`requirements.md`](./requirements.md)
 

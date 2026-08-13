@@ -53,7 +53,7 @@ function assertCredentials(method: AuthMethod, credentials: Credentials, region:
   if (method === "resend_oauth") throw new Error("Resend OAuth is not available yet. Connect with a Resend API key instead.");
 }
 
-const testMessage = { subject: "Takumi Talks email delivery test", text: "Your event email connection is working." };
+const testMessage = { subject: "Namos Sessions email delivery test", text: "Your event email connection is working." };
 
 // Saves only after a live send succeeds, so a stored integration is always one that worked at
 // least once. The plaintext credentials never leave this action.

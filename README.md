@@ -1,7 +1,17 @@
-# Takumi Talks
+# Namos Sessions
 
 Open-source conference program management for CFP forms and submissions, speaker portals,
 review, scheduling, and communications.
+
+## Related repositories
+
+Namos Sessions is split across three repos:
+
+| Repo | Visibility | Purpose |
+| --- | --- | --- |
+| **[namos-sessions-webapp](https://github.com/nayamoss/namos-sessions-webapp)** | Private | Primary application source — full feature set, internal docs, CI |
+| **[namos-sessions-public](https://github.com/nayamoss/namos-sessions-public)** (this repo) | Public | Open-source mirror of the app for community use and contributions |
+| **[namos-sessions-marketing](https://github.com/nayamoss/namos-sessions-marketing)** | Private | Marketing site, landing pages, and content for Namos Sessions |
 
 ## Data backends
 
@@ -23,6 +33,13 @@ The optional submission, decision, reminder, and portal-form email handlers requ
 server-only `CONVEX_URL`, `RESEND_API_KEY`, and `RESEND_FROM_EMAIL` values. When those
 are absent, a saved workflow stays successful and the handler reports delivery as skipped
 rather than claiming an email was sent.
+
+## Where things live
+
+- **Feature docs** — `docs/features/<feature-name>/` (one folder per feature: `requirements.md`, `plan.md`, `design.md`)
+- **Convex backend** — `convex/` (functions, schema, seed data)
+- **App source** — `src/`, with the Convex/Airtable boundary isolated in `src/data`
+- **Product notes** — `PRODUCT.md`
 
 ## Local development
 
@@ -52,6 +69,11 @@ not configure a deployment, email provider, or authentication for you.
 - `npm run lint` — lint
 - `npm run check` — repeatable local handoff check: typecheck, tests, and production build
 - `npm run seed:demo` — populate the configured Convex deployment with demo data
+
+## Contributing
+
+Issues and pull requests are welcome here. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup,
+architecture boundaries, and the pull-request checklist.
 
 ## Measured performance
 

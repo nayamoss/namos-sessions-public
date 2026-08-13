@@ -8,7 +8,7 @@
 ## Problem Statement
 
 The client's stated reason for replacing Sessionize/Sessionboard is that both are **extremely slow**.
-Takumi Talks currently reproduces the exact architecture that makes them feel slow.
+Namos Sessions currently reproduces the exact architecture that makes them feel slow.
 
 The root cause is a single line of architecture: `src/data/convex/index.ts:56` constructs a
 **`ConvexHttpClient`** — Convex's stateless, one-shot HTTP client — instead of the reactive

@@ -22,8 +22,8 @@ export const demo = mutation({
     const eventId = event._id;
 
     const representativeEvents = [
-      { name: "Takumi Talks Draft", slug: "takumi-talks-draft", status: "draft" as const, startDate: Date.UTC(2027, 0, 10), endDate: Date.UTC(2027, 0, 11) },
-      { name: "Takumi Talks Archive", slug: "takumi-talks-archive", status: "archived" as const, startDate: Date.UTC(2025, 0, 10), endDate: Date.UTC(2025, 0, 11) },
+      { name: "Namos Sessions Draft", slug: "namos-sessions-draft", status: "draft" as const, startDate: Date.UTC(2027, 0, 10), endDate: Date.UTC(2027, 0, 11) },
+      { name: "Namos Sessions Archive", slug: "namos-sessions-archive", status: "archived" as const, startDate: Date.UTC(2025, 0, 10), endDate: Date.UTC(2025, 0, 11) },
     ];
     for (const fixture of representativeEvents) {
       const existing = await ctx.db.query("events").withIndex("by_slug", (q) => q.eq("slug", fixture.slug)).first();

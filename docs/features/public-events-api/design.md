@@ -162,7 +162,7 @@ No `orgId` field — see Technical Decisions.
   - sticky request/response code rail on wide screens, stacked after the operation on narrow
     screens.
 - Elements:
-  1. **Product header** — Takumi Talks identity, "API reference" context, and a quiet link back
+  1. **Product header** — Namos Sessions identity, "API reference" context, and a quiet link back
      to the product. It establishes that this is documentation before the endpoint content.
   2. **Section navigation** — Overview, Authentication, List events, Event object, and Errors.
      Anchor links use the browser's native document behavior and remain visible on desktop.

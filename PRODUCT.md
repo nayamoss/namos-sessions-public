@@ -13,7 +13,7 @@ narrower role-specific surfaces for assigned evaluations and their own portal wo
 
 ## Product Purpose
 
-Takumi Talks is conference program-management software. It turns the post-CFP workflow into a
+Namos Sessions is conference program-management software. It turns the post-CFP workflow into a
 coherent, event-scoped operating system: submission review, speaker readiness, onboarding tasks,
 communications, availability, and agenda scheduling. Success means users can see what needs
 attention, take the next valid action, and trust that state persists without hidden inference.

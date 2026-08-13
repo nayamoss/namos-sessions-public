@@ -1,6 +1,6 @@
 # Contributing
 
-Thank you for helping improve Takumi Talks.
+Thank you for helping improve Namos Sessions.
 
 ## Local setup
 

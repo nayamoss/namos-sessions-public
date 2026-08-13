@@ -61,7 +61,7 @@ selects `Embeds`. The organizer never needs to know or type `/cms/embeds`.
 20. The external website loads `/embed/:embedId` inside the iframe. The public route checks that
     the embed is enabled and the event published, then returns only configured public fields.
 21. The attendee sees the configured view, theme, event data, search/filter controls where
-    applicable, and a small `Powered by Takumi Talks` footer.
+    applicable, and a small `Powered by Namos Sessions` footer.
 22. The attendee searches or filters within the embed. The already-loaded public dataset updates
     immediately without navigating the parent website.
 23. The organizer later changes a published session or accepted speaker profile. On the next iframe
