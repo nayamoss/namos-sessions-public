@@ -8,8 +8,10 @@ Open-source conference program management for CFP forms and submissions, speaker
 review, scheduling, and communications.
 
 > **Project status:** This public mirror is in active pre-1.0 development. APIs and data models
-> may change between releases. Issues and pull requests belong in this repository; private product
-> development and deployment configuration remain in the primary application repository.
+> may change between releases. Issues and pull requests belong in this repository; the private
+> product's own feature backlog, internal docs, and production deployment secrets remain in the
+> primary application repository. Instructions for deploying **your own copy** of this repo
+> live here — see [`docs/deployment/one-click.md`](docs/deployment/one-click.md).
 
 ## What it includes
 

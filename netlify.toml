@@ -1,0 +1,20 @@
+[build]
+  command = "npm run build:hosted"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# These values are requested when the repository is deployed through Netlify's
+# Deploy to Netlify flow. Never put production credentials in this file.
+[template.environment]
+  CONVEX_DEPLOY_KEY = "Convex production deploy key (from the Convex deployment settings)"
+  VITE_CLERK_PUBLISHABLE_KEY = "Clerk publishable key for the application"
+
+# Serve client-side routes through the Vite entry point. Existing static files
+# in dist continue to take precedence because this redirect is not forced.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
