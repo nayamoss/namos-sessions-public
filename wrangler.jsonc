@@ -1,11 +1,16 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "namos-sessions-webapp",
+  "name": "namos-sessions-public",
   "compatibility_date": "2026-08-13",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
+  "preview_urls": true,
   "assets": {
     "directory": "dist",
     "not_found_handling": "single-page-application"
+  },
+  "vars": {
+    "VITE_CONVEX_URL": "https://your-project.convex.cloud",
+    "VITE_CLERK_PUBLISHABLE_KEY": "pk_test_your-clerk-publishable-key"
   }
 }
