@@ -117,3 +117,31 @@ reusing these figures.
 
 This is not multi-tenant: records are scoped by `eventId`, not organizations. The project has
 no organization table, `organizationId`, or Clerk Organizations dependency.
+
+## Costs to consider before deploying
+
+Running your own copy means running your own accounts with each service below. This project's
+free tiers are enough for local development, a demo, or a small event — check current pricing
+before a larger one, since limits and plans change:
+
+- **Convex** (primary data backend) — free tier covers function calls, storage, and bandwidth up
+  to a monthly cap; paid plans scale by usage. See [convex.dev/pricing](https://www.convex.dev/pricing).
+- **Clerk** (auth) — free tier covers a meaningful number of monthly active users; paid plans
+  scale per MAU past that. See [clerk.com/pricing](https://clerk.com/pricing).
+- **Resend** (optional, email delivery) — free tier is capped on emails per day/month; if you skip
+  it, submission/decision/reminder emails report as skipped instead of failing. See
+  [resend.com/pricing](https://resend.com/pricing).
+- **Airtable** (optional secondary adapter) — only relevant if you enable `VITE_DATA_BACKEND=airtable`;
+  has its own separate pricing and API rate limits.
+- **Hosting** (Cloudflare Workers, Netlify, Vercel, Railway, or DigitalOcean App Platform — pick
+  one via [`docs/deployment/one-click.md`](docs/deployment/one-click.md)) — free/hobby tiers exist
+  on most of these, but request volume, build minutes, and bandwidth caps vary by provider and
+  change over time. DigitalOcean App Platform in particular does not have an indefinite free tier.
+
+None of these costs are billed by or paid to this project — you're setting up and paying for your
+own accounts directly with each provider.
+
+## Questions or help
+
+Best effort only — see [SUPPORT.md](SUPPORT.md) for what that means. For anything not suited to
+a public GitHub Discussion or issue, email **info@beeconomybuzz.com**.
