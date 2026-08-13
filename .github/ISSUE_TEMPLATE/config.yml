@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and ideas
+    url: https://github.com/nayamoss/namos-sessions-public/discussions
+    about: Ask for help or explore an idea before it becomes a scoped issue.
+  - name: Security vulnerability
+    url: https://github.com/nayamoss/namos-sessions-public/security/advisories/new
+    about: Report suspected vulnerabilities privately. Do not open a public issue.

@@ -1,7 +1,24 @@
 # Namos Sessions
 
+[![CI](https://github.com/nayamoss/namos-sessions-public/actions/workflows/ci.yml/badge.svg)](https://github.com/nayamoss/namos-sessions-public/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/nayamoss/namos-sessions-public/actions/workflows/codeql.yml/badge.svg)](https://github.com/nayamoss/namos-sessions-public/actions/workflows/codeql.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-006BFF.svg)](LICENSE)
+
 Open-source conference program management for CFP forms and submissions, speaker portals,
 review, scheduling, and communications.
+
+> **Project status:** This public mirror is in active pre-1.0 development. APIs and data models
+> may change between releases. Issues and pull requests belong in this repository; private product
+> development and deployment configuration remain in the primary application repository.
+
+## What it includes
+
+- Configurable CFP and speaker-portal forms
+- Submission review, scoring, assignments, and decision queues
+- Speaker profiles, documents, availability, tasks, and readiness tracking
+- Agenda scheduling with room, speaker, and track conflict detection
+- Email templates, reminders, delivery history, and calendar invitations
+- Sponsor workflows, public embeds, and an event API foundation
 
 ## Related repositories
 
@@ -74,6 +91,11 @@ not configure a deployment, email provider, or authentication for you.
 
 Issues and pull requests are welcome here. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup,
 architecture boundaries, and the pull-request checklist.
+
+- [Get support](SUPPORT.md)
+- [Report a vulnerability privately](SECURITY.md)
+- [Read the Code of Conduct](CODE_OF_CONDUCT.md)
+- [Understand project governance](GOVERNANCE.md)
 
 ## Measured performance
 

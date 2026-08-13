@@ -1,24 +1,23 @@
 # Security Policy
 
+## Supported versions
+
+Namos Sessions is pre-1.0. Security fixes are applied to the latest code on `main` and the newest
+published release. Older snapshots are not maintained.
+
 ## Reporting a vulnerability
 
-Please report suspected vulnerabilities privately by emailing
-`security@namos-sessions.xyz`. Do not open a public issue or disclose the vulnerability until
-the maintainers have had a reasonable opportunity to investigate and release a fix.
+Do not open a public issue, discussion, or pull request for a suspected vulnerability.
 
-> **Owner TODO:** Confirm that this inbox exists, is monitored, and is the correct security
-> contact before publishing the repository.
+Use **Report a vulnerability** on this repository's Security tab to create a private advisory. If
+private reporting is unavailable, email `security@namos-sessions.xyz`.
 
-Include the affected component, reproduction steps, potential impact, and any suggested
-mitigation. We aim to acknowledge reports within 3 business days and provide an initial
-assessment within 7 business days. Resolution timing depends on severity and complexity; we will
-keep reporters informed of material progress.
+Include the affected component and version, reproduction steps or a minimal proof of concept,
+expected impact, required privileges, and any known mitigation. We aim to acknowledge a complete
+report within three business days and share an initial assessment within seven business days.
 
-## Scope
+## Safe-harbor expectations
 
-Reports about the current code in this repository and its first-party deployments are in scope.
-Vulnerabilities in third-party services or dependencies should also be reported to the relevant
-provider, though we welcome notice when they affect this project.
-
-We ask reporters to act in good faith, avoid accessing or modifying data that is not their own,
-avoid service disruption, and allow time for remediation before coordinated disclosure.
+Act in good faith, avoid privacy violations and service disruption, access only data you own or
+have explicit permission to test, and allow a reasonable remediation period before disclosure.
+We will not pursue action against research that follows these expectations.
