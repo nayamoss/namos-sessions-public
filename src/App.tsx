@@ -39,6 +39,9 @@ const SubmissionFormBuilder = lazy(
 const PortalForms = lazy(() => import("@/pages/portal/PortalForms"));
 const TasksAdmin = lazy(() => import("@/pages/portal/TasksAdmin"));
 const Communications = lazy(() => import("@/pages/program/Communications"));
+const CommTemplateEditor = lazy(
+  () => import("@/pages/program/CommTemplateEditor"),
+);
 const Speakers = lazy(() => import("@/pages/program/Speakers"));
 const Sponsors = lazy(() => import("@/pages/program/Sponsors"));
 const DashboardHome = lazy(() => import("@/pages/dashboard/DashboardHome"));
@@ -326,6 +329,10 @@ export default function App() {
                     <Route
                       path="program/communications"
                       element={<Communications />}
+                    />
+                    <Route
+                      path="program/communications/templates/:id/edit"
+                      element={<CommTemplateEditor />}
                     />
                     <Route path="portals/forms" element={<PortalForms />} />
                     <Route path="portals/tasks" element={<TasksAdmin />} />

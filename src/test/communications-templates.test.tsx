@@ -1,8 +1,8 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { ClerkProvider } from "@clerk/clerk-react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
-import Communications from "@/pages/program/Communications";
+import CommTemplateEditor from "@/pages/program/CommTemplateEditor";
 import { RepoContext } from "@/data/repo";
 import { createRepository, type DataTransport } from "@/data/transport";
 import type { EventId } from "@/data/types";
@@ -23,15 +23,20 @@ describe("Communications template management", () => {
 
     render(
       <ClerkProvider publishableKey={TEST_CLERK_PUBLISHABLE_KEY}>
-        <MemoryRouter initialEntries={["/program/communications"]}>
+        <MemoryRouter initialEntries={["/program/communications/templates/new/edit"]}>
           <RepoContext.Provider value={createRepository(transport)}>
-            <Communications />
+            <Routes>
+              <Route
+                path="/program/communications/templates/:id/edit"
+                element={<CommTemplateEditor />}
+              />
+            </Routes>
           </RepoContext.Provider>
         </MemoryRouter>
       </ClerkProvider>,
     );
 
-    expect(await screen.findByRole("heading", { name: "Template library" })).toBeInTheDocument();
+    expect(await screen.findByLabelText("Template name")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Template name"), { target: { value: "Speaker reminder" } });
     fireEvent.change(screen.getByLabelText("Subject"), { target: { value: "Your tasks are due" } });
     fireEvent.change(screen.getByLabelText("Body"), { target: { value: "Please finish your portal tasks." } });
