@@ -9,9 +9,9 @@ describe("stripHtmlTags", () => {
   it("does not re-form markup that a single pass would leave behind", () => {
     // One pass turns this into "<script" — the bug CodeQL flagged.
     expect(stripHtmlTags("<scr<script>ipt>alert(1)")).not.toContain("<script");
-    // A single pass yields "<script"; looping leaves inert text instead.
+    // A single pass would yield "<script" here; looping leaves inert text.
+    // (The single-pass form is deliberately not written out — CodeQL flags it.)
     expect(stripHtmlTags("<scr<script>ipt>alert(1)")).toBe("ipt>alert(1)");
-    expect("<scr<script>ipt>alert(1)".replace(/<[^>]*>/g, "")).toContain("ipt>");
   });
 
   it("leaves plain text untouched", () => {
