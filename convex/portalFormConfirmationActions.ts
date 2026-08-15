@@ -10,6 +10,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
 import { deliverEventEmail } from "./emailDelivery";
+import { stripHtmlTags } from "../src/lib/strip-html";
 
 export const deliver = internalAction({
   args: { eventId: v.id("events"), formId: v.id("submission_forms"), speakerId: v.id("speakers") },
@@ -19,7 +20,7 @@ export const deliver = internalAction({
 
     const subject = `We received your ${context.formTitle} form for ${context.eventName}`;
     const text =
-      context.confirmationBody?.replace(/<[^>]*>/g, "").trim() ||
+      stripHtmlTags(context.confirmationBody ?? "").trim() ||
       `Hi ${context.speakerName},\n\nWe received your ${context.formTitle} form for ${context.eventName}.`;
 
     try {
