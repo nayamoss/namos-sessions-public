@@ -9,6 +9,16 @@
  */
 
 import type * as agenda from "../agenda.js";
+import type * as agendaAudit from "../agendaAudit.js";
+import type * as agentData from "../agentData.js";
+import type * as agentProposal from "../agentProposal.js";
+import type * as agentProviderSecrets from "../agentProviderSecrets.js";
+import type * as agentProviderSettings from "../agentProviderSettings.js";
+import type * as agentProviderSettingsActions from "../agentProviderSettingsActions.js";
+import type * as agentRuns from "../agentRuns.js";
+import type * as agentRuntime from "../agentRuntime.js";
+import type * as agentState from "../agentState.js";
+import type * as agentWorkflow from "../agentWorkflow.js";
 import type * as apiKeyAuth from "../apiKeyAuth.js";
 import type * as apiKeys from "../apiKeys.js";
 import type * as apiKeysActions from "../apiKeysActions.js";
@@ -23,6 +33,7 @@ import type * as emailDelivery from "../emailDelivery.js";
 import type * as emailIntegrations from "../emailIntegrations.js";
 import type * as emailIntegrationsActions from "../emailIntegrationsActions.js";
 import type * as evaluations from "../evaluations.js";
+import type * as eventInviteActions from "../eventInviteActions.js";
 import type * as eventMembers from "../eventMembers.js";
 import type * as eventValidation from "../eventValidation.js";
 import type * as events from "../events.js";
@@ -59,6 +70,16 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   agenda: typeof agenda;
+  agendaAudit: typeof agendaAudit;
+  agentData: typeof agentData;
+  agentProposal: typeof agentProposal;
+  agentProviderSecrets: typeof agentProviderSecrets;
+  agentProviderSettings: typeof agentProviderSettings;
+  agentProviderSettingsActions: typeof agentProviderSettingsActions;
+  agentRuns: typeof agentRuns;
+  agentRuntime: typeof agentRuntime;
+  agentState: typeof agentState;
+  agentWorkflow: typeof agentWorkflow;
   apiKeyAuth: typeof apiKeyAuth;
   apiKeys: typeof apiKeys;
   apiKeysActions: typeof apiKeysActions;
@@ -73,6 +94,7 @@ declare const fullApi: ApiFromModules<{
   emailIntegrations: typeof emailIntegrations;
   emailIntegrationsActions: typeof emailIntegrationsActions;
   evaluations: typeof evaluations;
+  eventInviteActions: typeof eventInviteActions;
   eventMembers: typeof eventMembers;
   eventValidation: typeof eventValidation;
   events: typeof events;
@@ -128,4 +150,7 @@ export declare const internal: FilterApi<
   FunctionReference<any, "internal">
 >;
 
-export declare const components: {};
+export declare const components: {
+  agent: import("@convex-dev/agent/_generated/component.js").ComponentApi<"agent">;
+  workflow: import("@convex-dev/workflow/_generated/component.js").ComponentApi<"workflow">;
+};

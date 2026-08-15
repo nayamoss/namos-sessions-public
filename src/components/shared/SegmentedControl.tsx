@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { cardSurfaceClasses } from "@/components/ui/card";
 
 export function SegmentedControl<Value extends string>({ label, value, options, onChange, disabled, className }: {
   label: string;
@@ -9,7 +10,7 @@ export function SegmentedControl<Value extends string>({ label, value, options, 
   className?: string;
 }) {
   return (
-    <div role="radiogroup" aria-label={label} className={cn("inline-flex items-center gap-1 rounded-lg bg-muted p-1", className)}>
+    <div role="radiogroup" aria-label={label} className={cn(cardSurfaceClasses("default", "flex max-w-full items-center gap-1 overflow-x-auto bg-muted p-1"), className)}>
       {options.map((option) => (
         <button
           key={option.value}
@@ -19,10 +20,10 @@ export function SegmentedControl<Value extends string>({ label, value, options, 
           disabled={disabled || option.disabled}
           onClick={() => onChange(option.value)}
           className={cn(
-            "h-7 rounded-md px-3 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+            "touch-target h-7 shrink-0 rounded-md px-3 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50",
             value === option.value
               ? "bg-background font-medium text-foreground"
-              : "text-muted-foreground hover:text-foreground",
+              : "text-foreground/70 hover:bg-background/60 hover:text-foreground",
           )}
         >
           {option.label}

@@ -1221,7 +1221,7 @@ export default function Sponsors() {
           </p>
         )}
         {!loading && sponsors.length === 0 ? (
-          <div className="flex min-h-64 flex-col items-center justify-center rounded-lg bg-muted/60 p-8 text-center">
+          <div className={cardSurfaceClasses("default", "flex min-h-64 flex-col items-center justify-center bg-muted/60 p-8 text-center")}>
             <Handshake className="h-10 w-10 text-muted-foreground" />
             <h2 className="mt-4 text-base font-semibold">No sponsors yet</h2>
             <p className="mt-2 max-w-md text-sm text-muted-foreground">
@@ -1248,3 +1248,4 @@ export default function Sponsors() {
     </AppLayout>
   );
 }
+import { cardSurfaceClasses } from "@/components/ui/card";

@@ -18,4 +18,14 @@ describe("cleanErrorMessage", () => {
       "Could not save event.",
     );
   });
+
+  it("removes nested Convex action and mutation error framing", () => {
+    const error = new Error(
+      "[Request ID: abc123] Server Error\nUncaught Error: Uncaught Error: You cannot remove the event's last organizer.\n    at async handler (../convex/eventInviteActions.ts:188:5)",
+    );
+
+    expect(cleanErrorMessage(error, "Could not remove event member.")).toBe(
+      "You cannot remove the event's last organizer.",
+    );
+  });
 });

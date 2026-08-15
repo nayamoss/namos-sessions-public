@@ -2,6 +2,7 @@ import { LoaderCircle, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { FORM_TEMPLATES, type FormTemplate } from "@/components/forms/formTemplates";
 import { Button } from "@/components/ui/button";
+import { cardSurfaceClasses } from "@/components/ui/card";
 
 type TemplateGalleryProps = ({
   appliesTo: "cfp" | "portal";
@@ -62,7 +63,7 @@ export function TemplateGallery({ appliesTo, templates: suppliedTemplates, onSel
           type="button"
           disabled={isLoading}
           onClick={() => void selectTemplate(template.id)}
-          className="flex min-h-44 flex-col rounded-lg bg-card p-5 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35 disabled:cursor-wait disabled:opacity-60"
+          className={cardSurfaceClasses("default", "flex min-h-44 flex-col p-5 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none disabled:cursor-wait disabled:opacity-60")}
         >
           <div className="flex items-start justify-between gap-3">
             <Icon className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
@@ -78,7 +79,7 @@ export function TemplateGallery({ appliesTo, templates: suppliedTemplates, onSel
         type="button"
         disabled={isLoading}
         onClick={onBlank}
-        className="flex min-h-44 flex-col rounded-lg bg-muted/40 p-5 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35 disabled:cursor-wait disabled:opacity-60"
+        className={cardSurfaceClasses("default", "flex min-h-44 flex-col bg-muted/40 p-5 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none disabled:cursor-wait disabled:opacity-60")}
       >
         <Plus className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
         <p className="mt-4 font-semibold">Start from blank</p>

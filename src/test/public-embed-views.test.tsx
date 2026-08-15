@@ -32,8 +32,8 @@ let root: Root | undefined;
 let container: HTMLDivElement | undefined;
 
 /** Mounts the public embed route for one feed and returns the rendered DOM. */
-async function renderFeed(feed: string, embed: PublicEmbed, get = vi.fn(async () => embed)) {
-  const repo = { publicEmbeds: { get }, agenda: { list: vi.fn() }, speakers: { list: vi.fn() } } as unknown as Repository;
+async function renderFeed(feed: string, embed: PublicEmbed, getLegacy = vi.fn(async () => embed)) {
+  const repo = { publicEmbeds: { getLegacy }, agenda: { list: vi.fn() }, speakers: { list: vi.fn() } } as unknown as Repository;
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);

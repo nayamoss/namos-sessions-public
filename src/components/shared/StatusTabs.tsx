@@ -49,7 +49,7 @@ export function StatusTabs({
               onClick={() => onValueChange(tab.value)}
               onKeyDown={(event) => handleKeyDown(event, index)}
               className={cn(
-                "shrink-0 rounded-md px-3 py-1.5 text-sm transition-colors",
+                "touch-target shrink-0 rounded-md px-3 py-1.5 text-sm transition-colors",
                 selected
                   ? "bg-muted text-foreground"
                   : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",

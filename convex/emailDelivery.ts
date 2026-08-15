@@ -55,6 +55,13 @@ export async function assertEventAccessAction(ctx: ActionCtx, eventId: Id<"event
   return identity;
 }
 
+export async function assertEventOrganizerAction(ctx: ActionCtx, eventId: Id<"events">): Promise<UserIdentity> {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) throw new Error("Unauthenticated");
+  if (!(await ctx.runQuery(api.eventMembers.hasOrganizerAccess, { eventId }))) throw new Error("Forbidden: event organizer access required.");
+  return identity;
+}
+
 function integrationKey() {
   const configured = process.env.EMAIL_INTEGRATION_ENCRYPTION_KEY;
   if (!configured) throw new Error("EMAIL_INTEGRATION_ENCRYPTION_KEY is not configured.");

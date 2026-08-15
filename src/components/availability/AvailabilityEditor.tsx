@@ -216,7 +216,7 @@ export function AvailabilityEditor({
         <button
           type="button"
           onClick={() => toggleDay(date)}
-          className="group w-full rounded-sm py-1 text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
+          className="group w-full rounded-sm py-1 text-center focus-visible:outline-none"
           aria-label={`${hours.every((hour) => blocked.has(slotKey(date, hour))) ? "Make" : "Mark"} ${dayLabel(date)} ${hours.every((hour) => blocked.has(slotKey(date, hour))) ? "available" : "unavailable all day"}`}
         >
           <span className="block font-semibold text-foreground">{timeView === "local" ? localDateRangeLabel(date, timezone) : dayLabel(date)}</span>
@@ -250,7 +250,7 @@ export function AvailabilityEditor({
               if (event.detail === 0) toggle(date, row.hour);
             }}
             className={cn(
-              "group flex h-9 w-full touch-none select-none items-center justify-center rounded-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40",
+              "group flex h-9 w-full touch-none select-none items-center justify-center rounded-sm transition-colors focus-visible:outline-none",
               unavailable
                 ? "bg-destructive/15 text-destructive hover:bg-destructive/20"
                 : "bg-muted/55 text-muted-foreground/0 hover:bg-muted hover:text-muted-foreground",
@@ -272,8 +272,8 @@ export function AvailabilityEditor({
             <p className="text-sm font-semibold">{monthLabel(visibleMonth)}</p>
             <p className="text-xs text-muted-foreground">{timezoneLabel(displayTimezone)} time</p>
           </div>
-          <div className="flex items-center gap-1">
-            <div className="inline-flex rounded-md bg-muted/60 p-0.5" role="group" aria-label="Time zone view">
+          <div className="flex w-full flex-wrap items-center gap-1 sm:w-auto sm:justify-end">
+            <div className="flex max-w-full overflow-x-auto rounded-md bg-muted/60 p-0.5" role="group" aria-label="Time zone view">
               <Button
                 type="button"
                 variant={timeView === "conference" ? "secondary" : "ghost"}

@@ -2,9 +2,16 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
-const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn("rounded-lg bg-card text-card-foreground", className)} {...props} />
-));
+type CardVariant = "default" | "muted";
+
+const cardSurfaceClasses = (variant: CardVariant = "default", className?: string) =>
+  cn("rounded-lg text-card-foreground", variant === "muted" ? "bg-muted/60" : "bg-card", className);
+
+const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement> & { variant?: CardVariant }>(
+  ({ className, variant = "default", ...props }, ref) => (
+    <div ref={ref} className={cn(cardSurfaceClasses(variant), className)} {...props} />
+  ),
+);
 Card.displayName = "Card";
 
 const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
@@ -40,4 +47,4 @@ const CardFooter = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
 );
 CardFooter.displayName = "CardFooter";
 
-export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent };
+export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent, cardSurfaceClasses };

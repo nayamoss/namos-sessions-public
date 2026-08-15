@@ -5,6 +5,7 @@ import {
   mutation,
   query,
   assertEventAccess,
+  assertEventOrganizerAccess,
   assertOrganizer,
 } from "./functions";
 
@@ -38,7 +39,7 @@ export const get = query({
 export const save = mutation({
   args: { id: v.optional(v.id("submission_forms")), form: v.any() },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.form.eventId);
+    await assertEventOrganizerAccess(ctx, args.form.eventId);
     const now = Date.now();
     if (!args.form?.eventId)
       throw new Error("A submission form must belong to an event.");
@@ -80,7 +81,7 @@ export const save = mutation({
 export const duplicate = mutation({
   args: { id: v.id("submission_forms"), eventId: v.id("events") },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     const form = await ctx.db.get(args.id);
     if (!form || form.eventId !== args.eventId)
       throw new Error("Form not found for this event.");
@@ -100,7 +101,7 @@ export const duplicate = mutation({
 export const createFromTemplate = mutation({
   args: { eventId: v.id("events"), templateId: v.string() },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     const template = FORM_TEMPLATES.find((item) => item.id === args.templateId);
     if (!template) throw new Error("Form template not found.");
 
@@ -176,7 +177,7 @@ export const createFromTemplate = mutation({
 export const remove = mutation({
   args: { id: v.id("submission_forms"), eventId: v.id("events") },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     const form = await ctx.db.get(args.id);
     if (!form || form.eventId !== args.eventId)
       throw new Error("Form not found for this event.");
@@ -186,7 +187,7 @@ export const remove = mutation({
 export const listFields = query({
   args: { eventId: v.optional(v.id("events")) },
   handler: async (ctx, args) => {
-    if (args.eventId) await assertEventAccess(ctx, args.eventId);
+    if (args.eventId) await assertEventOrganizerAccess(ctx, args.eventId);
     else await assertOrganizer(ctx);
     return ctx.db.query("field_definitions").collect();
   },
@@ -205,7 +206,7 @@ export const fields = query({
 export const saveField = mutation({
   args: { id: v.optional(v.id("field_definitions")), eventId: v.optional(v.id("events")), field: v.any() },
   handler: async (ctx, args) => {
-    if (args.eventId) await assertEventAccess(ctx, args.eventId);
+    if (args.eventId) await assertEventOrganizerAccess(ctx, args.eventId);
     else await assertOrganizer(ctx);
     const now = Date.now();
     if (args.id) {

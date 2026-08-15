@@ -16,6 +16,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { StatCard } from "@/components/shared/StatCard";
 import { StatusTabs } from "@/components/shared/StatusTabs";
 import { Button } from "@/components/ui/button";
+import { cardSurfaceClasses } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -299,7 +300,7 @@ export default function Communications() {
           </TabsList>
 
           <TabsContent value="templates" className="space-y-4">
-            <section className="space-y-4 rounded-lg bg-card p-5">
+            <section className={cardSurfaceClasses("default", "space-y-4 p-5")}>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h2 className="font-semibold">Template library</h2>
@@ -360,7 +361,7 @@ export default function Communications() {
           </TabsContent>
 
           <TabsContent value="test" className="space-y-4">
-            <section className="space-y-4 rounded-lg bg-card p-5">
+            <section className={cardSurfaceClasses("default", "space-y-4 p-5")}>
               <div>
                 <h2 className="font-semibold">Test the confirmation email</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
@@ -457,7 +458,7 @@ export default function Communications() {
                 }}
               />
             ) : (
-              <div className="rounded-lg bg-card">
+              <div className={cardSurfaceClasses()}>
                 <EmptyState message="No delivery attempts match this view." />
               </div>
             )}

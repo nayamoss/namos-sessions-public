@@ -114,7 +114,7 @@ export function ReviewerProgressPanel({ eventId, plan, refreshKey }: { eventId: 
     { key: "actions", header: "", cell: row => <span className="flex justify-end">{reminderCell(row)}</span> },
   ];
 
-  return <section className="rounded-lg bg-card p-5">
+  return <section className={cardSurfaceClasses("default", "p-5")}>
     <div className="flex flex-wrap items-end justify-between gap-3">
       <div>
         <h2 className="font-semibold">Reviewer progress</h2>
@@ -154,3 +154,4 @@ export function ReviewerProgressPanel({ eventId, plan, refreshKey }: { eventId: 
     </div>}
   </section>;
 }
+import { cardSurfaceClasses } from "@/components/ui/card";

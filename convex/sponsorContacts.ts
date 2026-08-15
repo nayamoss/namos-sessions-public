@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { assertEventAccess, mutation, query } from "./functions";
+import { assertEventOrganizerAccess, mutation, query } from "./functions";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 
@@ -34,7 +34,7 @@ export const listBySponsor = query({
   args: { sponsorId: v.id("sponsors") },
   handler: async (ctx, args) => {
     const sponsor = await getSponsor(ctx, args.sponsorId);
-    await assertEventAccess(ctx, sponsor.eventId);
+    await assertEventOrganizerAccess(ctx, sponsor.eventId);
     return ctx.db
       .query("sponsor_contacts")
       .withIndex("by_sponsor", (q) => q.eq("sponsorId", args.sponsorId))
@@ -53,7 +53,7 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const sponsor = await getSponsor(ctx, args.sponsorId);
-    await assertEventAccess(ctx, sponsor.eventId);
+    await assertEventOrganizerAccess(ctx, sponsor.eventId);
     const name = args.name.trim();
     if (!name) throw new Error("A contact needs a name.");
     const contacts = await ctx.db
@@ -89,7 +89,7 @@ export const update = mutation({
   handler: async (ctx, args) => {
     const contact = await ctx.db.get(args.contactId);
     if (!contact) throw new Error("Sponsor contact not found.");
-    await assertEventAccess(ctx, contact.eventId);
+    await assertEventOrganizerAccess(ctx, contact.eventId);
     const name = args.name === undefined ? contact.name : args.name.trim();
     if (!name) throw new Error("A contact needs a name.");
     if (args.isPrimary) await makePrimary(ctx, contact.sponsorId, contact._id);
@@ -120,7 +120,7 @@ export const remove = mutation({
   handler: async (ctx, args) => {
     const contact = await ctx.db.get(args.contactId);
     if (!contact) throw new Error("Sponsor contact not found.");
-    await assertEventAccess(ctx, contact.eventId);
+    await assertEventOrganizerAccess(ctx, contact.eventId);
     await ctx.db.delete(args.contactId);
     if (contact.isPrimary) {
       const next = await ctx.db

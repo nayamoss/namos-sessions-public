@@ -1,81 +1,31 @@
-import type { PublicEmbed, PublicEmbedAgendaItem } from "@/data/types";
+import type { Embed, EmbedFieldOptions, EmbedId, EmbedView, EmbedWrite, PublicEmbed, PublicEmbedAgendaItem } from "@/data/types";
 
-/** The public embed feeds served by `/e/:eventSlug/:feed`. */
+export const embedViews: EmbedView[] = ["agenda", "schedule_itinerary", "schedule_grid", "session_list", "speaker_gallery", "speaker_list"];
+export const embedViewLabels: Record<EmbedView, string> = { agenda: "Agenda", schedule_itinerary: "Schedule itinerary", schedule_grid: "Schedule grid", session_list: "Session list", speaker_gallery: "Speaker gallery", speaker_list: "Speaker list" };
+export const embedViewDescriptions: Record<EmbedView, string> = { agenda: "A time-ordered event agenda.", schedule_itinerary: "A searchable chronological schedule.", schedule_grid: "A day-by-day timetable with rooms as columns and time slots as rows.", session_list: "A browsable list of published sessions.", speaker_gallery: "A visual gallery of accepted speakers.", speaker_list: "An alphabetical speaker directory." };
+export const requiredEmbedFields = { agenda: ["title", "time", "room"], session: ["title"], speaker: ["name"] } as const;
+export const defaultEmbedFields: EmbedFieldOptions = { agenda: { title: true, time: true, room: true, track: true, speakers: true }, session: { title: true, time: true, room: true, track: true, speakers: true }, speaker: { name: true, headshot: true, bio: true, links: true, sessions: true } };
+export function defaultEmbed(eventId: EmbedWrite["eventId"]): EmbedWrite { return { eventId, name: "", format: "styled_html", view: "agenda", enabled: true, theme: "system", primaryColor: "#E56B5D", dateFormat: "weekday_long", timeFormat: "12_hour", trackIds: [], fields: structuredClone(defaultEmbedFields) }; }
+export function embedWriteFromEmbed(embed: Embed): EmbedWrite {
+  const { id, eventId, name, format, view, enabled, theme, primaryColor, dateFormat, timeFormat, trackIds, fields } = embed;
+  return { id, eventId, name, format, view, enabled, theme, primaryColor, dateFormat, timeFormat, trackIds: [...trackIds], fields: structuredClone(fields) };
+}
+export function isHexColor(value: string) { return /^#[0-9A-Fa-f]{6}$/.test(value); }
+export function publicEmbedUrl(origin: string, embedId: EmbedId): string;
+export function publicEmbedUrl(origin: string, eventSlug: string, feed: EmbedFeed): string;
+export function publicEmbedUrl(origin: string, idOrSlug: string, legacyFeed?: EmbedFeed) { return new URL(legacyFeed ? `/e/${encodeURIComponent(idOrSlug)}/${legacyFeed}` : `/embed/${encodeURIComponent(idOrSlug)}`, origin).toString(); }
+export function iframeHeight(view: EmbedView) { return view === "speaker_gallery" ? 880 : view === "speaker_list" ? 720 : view === "schedule_grid" ? 900 : 760; }
+function escapeAttribute(value: string) { return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;"); }
+export function iframeSnippet(origin: string, embedId: EmbedId, view: EmbedView) { const src = escapeAttribute(publicEmbedUrl(origin, embedId)); const title = escapeAttribute(`${embedViewLabels[view]} embed — Namos Sessions`); return `<iframe src="${src}" title="${title}" loading="lazy" width="100%" height="${iframeHeight(view)}" style="border:0;width:100%;" referrerpolicy="strict-origin-when-cross-origin"></iframe>`; }
+
+/** Legacy public feeds remain live while saved embeds migrate customers to opaque IDs. */
 export const embedFeeds = ["agenda", "sessions", "itinerary", "speakers"] as const;
 export type EmbedFeed = (typeof embedFeeds)[number];
-
-export function isEmbedFeed(value: string | undefined): value is EmbedFeed {
-  return embedFeeds.includes(value as EmbedFeed);
-}
-
-export const embedFeedTitles: Record<EmbedFeed, string> = {
-  agenda: "Agenda",
-  sessions: "Sessions",
-  itinerary: "Schedule itinerary",
-  speakers: "Speakers",
-};
-
-/** Copy shown when the shared public query returns nothing for a feed. */
-export const embedFeedEmptyCopy: Record<EmbedFeed, string> = {
-  agenda: "The agenda has not been published yet.",
-  sessions: "The session catalog has not been published yet.",
-  itinerary: "The itinerary will appear once the schedule is published.",
-  speakers: "Speakers will appear once accepted.",
-};
-
-export function publicEmbedUrl(origin: string, eventSlug: string, view: EmbedFeed) { return new URL(`/e/${encodeURIComponent(eventSlug)}/${view}`, origin).toString(); }
-
+export function isEmbedFeed(value: string | undefined): value is EmbedFeed { return embedFeeds.includes(value as EmbedFeed); }
+export const embedFeedTitles: Record<EmbedFeed, string> = { agenda: "Agenda", sessions: "Sessions", itinerary: "Schedule itinerary", speakers: "Speakers" };
+export const embedFeedEmptyCopy: Record<EmbedFeed, string> = { agenda: "The agenda has not been published yet.", sessions: "The session catalog has not been published yet.", itinerary: "The itinerary will appear once the schedule is published.", speakers: "Speakers will appear once accepted." };
 const uncategorized = "Uncategorized";
-
-/**
- * Chronological day buckets. The public query already sorts the agenda by start
- * time, so insertion order is the event's own running order.
- */
-function groupByDay(embed: PublicEmbed) {
-  const formatter = new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric", timeZone: embed.eventTimezone });
-  const days = new Map<string, PublicEmbedAgendaItem[]>();
-  for (const item of embed.agenda) {
-    const label = formatter.format(item.startTime);
-    days.set(label, [...(days.get(label) ?? []), item]);
-  }
-  return [...days.entries()].map(([label, items]) => ({ label, items }));
-}
-
-/** Agenda embed: day, then track within the day. */
-export function agendaDayTrackGroups(embed: PublicEmbed) {
-  return groupByDay(embed).map(day => {
-    const tracks = new Map<string, PublicEmbedAgendaItem[]>();
-    for (const item of day.items) {
-      const track = item.trackName ?? uncategorized;
-      tracks.set(track, [...(tracks.get(track) ?? []), item]);
-    }
-    return { label: day.label, tracks: [...tracks.entries()].map(([track, items]) => ({ track, items })) };
-  });
-}
-
-/**
- * Itinerary embed: one flat, time-ordered run of sessions per day. Deliberately
- * has no track sub-grouping — it reads like a printed run of show.
- */
-export function itineraryDayGroups(embed: PublicEmbed) {
-  return groupByDay(embed).map(day => ({ label: day.label, items: [...day.items].sort((left, right) => left.startTime - right.startTime || left.title.localeCompare(right.title)) }));
-}
-
-/**
- * Sessions embed: a catalog browsed by topic, never by day. Tracks are
- * alphabetical with the untracked bucket last; sessions read alphabetically.
- */
-export function sessionTrackGroups(embed: PublicEmbed) {
-  const tracks = new Map<string, PublicEmbedAgendaItem[]>();
-  for (const item of embed.agenda) {
-    const track = item.trackName ?? uncategorized;
-    tracks.set(track, [...(tracks.get(track) ?? []), item]);
-  }
-  return [...tracks.entries()]
-    .map(([track, items]) => ({ track, items: [...items].sort((left, right) => left.title.localeCompare(right.title)) }))
-    .sort((left, right) => {
-      if (left.track === uncategorized) return 1;
-      if (right.track === uncategorized) return -1;
-      return left.track.localeCompare(right.track);
-    });
-}
+function groupByDay(embed: PublicEmbed) { const formatter = new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric", timeZone: embed.eventTimezone }); const days = new Map<string, PublicEmbedAgendaItem[]>(); for (const item of embed.agenda) { const label = formatter.format(item.startTime); days.set(label, [...(days.get(label) ?? []), item]); } return [...days.entries()].map(([label, items]) => ({ label, items })); }
+export function agendaDayTrackGroups(embed: PublicEmbed) { return groupByDay(embed).map(day => { const tracks = new Map<string, PublicEmbedAgendaItem[]>(); for (const item of day.items) { const track = item.trackName ?? uncategorized; tracks.set(track, [...(tracks.get(track) ?? []), item]); } return { label: day.label, tracks: [...tracks.entries()].map(([track, items]) => ({ track, items })) }; }); }
+export function itineraryDayGroups(embed: PublicEmbed) { return groupByDay(embed).map(day => ({ label: day.label, items: [...day.items].sort((left, right) => left.startTime - right.startTime || left.title.localeCompare(right.title)) })); }
+export function sessionTrackGroups(embed: PublicEmbed) { const tracks = new Map<string, PublicEmbedAgendaItem[]>(); for (const item of embed.agenda) { const track = item.trackName ?? uncategorized; tracks.set(track, [...(tracks.get(track) ?? []), item]); } return [...tracks.entries()].map(([track, items]) => ({ track, items: [...items].sort((left, right) => left.title.localeCompare(right.title)) })).sort((left, right) => left.track === uncategorized ? 1 : right.track === uncategorized ? -1 : left.track.localeCompare(right.track)); }

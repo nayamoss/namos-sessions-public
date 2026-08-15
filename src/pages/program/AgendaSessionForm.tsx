@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -50,14 +50,14 @@ export function AgendaSessionForm({ event, rooms, tracks, speakers, submissions,
   const locked = mode === "submission" && submissionId !== "none";
   const accepted = useMemo(() => submissions.filter((submission) => submission.status === "accepted"), [submissions]);
 
-  useEffect(() => {
-    if (!locked) return;
-    const submission = accepted.find((candidate) => candidate.id === submissionId);
+  const selectSubmission = (nextSubmissionId: string) => {
+    setSubmissionId(nextSubmissionId);
+    const submission = accepted.find((candidate) => candidate.id === nextSubmissionId);
     if (!submission) return;
     setTitle(submission.title ?? "Untitled accepted submission");
     setSpeakerIds([...submission.speakerIds]);
     setTrackId(submission.trackId ?? "none");
-  }, [accepted, locked, submissionId]);
+  };
 
   const submit = async (formEvent: React.FormEvent) => {
     formEvent.preventDefault();
@@ -95,7 +95,7 @@ export function AgendaSessionForm({ event, rooms, tracks, speakers, submissions,
       {mode === "submission" && (
         <div className="space-y-2">
           <Label htmlFor="agenda-submission">Accepted submission</Label>
-          <Select value={submissionId} onValueChange={setSubmissionId}>
+          <Select value={submissionId} onValueChange={selectSubmission}>
             <SelectTrigger id="agenda-submission"><SelectValue placeholder="Choose a submission" /></SelectTrigger>
             <SelectContent><SelectItem value="none">Choose a submission</SelectItem>{accepted.map((submission) => <SelectItem key={submission.id} value={submission.id}>{submission.title ?? "Untitled submission"}</SelectItem>)}</SelectContent>
           </Select>
@@ -113,7 +113,7 @@ export function AgendaSessionForm({ event, rooms, tracks, speakers, submissions,
       <div className="space-y-2"><Label htmlFor="agenda-track">Track</Label><Select disabled={locked} value={trackId} onValueChange={setTrackId}><SelectTrigger id="agenda-track"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Unassigned</SelectItem>{tracks.map((track) => <SelectItem key={track.id} value={track.id}>{track.name}</SelectItem>)}</SelectContent></Select></div>
       <div className="space-y-2"><Label htmlFor="agenda-room">Room</Label><Select value={roomId} onValueChange={setRoomId}><SelectTrigger id="agenda-room"><SelectValue placeholder="Choose a room" /></SelectTrigger><SelectContent>{rooms.map((room) => <SelectItem key={room.id} value={room.id}>{room.name}</SelectItem>)}</SelectContent></Select></div>
       <div className="space-y-2"><Label htmlFor="agenda-date">Date</Label><Input id="agenda-date" type="date" min={utcCalendarDate(event.startDate)} max={utcCalendarDate(event.endDate)} value={date} onChange={(event) => setDate(event.target.value)} /></div>
-      <div className="grid grid-cols-2 gap-3"><div className="space-y-2"><Label htmlFor="agenda-start">Start</Label><Input id="agenda-start" type="time" step={900} value={start} onChange={(event) => setStart(event.target.value)} /></div><div className="space-y-2"><Label htmlFor="agenda-end">End</Label><Input id="agenda-end" type="time" step={900} value={end} onChange={(event) => setEnd(event.target.value)} /></div></div>
+      <div className="grid gap-3 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor="agenda-start">Start</Label><Input id="agenda-start" type="time" step={900} value={start} onChange={(event) => setStart(event.target.value)} /></div><div className="space-y-2"><Label htmlFor="agenda-end">End</Label><Input id="agenda-end" type="time" step={900} value={end} onChange={(event) => setEnd(event.target.value)} /></div></div>
       <div className="flex items-center justify-between gap-3"><div><Label htmlFor="agenda-published">Published</Label><p className="text-xs text-muted-foreground">Visible to assigned speakers.</p></div><Switch id="agenda-published" checked={published} onCheckedChange={setPublished} /></div>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       <div className="flex gap-2"><Button type="submit" variant="accent" disabled={saving || (mode === "submission" && submissionId === "none")}>{saving ? "Saving…" : "Save session"}</Button><Button type="button" variant="ghost" disabled={saving} onClick={onCancel}>Cancel</Button></div>

@@ -695,19 +695,6 @@ export default function Agenda() {
             {error}
           </p>
         )}
-        <StatusTabs
-          ariaLabel="Agenda views"
-          value={view}
-          onValueChange={(value) => setView(value as typeof view)}
-          tabs={[
-            { value: "list", label: "List", count: items.length },
-            { value: "day", label: "Day", count: dayGroups.length },
-            { value: "week", label: "Week", count: items.length },
-            { value: "track", label: "Track", count: trackGroups.length },
-            { value: "rooms", label: "Rooms", count: rooms.length },
-            { value: "conflicts", label: "Conflicts", count: conflicts.length },
-          ]}
-        />
         <ContentToolbar
           ariaLabel="Agenda controls"
           search={
@@ -727,6 +714,19 @@ export default function Agenda() {
           }
           utilities={
             <>
+              <StatusTabs
+                ariaLabel="Agenda views"
+                value={view}
+                onValueChange={(value) => setView(value as typeof view)}
+                tabs={[
+                  { value: "list", label: "List", count: items.length },
+                  { value: "day", label: "Day", count: dayGroups.length },
+                  { value: "week", label: "Week", count: items.length },
+                  { value: "track", label: "Track", count: trackGroups.length },
+                  { value: "rooms", label: "Rooms", count: rooms.length },
+                  { value: "conflicts", label: "Conflicts", count: conflicts.length },
+                ]}
+              />
               <Button
                 type="button"
                 variant="outline"
@@ -741,7 +741,7 @@ export default function Agenda() {
               </Button>
               <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" size="sm"><ArrowUpDown className="mr-1 h-4 w-4" />Sort</Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuRadioGroup value={sortKey} onValueChange={(value) => setSortKey(value as SortKey)}><DropdownMenuRadioItem value="time">Time</DropdownMenuRadioItem><DropdownMenuRadioItem value="title">Title</DropdownMenuRadioItem><DropdownMenuRadioItem value="room">Room</DropdownMenuRadioItem></DropdownMenuRadioGroup></DropdownMenuContent></DropdownMenu>
               <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" size="sm"><Filter className="mr-1 h-4 w-4" />Filter{roomFilters.length + trackFilters.length + (publicationFilter === "all" ? 0 : 1) > 0 ? ` (${roomFilters.length + trackFilters.length + (publicationFilter === "all" ? 0 : 1)})` : ""}</Button></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-56"><p className="px-2 py-1 text-xs font-medium text-muted-foreground">Rooms</p>{rooms.map((room) => <DropdownMenuCheckboxItem key={room.id} checked={roomFilters.includes(room.id)} onCheckedChange={(checked) => setRoomFilters((current) => checked ? [...current, room.id] : current.filter((id) => id !== room.id))}>{room.name}</DropdownMenuCheckboxItem>)}<p className="px-2 py-1 text-xs font-medium text-muted-foreground">Tracks</p>{tracks.map((track) => <DropdownMenuCheckboxItem key={track.id} checked={trackFilters.includes(track.id)} onCheckedChange={(checked) => setTrackFilters((current) => checked ? [...current, track.id] : current.filter((id) => id !== track.id))}>{track.name}</DropdownMenuCheckboxItem>)}<p className="px-2 py-1 text-xs font-medium text-muted-foreground">Status</p><DropdownMenuRadioGroup value={publicationFilter} onValueChange={(value) => setPublicationFilter(value as typeof publicationFilter)}><DropdownMenuRadioItem value="all">All</DropdownMenuRadioItem><DropdownMenuRadioItem value="published">Published</DropdownMenuRadioItem><DropdownMenuRadioItem value="draft">Draft</DropdownMenuRadioItem></DropdownMenuRadioGroup></DropdownMenuContent></DropdownMenu>
-              <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" size="sm" aria-label="More agenda options"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onSelect={exportCsv}><Download className="mr-2 h-4 w-4" />Export as CSV</DropdownMenuItem><DropdownMenuItem onSelect={exportPdf}><Download className="mr-2 h-4 w-4" />Export as PDF</DropdownMenuItem><DropdownMenuItem onSelect={() => window.print()}><Printer className="mr-2 h-4 w-4" />Print schedule</DropdownMenuItem><DropdownMenuItem onSelect={() => { setDetailMode("duplicate"); setParams((current) => { const next = new URLSearchParams(current); next.delete("selected"); return next; }); }}><Copy className="mr-2 h-4 w-4" />Duplicate day…</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
+              <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" size="icon" aria-label="More agenda options"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onSelect={exportCsv}><Download className="mr-2 h-4 w-4" />Export as CSV</DropdownMenuItem><DropdownMenuItem onSelect={exportPdf}><Download className="mr-2 h-4 w-4" />Export as PDF</DropdownMenuItem><DropdownMenuItem onSelect={() => window.print()}><Printer className="mr-2 h-4 w-4" />Print schedule</DropdownMenuItem><DropdownMenuItem onSelect={() => { setDetailMode("duplicate"); setParams((current) => { const next = new URLSearchParams(current); next.delete("selected"); return next; }); }}><Copy className="mr-2 h-4 w-4" />Duplicate day…</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
             </>
           }
           primaryAction={
@@ -753,7 +753,7 @@ export default function Agenda() {
         {showPublishConfirmation && (
           <section
             aria-label="Publish schedule confirmation"
-            className="rounded-lg bg-muted p-4"
+            className={cardSurfaceClasses("default", "bg-muted p-4")}
           >
             <p className="font-medium">Publish the current schedule?</p>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -860,7 +860,7 @@ function DayView({
   }
   return (
     <section className="space-y-3">
-      <div className="flex items-center gap-3 rounded-lg bg-muted/40 p-3">
+      <div className={cardSurfaceClasses("default", "flex items-center gap-3 bg-muted/40 p-3")}>
         <Label htmlFor="agenda-day" className="text-sm font-medium">
           Event day
         </Label>
@@ -911,7 +911,7 @@ function WeekView({
     );
   }
   return (
-    <section className="overflow-x-auto rounded-lg bg-card p-3">
+    <section className={cardSurfaceClasses("default", "overflow-x-auto p-3")}>
       <div
         className="grid gap-3"
         style={{
@@ -924,8 +924,8 @@ function WeekView({
             key={day.date}
             className={
               index % 2 === 0
-                ? "space-y-3 rounded-lg bg-muted/35 p-3"
-                : "space-y-3 rounded-lg bg-muted/15 p-3"
+                ? cardSurfaceClasses("default", "space-y-3 bg-muted/35 p-3")
+                : cardSurfaceClasses("default", "space-y-3 bg-muted/15 p-3")
             }
           >
             <div>
@@ -976,8 +976,8 @@ function TrackView({
           key={group.track}
           className={
             index % 2 === 0
-              ? "space-y-3 rounded-lg bg-muted/35 p-4"
-              : "space-y-3 rounded-lg bg-muted/15 p-4"
+              ? cardSurfaceClasses("default", "space-y-3 bg-muted/35 p-4")
+              : cardSurfaceClasses("default", "space-y-3 bg-muted/15 p-4")
           }
         >
           <div className="flex items-center justify-between gap-3">
@@ -1017,44 +1017,96 @@ function RoomsView({
 }) {
   const days = agendaEventDays(event.startDate, event.endDate);
   const [roomDay, setRoomDay] = useState(days[0] ?? "");
+  const [draggedSessionId, setDraggedSessionId] = useState<string>();
+  const [dragTarget, setDragTarget] = useState<string>();
   const dayItems = items.filter((item) => eventDateTime(item.startTime, timeZone).date === roomDay);
   const slots = agendaRoomSlots(roomDay, dayItems, timeZone);
   if (rooms.length === 0 || days.length === 0) return <EmptyAgenda message="Add rooms and an event date range to build the room grid." />;
   return (
-    <section className="space-y-3">
-      <div className="flex items-center gap-3 rounded-lg bg-muted/40 p-3"><Label>Event day</Label><Select value={roomDay} onValueChange={setRoomDay}><SelectTrigger className="h-8 w-52"><SelectValue /></SelectTrigger><SelectContent>{days.map((day) => <SelectItem key={day} value={day}>{formatDay(day, timeZone, "long")}</SelectItem>)}</SelectContent></Select></div>
-      <div className="overflow-x-auto rounded-lg bg-card"><div className="min-w-[720px]">
+    <section className="space-y-4">
+      <div className="flex flex-col items-start gap-2 px-1 sm:flex-row sm:items-center sm:gap-3">
+        <Label className="text-sm text-muted-foreground">Event day</Label>
+        <Select value={roomDay} onValueChange={setRoomDay}>
+          <SelectTrigger className="h-8 w-full bg-muted/50 sm:w-52">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {days.map((day) => (
+              <SelectItem key={day} value={day}>
+                {formatDay(day, timeZone, "long")}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          Drag sessions between rooms and 15-minute time slots.
+        </p>
+      </div>
+      <div className={cardSurfaceClasses("default", "overflow-x-auto")}>
+        <div className="min-w-[760px] p-1">
         <div
-          className="grid auto-rows-[24px] text-sm"
+          className="grid auto-rows-[24px] gap-x-px overflow-hidden rounded-md bg-muted/40 text-sm"
           style={{
-            gridTemplateColumns: `110px repeat(${Math.max(rooms.length, 1)}, minmax(180px, 1fr))`,
+            gridTemplateColumns: `96px repeat(${Math.max(rooms.length, 1)}, minmax(190px, 1fr))`,
           }}
         >
-          <div className="sticky top-0 z-20 bg-muted p-3 text-xs font-medium text-muted-foreground">Time</div>
-          {rooms.map((room, roomIndex) => <div key={room.id} className="sticky top-0 z-20 bg-muted p-3 text-xs font-medium text-muted-foreground" style={{ gridColumn: roomIndex + 2 }}>{room.name}</div>)}
+          <div className="sticky top-0 z-20 flex items-center bg-card px-3 py-2 text-xs font-medium text-muted-foreground">
+            Time
+          </div>
+          {rooms.map((room, roomIndex) => (
+            <div
+              key={room.id}
+              className="sticky top-0 z-20 flex items-center bg-card px-3 py-2 text-xs font-semibold text-foreground"
+              style={{ gridColumn: roomIndex + 2 }}
+            >
+              <span className="truncate">{room.name}</span>
+            </div>
+          ))}
           {slots.map((slot, slotIndex) => {
-            const bandClass = Math.floor(slotIndex / 4) % 2 === 0 ? "bg-muted/25" : "bg-muted/10";
+            const isHour = slotIndex % 4 === 0;
             return (
               <Fragment key={slot}>
-                <div className={`flex items-start gap-2 px-3 text-xs text-muted-foreground ${bandClass}`} style={{ gridColumn: 1, gridRow: slotIndex + 2 }}>{slotIndex % 2 === 0 && <><Clock3 className="h-3.5 w-3.5" /><span>{formatTime(slot, timeZone)}</span></>}</div>
-                {rooms.map((room, roomIndex) => (
-                  <div
-                    key={`${slot}-${room.id}`}
-                    className={`min-h-6 transition-colors hover:bg-accent/50 ${bandClass}`}
-                    style={{ gridColumn: roomIndex + 2, gridRow: slotIndex + 2 }}
-                    aria-label={`${room.name} at ${formatDay(roomDay, timeZone)} ${formatTime(slot, timeZone)}`}
-                    onDragOver={(dragEvent) => {
-                      dragEvent.preventDefault();
-                      dragEvent.dataTransfer.dropEffect = "move";
-                    }}
-                    onDrop={(dropEvent) => {
-                      dropEvent.preventDefault();
-                      const sessionId =
-                        dropEvent.dataTransfer.getData("text/plain");
-                      if (sessionId) void onMove(sessionId, room.id, slot).catch(() => undefined);
-                    }}
-                  />
-                ))}
+                <div
+                  className={isHour ? "flex items-start gap-1.5 bg-card px-3 pt-1 text-xs font-medium text-muted-foreground" : "bg-card"}
+                  style={{ gridColumn: 1, gridRow: slotIndex + 2 }}
+                >
+                  {isHour && (
+                    <>
+                      <Clock3 className="mt-px h-3 w-3 shrink-0" />
+                      <span className="whitespace-nowrap">{formatTime(slot, timeZone)}</span>
+                    </>
+                  )}
+                </div>
+                {rooms.map((room, roomIndex) => {
+                  const targetId = `${slot}-${room.id}`;
+                  const isActiveTarget = draggedSessionId && dragTarget === targetId;
+                  return (
+                    <div
+                      key={targetId}
+                      className={isActiveTarget
+                        ? "min-h-6 bg-accent/70 transition-colors"
+                        : isHour
+                          ? "min-h-6 bg-muted/30 transition-colors hover:bg-muted/50"
+                          : "min-h-6 bg-muted/15 transition-colors hover:bg-muted/50"}
+                      style={{ gridColumn: roomIndex + 2, gridRow: slotIndex + 2 }}
+                      aria-label={`${room.name} at ${formatDay(roomDay, timeZone)} ${formatTime(slot, timeZone)}`}
+                      onDragEnter={() => setDragTarget(targetId)}
+                      onDragOver={(dragEvent) => {
+                        dragEvent.preventDefault();
+                        dragEvent.dataTransfer.dropEffect = "move";
+                        setDragTarget(targetId);
+                      }}
+                      onDrop={(dropEvent) => {
+                        dropEvent.preventDefault();
+                        const sessionId =
+                          dropEvent.dataTransfer.getData("text/plain");
+                        setDraggedSessionId(undefined);
+                        setDragTarget(undefined);
+                        if (sessionId) void onMove(sessionId, room.id, slot).catch(() => undefined);
+                      }}
+                    />
+                  );
+                })}
               </Fragment>
             );
           })}
@@ -1063,10 +1115,38 @@ function RoomsView({
             const slotIndex = slots.findIndex((slot) => slot === snapToAgendaInterval(session.startTime, timeZone));
             if (roomIndex < 0 || slotIndex < 0) return null;
             const durationRows = Math.max(1, Math.round((session.endTime - session.startTime) / (15 * 60_000)));
-            return <article key={session.id} draggable onDragStart={(dragEvent) => { dragEvent.dataTransfer.effectAllowed = "move"; dragEvent.dataTransfer.setData("text/plain", session.id); }} className="z-10 m-1 cursor-grab overflow-hidden rounded-md bg-background p-2 text-xs active:cursor-grabbing" style={{ gridColumn: roomIndex + 2, gridRow: `${slotIndex + 2} / span ${durationRows}` }}><p className="truncate font-medium">{session.title}</p><p className="truncate text-muted-foreground">{formatTime(session.startTime, timeZone)}–{formatTime(session.endTime, timeZone)}</p><AgendaMoveControl id={session.id} title={session.title} roomId={session.roomId} startTime={session.startTime} rooms={rooms} timeZone={timeZone} onMove={onMove} /></article>;
+            const isDragging = draggedSessionId === session.id;
+            return (
+              <article
+                key={session.id}
+                draggable
+                aria-label={`${session.title}, ${formatTime(session.startTime, timeZone)} to ${formatTime(session.endTime, timeZone)}`}
+                onDragStart={(dragEvent) => {
+                  dragEvent.dataTransfer.effectAllowed = "move";
+                  dragEvent.dataTransfer.setData("text/plain", session.id);
+                  setDraggedSessionId(session.id);
+                }}
+                onDragEnd={() => {
+                  setDraggedSessionId(undefined);
+                  setDragTarget(undefined);
+                }}
+                className={`group relative z-10 m-1 cursor-grab overflow-hidden rounded-md bg-primary/10 py-1.5 pl-2 pr-7 text-xs text-foreground transition-colors hover:bg-primary/15 active:cursor-grabbing ${isDragging ? "opacity-50" : ""}`}
+                style={{ gridColumn: roomIndex + 2, gridRow: `${slotIndex + 2} / span ${durationRows}` }}
+              >
+                <p className="truncate font-semibold">{session.title}</p>
+                <p className="truncate font-medium text-primary">
+                  {formatTime(session.startTime, timeZone)}–{formatTime(session.endTime, timeZone)}
+                </p>
+                {durationRows >= 4 && session.track && (
+                  <p className="truncate text-muted-foreground">{session.track}</p>
+                )}
+                <AgendaMoveControl id={session.id} title={session.title} roomId={session.roomId} startTime={session.startTime} rooms={rooms} timeZone={timeZone} onMove={onMove} compact={durationRows < 3} />
+              </article>
+            );
           })}
         </div>
-      </div></div>
+        </div>
+      </div>
     </section>
   );
 }
@@ -1110,7 +1190,7 @@ function AgendaSessionCard({
 
 function EmptyAgenda({ message }: { message: string }) {
   return (
-    <div className="rounded-lg bg-card p-8 text-center text-sm text-muted-foreground">
+    <div className={cardSurfaceClasses("default", "p-8 text-center text-sm text-muted-foreground")}>
       {message}
     </div>
   );
@@ -1130,7 +1210,7 @@ function ConflictsView({
   return (
     <section className="space-y-3">
       {valid.length === 0 ? (
-        <div className="rounded-lg bg-card p-8 text-center">
+        <div className={cardSurfaceClasses("default", "p-8 text-center")}>
           <p className="font-medium">No room or speaker overlaps</p>
           <p className="mt-1 text-sm text-muted-foreground">
             Availability conflicts are evaluated on the persisted agenda as
@@ -1139,7 +1219,7 @@ function ConflictsView({
         </div>
       ) : (
         valid.map((conflict) => (
-          <article key={conflict.id} className="rounded-lg bg-card p-5">
+          <article key={conflict.id} className={cardSurfaceClasses("default", "p-5")}>
             <div className="flex gap-3">
               {conflict.title.includes("Informational") ? <Info className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" /> : <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />}
               <div>
@@ -1198,3 +1278,4 @@ function DuplicateDayForm({ days, timeZone, onDuplicate, onCancel }: { days: str
   const [error, setError] = useState<string>();
   return <form className="space-y-5" onSubmit={async (event) => { event.preventDefault(); setError(undefined); setSaving(true); try { await onDuplicate(source, target); } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not duplicate the day."); } finally { setSaving(false); } }}><p className="text-sm text-muted-foreground">Copies every source session to the same local times on the target day as drafts. Existing target sessions stay unchanged.</p><div className="space-y-2"><Label>Source day</Label><Select value={source} onValueChange={setSource}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{days.map((day) => <SelectItem key={day} value={day}>{formatDay(day, timeZone, "long")}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>Target day</Label><Select value={target} onValueChange={setTarget}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{days.map((day) => <SelectItem key={day} value={day}>{formatDay(day, timeZone, "long")}</SelectItem>)}</SelectContent></Select></div>{error && <p role="alert" className="text-sm text-destructive">{error}</p>}<div className="flex gap-2"><Button type="submit" variant="accent" disabled={saving || !source || !target || source === target}>{saving ? "Duplicating…" : "Duplicate as drafts"}</Button><Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button></div></form>;
 }
+import { cardSurfaceClasses } from "@/components/ui/card";

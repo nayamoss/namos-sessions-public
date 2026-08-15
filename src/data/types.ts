@@ -8,6 +8,9 @@ export type TaskId = Brand<string, "TaskId">;
 export type TagId = Brand<string, "TagId">;
 export type SponsorId = Brand<string, "SponsorId">;
 export type SponsorTierId = Brand<string, "SponsorTierId">;
+export type AgentRunId = Brand<string, "AgentRunId">;
+export type AgentProposalId = Brand<string, "AgentProposalId">;
+export type EmbedId = Brand<string, "EmbedId">;
 
 export type SubmissionStatus =
   | "draft" | "pending" | "accept_queue" | "accepted"
@@ -120,7 +123,15 @@ export interface ReviewerReminderBatch { status: "sent" | "failed" | "skipped"; 
 export interface AgendaItem { id: AgendaItemId; eventId: EventId; title: string; roomId: string; trackId?: string; submissionId?: SubmissionId; speakerIds: SpeakerId[]; startTime: number; endTime: number; videoUrl?: string; locationDetails?: string; calendarUid?: string; calendarSequence?: number; isPublished: boolean; }
 export interface SpeakerAgendaItem extends AgendaItem { roomName: string; trackName?: string; }
 export interface AgendaConflict { itemA: AgendaItemId; itemB: AgendaItemId; reason: "room_overlap" | "speaker_overlap" | "speaker_unavailable" | "track_overlap"; speakerId?: SpeakerId; }
-export interface OnboardingTask { id: TaskId; eventId: EventId; speakerId?: SpeakerId; submissionId?: SubmissionId; sponsorId?: SponsorId; linkedFormId?: FormId; targetType: "contact" | "group" | "submission" | "sponsor"; title: string; source: "manual" | "auto"; status: "pending" | "in_progress" | "completed"; dueDate?: number; completedAt?: number; }
+export interface OnboardingTask { id: TaskId; eventId: EventId; speakerId?: SpeakerId; submissionId?: SubmissionId; sponsorId?: SponsorId; linkedFormId?: FormId; targetType: "contact" | "group" | "submission" | "sponsor"; title: string; source: "manual" | "auto" | "agent"; status: "pending" | "in_progress" | "completed"; dueDate?: number; completedAt?: number; }
+export type AgentRunStatus = "queued" | "running" | "needs_input" | "needs_approval" | "completed" | "failed" | "cancelled";
+export type AgentProviderMode = "managed" | "bring_your_own";
+export interface AgentRun { id: AgentRunId; eventId: EventId; threadId?: string; requestedByUserId: string; objective: string; status: AgentRunStatus; model: string; providerMode?: AgentProviderMode; idempotencyKey: string; stepCount: number; maxSteps: number; inputTokens?: number; outputTokens?: number; finalSummary?: string; error?: string; startedAt?: number; completedAt?: number; createdAt: number; updatedAt: number; }
+export type AgentRunEventType = "user_message" | "assistant_message" | "progress" | "tool_call" | "tool_result" | "clarification" | "proposal" | "approval" | "error";
+export interface AgentRunEvent { id: string; eventId: EventId; runId: AgentRunId; sequence: number; type: AgentRunEventType; message: string; toolName?: string; toolCallId?: string; detailsJson?: string; durationMs?: number; createdAt: number; }
+export interface AgentProposedTask { title: string; targetType: OnboardingTask["targetType"]; speakerId?: SpeakerId; submissionId?: SubmissionId; sponsorId?: SponsorId; linkedFormId?: FormId; dueDate?: number; reason: string; }
+export interface AgentTaskProposal { id: AgentProposalId; eventId: EventId; runId: AgentRunId; kind: "create_tasks"; tasks: AgentProposedTask[]; payloadHash: string; summary: string; status: "pending" | "rejected" | "applying" | "applied" | "failed" | "superseded"; proposedByToolCallId: string; decidedByUserId?: string; decisionReason?: string; decidedAt?: number; appliedAt?: number; createdTaskIds?: TaskId[]; error?: string; createdAt: number; updatedAt: number; }
+export interface AgentRunDetail { run: AgentRun; events: AgentRunEvent[]; proposals: AgentTaskProposal[]; }
 export type TaskTemplateItem = { title: string; description?: string; targetType: OnboardingTask["targetType"]; linkedFormId?: FormId; dueDateOffsetDays?: number };
 export interface TaskTemplate { id: string; eventId: EventId; name: string; description?: string; items: TaskTemplateItem[]; isSeeded: boolean; }
 export interface Comm { id: string; eventId: EventId; type: string; speakerId?: SpeakerId; status?: "queued" | "sent" | "failed"; sentAt?: number; createdAt?: number; }
@@ -132,7 +143,29 @@ export interface CommSendRecipientResult { speakerId?: string; toEmail?: string;
 export interface CommSendResult { status: "sent" | "failed" | "skipped"; requested: number; sent: number; failed: number; skipped: number; results: CommSendRecipientResult[]; }
 // Role lives on this row, never in an env var or hardcoded list — see convex/organizers.ts.
 export interface Organizer { id: string; userId: string; email: string; role: "owner" | "admin"; onboardingCompletedAt?: number; createdAt: number; }
-export interface EventMember { id: string; eventId: EventId; userId: string; email: string; role: "organizer" | "reviewer"; invitedByUserId: string; createdAt: number; }
+// Onboarding-captured personalization for any signed-in user — see schema.ts's `userProfiles`
+// comment for why this is separate from Organizer.
+export interface UserProfile { id: string; userId: string; displayName?: string; signupRole?: "solo" | "team"; referralSource?: string; updatedAt: number; }
+export interface EventMember {
+  id: string;
+  eventId: EventId;
+  userId: string;
+  email: string;
+  role: "organizer" | "reviewer";
+  invitedByUserId: string;
+  clerkInvitationId?: string;
+  inviteEmailStatus?: "pending" | "sent" | "failed";
+  inviteError?: string;
+  invitedAt?: number;
+  createdAt: number;
+}
+export interface EventInviteResult {
+  memberId: string;
+  status: "active" | "pending";
+  clerkInvitationCreated: boolean;
+  emailSent: boolean;
+  warning?: string;
+}
 
 export type EmailProvider = "resend" | "ses";
 export type EmailAuthMethod = "resend_oauth" | "resend_api_key" | "ses_api" | "ses_smtp";
@@ -151,6 +184,8 @@ export interface EmailIntegration {
 }
 export interface EmailIntegrationCredentials { apiKey?: string; accessKeyId?: string; secretAccessKey?: string; username?: string; password?: string; }
 export interface EmailIntegrationSaveInput { eventId: EventId; authMethod: EmailAuthMethod; sender: string; region?: string; credentials: EmailIntegrationCredentials; }
+/** Organizer-safe projection. The API key itself is never returned. */
+export interface AgentProviderSetting { eventId: EventId; mode: AgentProviderMode; provider: "openai"; credentialHint?: string; status: "ready" | "error"; lastError?: string; managedAvailable: boolean; updatedAt: number; }
 export type AvailabilitySlot = {
   date: number;
   /** Exact event-local hour for new records. */
@@ -159,6 +194,20 @@ export type AvailabilitySlot = {
   part?: "morning" | "afternoon" | "evening";
 };
 export interface Availability { id: string; eventId: EventId; speakerId: SpeakerId; unavailable: AvailabilitySlot[]; notes?: string; }
+
+export type EmbedView = "agenda" | "schedule_itinerary" | "session_list" | "speaker_gallery" | "speaker_list" | "schedule_grid";
+export type EmbedTheme = "light" | "dark" | "system";
+export type EmbedDateFormat = "weekday_long" | "weekday_short" | "numeric";
+export type EmbedTimeFormat = "12_hour" | "24_hour";
+export interface EmbedFieldOptions {
+  agenda: { title: boolean; time: boolean; room: boolean; track: boolean; speakers: boolean };
+  session: { title: boolean; time: boolean; room: boolean; track: boolean; speakers: boolean };
+  speaker: { name: boolean; headshot: boolean; bio: boolean; links: boolean; sessions: boolean };
+}
+export interface Embed { id: EmbedId; eventId: EventId; name: string; format: "styled_html"; view: EmbedView; enabled: boolean; theme: EmbedTheme; primaryColor: string; dateFormat: EmbedDateFormat; timeFormat: EmbedTimeFormat; trackIds: string[]; fields: EmbedFieldOptions; createdAt: number; updatedAt: number; }
+export type EmbedWrite = Omit<Embed, "id" | "createdAt" | "updatedAt"> & { id?: EmbedId };
+export interface PublicEmbedSession { key: string; title: string; startTime?: number; endTime?: number; roomName?: string; trackKey?: string; trackName?: string; speakerNames?: string[]; }
+export interface PublicEmbedView { name: string; view: EmbedView; theme: EmbedTheme; primaryColor: string; dateFormat: EmbedDateFormat; timeFormat: EmbedTimeFormat; event: { name: string; timezone: string }; tracks: Array<{ key: string; name: string }>; sessions: PublicEmbedSession[]; speakers: Array<{ key: string; name: string; headshotUrl?: string; bio?: string; links?: PublicEmbedSpeakerLink[]; sessions?: Array<{ title: string; startTime?: number; roomName?: string }> }>; }
 
 // These are deliberately projection-only types for unauthenticated embeds. They contain no
 // record ids, email addresses, internal statuses, or draft data.

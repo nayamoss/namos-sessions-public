@@ -19,7 +19,7 @@ export type ShortcutBinding = {
   shift?: boolean;
 };
 
-export type ShortcutId = "palette" | "sidebar" | "help";
+export type ShortcutId = "palette" | "sidebar" | "rightPanel" | "help";
 
 const CODE_LABELS: Record<string, string> = {
   Slash: "/",
@@ -83,6 +83,7 @@ export function formatShortcut(binding: ShortcutBinding): string[] {
 export const SHORTCUTS: Record<ShortcutId, ShortcutBinding> = {
   palette: { code: "KeyK", meta: true },
   sidebar: { code: "Slash", meta: true },
+  rightPanel: { code: "Backslash", meta: true },
   help: { code: "Slash", shift: true },
 };
 
@@ -125,6 +126,7 @@ export const SHORTCUT_HELP: readonly ShortcutHelpGroup[] = [
     items: [
       { keys: formatShortcut(SHORTCUTS.palette), label: "Open command palette" },
       { keys: formatShortcut(SHORTCUTS.sidebar), label: "Toggle sidebar" },
+      { keys: formatShortcut(SHORTCUTS.rightPanel), label: "Toggle right panel" },
     ],
   },
   {

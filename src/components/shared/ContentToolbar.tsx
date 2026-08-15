@@ -19,11 +19,15 @@ export function ContentToolbar({
       aria-label={ariaLabel}
       className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center"
     >
-      {search && <div className="min-w-0 md:max-w-md md:flex-1">{search}</div>}
+      {search && (
+        <div className="min-w-0 shrink-0 md:min-w-[12rem] md:max-w-md md:flex-1">
+          {search}
+        </div>
+      )}
       {(utilities || primaryAction) && (
-        <div className="flex min-w-0 items-center gap-2 overflow-x-auto pb-1 md:ml-auto md:pb-0">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-x-auto pb-1 md:ml-auto md:flex-nowrap md:pb-0">
           {primaryAction && <div className="order-1 shrink-0 md:order-2">{primaryAction}</div>}
-          {utilities && <div className="order-2 flex shrink-0 items-center gap-2 md:order-1">{utilities}</div>}
+          {utilities && <div className="order-2 flex min-w-0 flex-wrap items-center gap-2 md:order-1 md:flex-nowrap">{utilities}</div>}
         </div>
       )}
     </section>

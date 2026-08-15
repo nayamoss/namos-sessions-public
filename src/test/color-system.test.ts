@@ -12,12 +12,34 @@ describe("product color system", () => {
     expect(clerkAppearance.variables.colorPrimary).toBe("#0066FF");
   });
 
-  it("defines blue primary and softened neutral surface tokens", () => {
-    const css = readFileSync(join(process.cwd(), "src/index.css"), "utf8");
-    expect(css).toContain("--primary: 216 100% 50%");
-    expect(css).toContain("--background: 220 33% 98%");
-    expect(css).toContain("--muted: 220 20% 93%");
-    expect(css).toContain("--ring: 216 100% 50%");
+  // Asserts the invariant rather than literal values: fill tokens that sit on
+  // the page background must not equal it. When --muted matched --background,
+  // the header search button, badges and switch thumbs rendered invisible (#171).
+  it("keeps fill tokens distinct from the surfaces they sit on", () => {
+    // Comments are stripped first: prose explaining these tokens necessarily
+    // names them, and would otherwise be read as a declaration.
+    const css = readFileSync(join(process.cwd(), "src/index.css"), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "");
+    const light = css.slice(css.indexOf(":root"), css.indexOf(".dark"));
+    const dark = css.slice(css.indexOf(".dark"));
+
+    const token = (scope: string, name: string) => {
+      const match = new RegExp(`^[ \\t]*--${name}:[ \\t]*([^;]+);`, "m").exec(scope);
+      if (!match) throw new Error(`--${name} is not defined`);
+      return match[1].trim();
+    };
+
+    for (const [label, scope] of [["light", light], ["dark", dark]] as const) {
+      const background = token(scope, "background");
+      for (const fill of ["muted", "secondary", "surface-sunken"]) {
+        // surface-sunken is light-mode only; skip where it is not declared.
+        if (!new RegExp(`--${fill}:`).test(scope)) continue;
+        expect(token(scope, fill), `--${fill} must differ from --background in ${label} mode`)
+          .not.toBe(background);
+      }
+      expect(token(scope, "card"), `--card must differ from --background in ${label} mode`)
+        .not.toBe(background);
+    }
   });
 
   it("does not reintroduce the old coral brand color in product source", () => {

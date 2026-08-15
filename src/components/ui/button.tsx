@@ -5,14 +5,14 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "touch-target inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
         default: "bg-primary text-primary-foreground hover:bg-primary/85",
         accent: "bg-primary text-primary-foreground hover:bg-primary/88",
         destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/85",
-        outline: "bg-background hover:bg-muted text-foreground",
+        outline: "bg-muted hover:bg-muted/70 text-foreground",
         secondary: "bg-secondary text-secondary-foreground hover:bg-muted",
         ghost: "hover:bg-muted",
         link: "text-primary underline-offset-4 hover:underline rounded-none",
@@ -40,9 +40,10 @@ export interface ButtonProps
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, ...props }, ref) => {
+  ({ className, variant, size, asChild = false, title, "aria-label": ariaLabel, ...props }, ref) => {
     const Comp = asChild ? Slot : "button";
-    return <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />;
+    const hoverLabel = title ?? (size === "icon" && typeof ariaLabel === "string" ? ariaLabel : undefined);
+    return <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} title={hoverLabel} aria-label={ariaLabel} {...props} />;
   },
 );
 Button.displayName = "Button";

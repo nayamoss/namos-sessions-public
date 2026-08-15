@@ -4,6 +4,9 @@ import { createRepository, type DataTransport, type ReadOperation, type WriteOpe
 type TokenGetter = () => Promise<string | null>;
 export function createAirtableTransport(getToken: TokenGetter = async () => null): DataTransport {
   const request = async <Result>(operation: ReadOperation | WriteOperation, input: Record<string, unknown>) => {
+    if (operation.startsWith("agentRuns.")) throw new Error("Operations Agent currently requires the Convex backend.");
+    if (operation.startsWith("agentProviderSettings.")) throw new Error("AI provider settings require the Convex backend — Airtable has no encrypted credential store.");
+    if (operation.startsWith("publicEmbeds.")) throw new Error("Public embed management is available on the Convex backend.");
     if (operation.startsWith("tags.") || operation === "submissions.setTags") throw new Error("Airtable tag operations are outside issue #27 and are not implemented.");
     if (operation === "submissions.getForSpeaker" || operation === "submissions.updateBySpeaker") throw new Error("The Airtable backend does not yet provide speaker submission editing.");
     if (operation === "events.listForPortal") throw new Error("Airtable does not yet provide the authenticated speaker portal event boundary.");

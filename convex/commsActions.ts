@@ -6,7 +6,7 @@ import { action } from "./_generated/server";
 import type { ActionCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { api, internal } from "./_generated/api";
-import { assertOrganizerAction, deliverEventEmail } from "./emailDelivery";
+import { assertEventOrganizerAction, deliverEventEmail } from "./emailDelivery";
 import { renderEmail } from "./commsEmailRender";
 import { DecisionAcceptedEmail } from "../src/emails/templates/decision-accepted";
 import { DecisionDeclinedEmail } from "../src/emails/templates/decision-declined";
@@ -63,7 +63,7 @@ function inviteFor(context: {
 export const sendDecision = action({
   args: { eventId: v.id("events"), submissionId: v.id("submissions"), recipientSpeakerIds: v.optional(v.array(v.id("speakers"))) },
   handler: async (ctx, args): Promise<SendBatch> => {
-    await assertOrganizerAction(ctx);
+    await assertEventOrganizerAction(ctx, args.eventId);
     const context = await ctx.runQuery(internal.commsData.decisionContext, { eventId: args.eventId, submissionId: args.submissionId });
     if (!context) throw new Error("Submission not found for this event.");
     const { submission, event, agenda, room, template } = context;
@@ -110,7 +110,7 @@ export const sendDecision = action({
 export const sendReminder = action({
   args: { eventId: v.id("events"), speakerId: v.id("speakers"), taskId: v.optional(v.id("onboarding_tasks")) },
   handler: async (ctx, args): Promise<SendBatch> => {
-    await assertOrganizerAction(ctx);
+    await assertEventOrganizerAction(ctx, args.eventId);
     const context = await ctx.runQuery(internal.commsData.reminderContext, args);
     if (!context) throw new Error("Speaker not found for this event.");
     const { speaker, event, task, submission, agenda, room, template } = context;
@@ -145,7 +145,7 @@ export const sendReminder = action({
 export const sendConsolidatedDecision = action({
   args: { eventId: v.id("events"), speakerId: v.id("speakers") },
   handler: async (ctx, args): Promise<SendBatch> => {
-    await assertOrganizerAction(ctx);
+    await assertEventOrganizerAction(ctx, args.eventId);
     const context = await ctx.runQuery(internal.commsData.consolidatedDecisionContext, args);
     if (!context) throw new Error("Speaker not found for this event.");
     const { speaker, event, submissions, agenda, rooms, template } = context;

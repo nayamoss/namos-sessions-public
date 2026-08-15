@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { GripVertical, Plus, Trash2 } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
+import { cardSurfaceClasses } from "@/components/ui/card";
 import { RichTextEditor } from "@/components/editor/RichTextEditor";
 import {
   RoutingRulesEditor,
@@ -980,7 +981,7 @@ export default function SubmissionFormBuilder() {
                 key={option}
                 type="button"
                 onClick={() => setKind(option)}
-                className={`rounded-lg p-5 text-left ${kind === option ? "bg-muted" : "bg-background hover:bg-muted/70"}`}
+                className={cardSurfaceClasses("default", `p-5 text-left ${kind === option ? "bg-muted" : "bg-background hover:bg-muted/70"}`)}
               >
                 <p className="font-semibold">
                   {option === "abstract" ? "Abstracts" : "Sessions"}

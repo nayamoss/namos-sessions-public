@@ -1,5 +1,6 @@
 import { v } from "convex/values";
-import { mutation, query, assertEventAccess } from "./functions";
+import { mutation, query, assertEventAccess, assertEventOrganizerAccess } from "./functions";
+import { recordAgendaItemAudit } from "./agendaAudit";
 import { assertOrganizerOrOwnsSpeaker } from "./speakers";
 
 const agendaItemFields = {
@@ -184,7 +185,7 @@ export const detectConflicts = query({
 export const save = mutation({
   args: { id: v.optional(v.id("agenda_items")), ...agendaItemFields },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    const identity = await assertEventOrganizerAccess(ctx, args.eventId);
     if (args.startTime >= args.endTime)
       throw new Error("An agenda item must end after it starts.");
     if (!args.title.trim()) throw new Error("An agenda item needs a title.");
@@ -233,10 +234,26 @@ export const save = mutation({
         calendarSequence: calendarChanged ? (existing.calendarSequence ?? 0) + 1 : (existing.calendarSequence ?? 0),
         updatedAt: now,
       });
+      const updated = await ctx.db.get(id);
+      if (!updated) throw new Error("Agenda item disappeared while saving.");
+      await recordAgendaItemAudit(ctx, {
+        item: updated,
+        operation: "update",
+        actorUserId: identity.subject,
+        source: "agenda:save",
+      });
       return id;
     }
     const newId = await ctx.db.insert("agenda_items", { ...normalizedFields, calendarSequence: 0, createdAt: now, updatedAt: now });
     await ctx.db.patch(newId, { calendarUid: `sessionboard-${newId}` });
+    const created = await ctx.db.get(newId);
+    if (!created) throw new Error("Agenda item disappeared while creating it.");
+    await recordAgendaItemAudit(ctx, {
+      item: created,
+      operation: "create",
+      actorUserId: identity.subject,
+      source: "agenda:save",
+    });
     return newId;
   },
 });
@@ -244,10 +261,16 @@ export const save = mutation({
 export const remove = mutation({
   args: { eventId: v.id("events"), id: v.id("agenda_items") },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    const identity = await assertEventOrganizerAccess(ctx, args.eventId);
     const item = await ctx.db.get(args.id);
     if (!item || item.eventId !== args.eventId)
       throw new Error("Agenda item not found for this event.");
+    await recordAgendaItemAudit(ctx, {
+      item,
+      operation: "delete",
+      actorUserId: identity.subject,
+      source: "agenda:remove",
+    });
     await ctx.db.delete(args.id);
   },
 });
@@ -255,7 +278,7 @@ export const remove = mutation({
 export const publishSchedule = mutation({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    const identity = await assertEventOrganizerAccess(ctx, args.eventId);
     const items = await ctx.db
       .query("agenda_items")
       .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
@@ -264,9 +287,15 @@ export const publishSchedule = mutation({
     await Promise.all(
       items
         .filter((item) => !item.isPublished)
-        .map((item) =>
-          ctx.db.patch(item._id, { isPublished: true, updatedAt: now }),
-        ),
+        .map(async (item) => {
+          await ctx.db.patch(item._id, { isPublished: true, updatedAt: now });
+          await recordAgendaItemAudit(ctx, {
+            item: { ...item, isPublished: true, updatedAt: now },
+            operation: "publish",
+            actorUserId: identity.subject,
+            source: "agenda:publishSchedule",
+          });
+        }),
     );
   },
 });

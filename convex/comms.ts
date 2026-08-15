@@ -1,5 +1,5 @@
 import { v, type Infer } from "convex/values";
-import { mutation, query, assertEventAccess, assertOrganizer } from "./functions";
+import { mutation, query, assertEventAccess, assertEventOrganizerAccess } from "./functions";
 import { internalMutation } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import { resolveCommTemplate } from "../src/lib/comms-template-tokens";
@@ -23,7 +23,7 @@ const deliveryStatus = v.union(
 export const listTemplates = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     return ctx.db
       .query("comms_templates")
       .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
@@ -41,7 +41,7 @@ export const saveTemplate = mutation({
     body: v.string(),
   },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     if (!args.name.trim() || !args.subject.trim() || !args.body.trim())
       throw new Error("A template needs a name, subject, and body.");
     const now = Date.now();
@@ -86,7 +86,7 @@ const scheduleOf = (time: number | undefined, timeZone: string | undefined) => t
 export const previewDecision = query({
   args: { eventId: v.id("events"), submissionId: v.id("submissions") },
   handler: async (ctx, args) => {
-    await assertOrganizer(ctx);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     const submission = await ctx.db.get(args.submissionId);
     if (!submission || submission.eventId !== args.eventId) throw new Error("Submission not found for this event.");
     if (submission.status !== "accepted" && submission.status !== "declined") throw new Error("Decide this submission before preparing its email.");
@@ -115,7 +115,7 @@ export const previewDecision = query({
 export const previewReminder = query({
   args: { eventId: v.id("events"), speakerId: v.id("speakers"), taskId: v.optional(v.id("onboarding_tasks")) },
   handler: async (ctx, args) => {
-    await assertOrganizer(ctx);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     const [speaker, event, tasks, agendaItems, templates] = await Promise.all([
       ctx.db.get(args.speakerId), ctx.db.get(args.eventId),
       ctx.db.query("onboarding_tasks").withIndex("by_speaker", (q) => q.eq("speakerId", args.speakerId)).collect(),
@@ -141,7 +141,7 @@ export const previewReminder = query({
 export const previewConsolidatedDecision = query({
   args: { eventId: v.id("events"), speakerId: v.id("speakers") },
   handler: async (ctx, args) => {
-    await assertOrganizer(ctx);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     const [speaker, event, submissions, agendaItems, templates] = await Promise.all([
       ctx.db.get(args.speakerId), ctx.db.get(args.eventId),
       ctx.db.query("submissions").withIndex("by_speaker", (q) => q.eq("speakerId", args.speakerId)).collect(),
@@ -206,7 +206,7 @@ async function insertDeliveryLog(ctx: MutationCtx, args: RecordDeliveryArgs) {
 export const recordDelivery = mutation({
   args: recordDeliveryArgs,
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     return insertDeliveryLog(ctx, args);
   },
 });

@@ -171,14 +171,14 @@ export default function Availability() {
         {loading ? (
           <SkeletonList rows={3} label="Loading speakers and availability…" />
         ) : !event ? (
-          <section className="rounded-lg bg-card p-6">
+          <section className={cardSurfaceClasses("default", "p-6")}>
             <h2 className="font-semibold">No event available</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               Create an event before reviewing speaker availability.
             </p>
           </section>
         ) : speakers.length === 0 ? (
-          <section className="rounded-lg bg-card p-6">
+          <section className={cardSurfaceClasses("default", "p-6")}>
             <h2 className="font-semibold">No speakers yet</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               Accepted speakers for {event.name} will appear here when they are
@@ -187,7 +187,7 @@ export default function Availability() {
           </section>
         ) : (
           <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
-            <div className="rounded-lg bg-card p-6">
+            <div className={cardSurfaceClasses("default", "p-6")}>
               <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                 <div className="space-y-1">
                   <h2 className="font-semibold">Unavailable times</h2>
@@ -228,7 +228,7 @@ export default function Availability() {
             </div>
 
             <aside className="space-y-4">
-              <div className="rounded-lg bg-card p-5">
+              <div className={cardSurfaceClasses("default", "p-5")}>
                 <p className="text-sm font-medium">Speaker profile</p>
                 <p className="mt-3 text-base font-semibold">
                   {selectedSpeaker?.name}
@@ -244,7 +244,7 @@ export default function Availability() {
                   {event.timezone}
                 </div>
               </div>
-              <div className="rounded-lg bg-card p-5">
+              <div className={cardSurfaceClasses("default", "p-5")}>
                 <div className="flex gap-3">
                   <UserRound className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
                   <div>
@@ -264,3 +264,4 @@ export default function Availability() {
     </AppLayout>
   );
 }
+import { cardSurfaceClasses } from "@/components/ui/card";

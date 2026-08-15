@@ -687,35 +687,37 @@ export default function Evaluation() {
             to manage plans and assignments.
           </p>
         )}
-        <StatusTabs
-          ariaLabel="Evaluation views"
-          value={reviewerOnly ? "queue" : surface}
-          onValueChange={(value) => setSurface(value as "plans" | "queue")}
-          tabs={
-            reviewerOnly
-              ? [
-                  {
-                    value: "queue",
-                    label: "My reviewer queue",
-                    count: open.length,
-                  },
-                ]
-              : [
-                  {
-                    value: "plans",
-                    label: "Evaluation plans",
-                    count: plans.length,
-                  },
-                  {
-                    value: "queue",
-                    label: "My reviewer queue",
-                    count: open.length,
-                  },
-                ]
-          }
-        />
         <ContentToolbar
           ariaLabel="Evaluation controls"
+          utilities={
+            <StatusTabs
+              ariaLabel="Evaluation views"
+              value={reviewerOnly ? "queue" : surface}
+              onValueChange={(value) => setSurface(value as "plans" | "queue")}
+              tabs={
+                reviewerOnly
+                  ? [
+                      {
+                        value: "queue",
+                        label: "My reviewer queue",
+                        count: open.length,
+                      },
+                    ]
+                  : [
+                      {
+                        value: "plans",
+                        label: "Evaluation plans",
+                        count: plans.length,
+                      },
+                      {
+                        value: "queue",
+                        label: "My reviewer queue",
+                        count: open.length,
+                      },
+                    ]
+              }
+            />
+          }
           primaryAction={
             reviewerOnly ? undefined : (
               <Button
@@ -778,7 +780,7 @@ export default function Evaluation() {
                 refreshKey={progressRefreshKey}
               />
             )}
-            <section className="rounded-lg bg-card p-5">
+            <section className={cardSurfaceClasses("default", "p-5")}>
               <h2 className="font-semibold">Create evaluation plan</h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 AI assistance is deliberately a stub; reviewers score
@@ -852,7 +854,7 @@ export default function Evaluation() {
                 </p>
               </div>
             </section>
-            <section className="rounded-lg bg-card p-5">
+            <section className={cardSurfaceClasses("default", "p-5")}>
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
                   <h2 className="font-semibold">Scoring criteria</h2>
@@ -911,7 +913,7 @@ export default function Evaluation() {
                 </p>
               )}
             </section>
-            <section className="rounded-lg bg-card p-5">
+            <section className={cardSurfaceClasses("default", "p-5")}>
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
                   <h2 className="font-semibold">Assign submissions</h2>
@@ -1027,7 +1029,7 @@ export default function Evaluation() {
           </>
         ) : (
           <>
-            <section className="rounded-lg bg-card p-5">
+            <section className={cardSurfaceClasses("default", "p-5")}>
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-sm font-medium">Reviewer queue</p>
                 {queueBlinded ? <BlindedBadge /> : null}
@@ -1068,7 +1070,7 @@ export default function Evaluation() {
                 loading={loading}
               />
               {active && (
-                <section className="rounded-lg bg-card p-5">
+                <section className={cardSurfaceClasses("default", "p-5")}>
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -1173,3 +1175,4 @@ export default function Evaluation() {
     </AppLayout>
   );
 }
+import { cardSurfaceClasses } from "@/components/ui/card";

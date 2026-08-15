@@ -3,7 +3,9 @@ import { CalendarDays, Copy, Plus } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
+import { DetailPane } from "@/components/shared/DetailPane";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { SegmentedControl } from "@/components/shared/SegmentedControl";
 import { SkeletonList } from "@/components/shared/SkeletonList";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -19,7 +21,7 @@ import {
 import { useRepo } from "@/data/repo";
 import type { Event, EventStatus } from "@/data/types";
 import { cleanErrorMessage } from "@/lib/errors";
-import { cn } from "@/lib/utils";
+import { EventCreationWizard } from "./EventCreationWizard";
 
 type Editor = { mode: "new" } | { mode: "duplicate"; source: Event };
 const slugify = (value: string) =>
@@ -102,11 +104,8 @@ function EventEditor({
     }
   };
   return (
-    <div className="space-y-5">
-      <div>
-        <h2 className="text-base font-semibold">
-          {source ? "Duplicate event" : "New event"}
-        </h2>
+    <DetailPane title={source ? "Duplicate event" : "New event"} onClose={onClose}>
+      <div className="space-y-5">
         <p className="mt-1 text-sm text-muted-foreground">
           {source
             ? "Configuration is copied; submissions, speakers, and schedule stay empty."
@@ -144,7 +143,7 @@ function EventEditor({
           /events/{slugify(slug) || "event-name"}
         </p>
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="event-start">Starts</Label>
           <Input
@@ -212,7 +211,7 @@ function EventEditor({
           {busy ? "Saving…" : source ? "Duplicate event" : "Create event"}
         </Button>
       </div>
-    </div>
+    </DetailPane>
   );
 }
 
@@ -225,17 +224,17 @@ export default function EventsLanding() {
   const [error, setError] = useState<string>();
   const [filter, setFilter] = useState<"all" | EventStatus>("all");
   const [editor, setEditor] = useState<Editor>();
-  const [canCreate, setCanCreate] = useState(false);
+  const [manageableEventIds, setManageableEventIds] = useState<Set<string>>(new Set());
   const load = useCallback(async () => {
     setLoading(true);
     setError(undefined);
     try {
-      const [rows, organizer] = await Promise.all([
-        repo.events.listMine(),
-        repo.organizers.getMine().catch(() => null),
-      ]);
+      const rows = await repo.events.listMine();
       setEvents(rows.sort((a, b) => b.startDate - a.startDate));
-      setCanCreate(Boolean(organizer));
+      const manageable = await Promise.all(
+        rows.map(async (event) => [event.id, await repo.eventMembers.canManage({ eventId: event.id })] as const),
+      );
+      setManageableEventIds(new Set(manageable.filter(([, allowed]) => allowed).map(([id]) => id)));
     } catch (cause) {
       setError(cleanErrorMessage(cause, "Could not load events."));
     } finally {
@@ -246,8 +245,8 @@ export default function EventsLanding() {
     void load();
   }, [load]);
   useEffect(() => {
-    if (params.get("new") === "1" && canCreate) setEditor({ mode: "new" });
-  }, [canCreate, params]);
+    if (params.get("new") === "1") setEditor({ mode: "new" });
+  }, [params]);
   const visible = useMemo(
     () =>
       filter === "all"
@@ -257,6 +256,7 @@ export default function EventsLanding() {
   );
   const closeEditor = () => {
     setEditor(undefined);
+    void load();
     setParams(
       (current) => {
         const next = new URLSearchParams(current);
@@ -271,12 +271,7 @@ export default function EventsLanding() {
       title="Events"
       detail={
         editor ? (
-          <EventEditor
-            editor={editor}
-            events={events}
-            onClose={closeEditor}
-            onSaved={(_id, slug) => navigate(`/events/${slug}/dashboard`)}
-          />
+          editor.mode === "new" ? <EventCreationWizard events={events} onClose={closeEditor} onSaved={(_id, slug, formId) => navigate(formId ? `/events/${slug}/program/forms/${formId}/edit` : `/events/${slug}/dashboard`)} /> : <EventEditor editor={editor} events={events} onClose={closeEditor} onSaved={(_id, slug) => navigate(`/events/${slug}/dashboard`)} />
         ) : undefined
       }
     >
@@ -284,33 +279,23 @@ export default function EventsLanding() {
         <ContentToolbar
           ariaLabel="Event controls"
           utilities={
-            <div className="flex gap-1 rounded-md bg-muted p-1">
-              {(["all", "draft", "published", "archived"] as const).map(
-                (status) => (
-                  <button
-                    key={status}
-                    type="button"
-                    onClick={() => setFilter(status)}
-                    className={cn(
-                      "rounded px-2.5 py-1.5 text-xs font-medium capitalize",
-                      filter === status
-                        ? "bg-background text-foreground"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {status}
-                  </button>
-                ),
-              )}
-            </div>
+            <SegmentedControl<"all" | EventStatus>
+              label="Event status"
+              value={filter}
+              options={[
+                { value: "all", label: "All" },
+                { value: "draft", label: "Draft" },
+                { value: "published", label: "Published" },
+                { value: "archived", label: "Archived" },
+              ]}
+              onChange={setFilter}
+            />
           }
           primaryAction={
-            canCreate ? (
-              <Button onClick={() => setEditor({ mode: "new" })}>
-                <Plus className="mr-2 h-4 w-4" />
-                New event
-              </Button>
-            ) : undefined
+            <Button onClick={() => setEditor({ mode: "new" })}>
+              <Plus className="mr-2 h-4 w-4" />
+              New event
+            </Button>
           }
         />
         {error && (
@@ -328,7 +313,7 @@ export default function EventsLanding() {
         ) : visible.length ? (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {visible.map((event) => (
-              <article key={event.id} className="rounded-xl bg-muted/60 p-5">
+              <article key={event.id} className={cardSurfaceClasses("default", "bg-muted/60 p-5")}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h2 className="truncate text-base font-semibold">
@@ -349,7 +334,7 @@ export default function EventsLanding() {
                   >
                     Open
                   </Button>
-                  {canCreate && (
+                  {manageableEventIds.has(event.id) && (
                     <Button
                       size="sm"
                       variant="secondary"
@@ -366,7 +351,7 @@ export default function EventsLanding() {
             ))}
           </div>
         ) : (
-          <div className="rounded-xl bg-muted/50 p-6">
+          <div className={cardSurfaceClasses("default", "bg-muted/50 p-6")}>
             <EmptyState
               message={
                 events.length
@@ -374,12 +359,10 @@ export default function EventsLanding() {
                   : "No events yet."
               }
               action={
-                canCreate ? (
-                  <Button onClick={() => setEditor({ mode: "new" })}>
-                    <CalendarDays className="mr-2 h-4 w-4" />
-                    Create your first event
-                  </Button>
-                ) : undefined
+                <Button onClick={() => setEditor({ mode: "new" })}>
+                  <CalendarDays className="mr-2 h-4 w-4" />
+                  Create your first event
+                </Button>
               }
             />
           </div>
@@ -388,3 +371,4 @@ export default function EventsLanding() {
     </AppLayout>
   );
 }
+import { cardSurfaceClasses } from "@/components/ui/card";

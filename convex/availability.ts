@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query, assertEventAccess } from "./functions";
+import { mutation, query, assertEventOrganizerAccess } from "./functions";
 import { assertOrganizerOrOwnsSpeaker } from "./speakers";
 
 const unavailable = v.array(v.object({ date: v.number(), hour: v.optional(v.number()), part: v.optional(v.union(v.literal("morning"), v.literal("afternoon"), v.literal("evening"))) }));
@@ -23,7 +23,7 @@ export const list = query({
       await assertOrganizerOrOwnsSpeaker(ctx, args.eventId, args.speakerId);
       return ctx.db.query("speaker_availability").withIndex("by_speaker", (q) => q.eq("speakerId", args.speakerId!)).collect();
     }
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     return ctx.db.query("speaker_availability").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect();
   },
 });

@@ -48,6 +48,7 @@ import type {
 } from "@/data/types";
 import { filterSubmissionsByStatus } from "@/lib/submission-filters";
 import { weightedTotal } from "@/lib/evaluation-score";
+import { friendlyErrorMessage } from "@/lib/errors";
 import {
   ABSTRACT_GRID_PREFERENCES_KEY,
   defaultAbstractGridPreferences,
@@ -603,7 +604,7 @@ export default function Abstracts() {
           repo.speakers.list(scope),
           repo.evaluations.list(scope),
           repo.forms.list(scope),
-          repo.forms.listFields(),
+          repo.forms.listFields(scope),
           repo.comms.list(scope),
           repo.tags.list(scope),
         ]);
@@ -622,9 +623,7 @@ export default function Abstracts() {
       );
     } catch (error) {
       setRows([]);
-      setLoadError(
-        error instanceof Error ? error.message : "Could not load abstracts.",
-      );
+      setLoadError(friendlyErrorMessage(error, "Could not load abstracts."));
     } finally {
       setLoading(false);
     }
@@ -833,14 +832,6 @@ export default function Abstracts() {
             {decisionFeedback}
           </p>
         )}
-        <StatusTabs
-          ariaLabel="Submission statuses"
-          value={status}
-          onValueChange={(value) =>
-            setStatus(value as SubmissionStatus | "all")
-          }
-          tabs={tabs}
-        />
         <ContentToolbar
           ariaLabel="Abstract controls"
           search={
@@ -860,14 +851,22 @@ export default function Abstracts() {
           }
           utilities={
             <>
+              <StatusTabs
+                ariaLabel="Submission statuses"
+                value={status}
+                onValueChange={(value) =>
+                  setStatus(value as SubmissionStatus | "all")
+                }
+                tabs={tabs}
+              />
               <Button
                 variant="outline"
-                size="sm"
+                size="icon"
                 onClick={() => downloadCsv(visibleRows)}
                 disabled={loading}
+                aria-label="Export abstracts as CSV"
               >
-                <Download className="mr-1 h-4 w-4" />
-                Export CSV
+                <Download className="h-4 w-4" />
               </Button>
               <ColumnsControl
                 preferences={columnPreferences}
@@ -879,7 +878,7 @@ export default function Abstracts() {
               <Button variant="outline" size="sm">
                 Filter
               </Button>
-              <Button variant="outline" size="sm" aria-label="More options">
+              <Button variant="outline" size="icon" aria-label="More options">
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </>

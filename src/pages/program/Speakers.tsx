@@ -1162,7 +1162,7 @@ export default function Speakers() {
             </Button>
           </section>
         ) : (
-          <section className="overflow-hidden rounded-xl bg-card">
+          <section className={cardSurfaceClasses("default", "overflow-hidden")}>
             <div className="px-3 pb-3 pt-2.5">
               <ContentToolbar
                 ariaLabel="Speaker controls"
@@ -1333,3 +1333,4 @@ export default function Speakers() {
     </AppLayout>
   );
 }
+import { cardSurfaceClasses } from "@/components/ui/card";

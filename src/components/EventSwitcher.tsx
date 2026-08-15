@@ -67,7 +67,7 @@ export function EventSwitcher({
           <button
             type="button"
             className={cn(
-              "flex w-full items-center rounded-md text-left text-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35",
+              "flex w-full items-center rounded-md text-left text-sm transition-colors hover:bg-muted focus-visible:outline-none",
               collapsed ? "justify-center p-2" : "gap-2 px-2.5 py-2",
             )}
             aria-label="Switch event"
@@ -103,7 +103,7 @@ export function EventSwitcher({
           align="start"
           side={collapsed ? "right" : "bottom"}
           sideOffset={8}
-          className="w-64 rounded-lg bg-muted p-1.5 shadow-none"
+          className={cardSurfaceClasses("default", "w-64 bg-muted p-1.5 shadow-none")}
         >
           {events.length ? (
             events.map((event) => (
@@ -150,3 +150,4 @@ export function EventSwitcher({
     </div>
   );
 }
+import { cardSurfaceClasses } from "@/components/ui/card";

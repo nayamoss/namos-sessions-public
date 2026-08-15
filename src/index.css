@@ -13,6 +13,12 @@ html {
   font-size: 80%;
 }
 
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
 @layer base {
   :root {
     color-scheme: light;
@@ -28,8 +34,11 @@ html {
     --text-3xl: 2.03125rem; /* 26px */
     --text-4xl: 2.34375rem; /* 30px */
 
-    /* Takumi palette — electric blue with soft, blue-tinted neutrals */
-    --background: 220 33% 98%;
+    /* Takumi palette — near-black primary with soft, warm neutrals.
+       --muted/--secondary/--surface-sunken must stay a visible step darker than
+       --background: they fill search, badges, switch tracks and input surfaces,
+       which sit directly on the page background and vanish if the two match. */
+    --background: 45 20% 96%;  /* faint warm gray page bg, distinct from white cards/inputs */
     --foreground: 222 24% 14%;
 
     --card: 0 0% 100%;
@@ -38,14 +47,14 @@ html {
     --popover: 0 0% 100%;
     --popover-foreground: 222 24% 14%;
 
-    --primary: 216 100% 50%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 0 0% 14%;
+    --primary-foreground: 0 0% 98%;
 
-    --secondary: 220 24% 96%;
+    --secondary: 45 16% 91%;
     --secondary-foreground: 222 24% 14%;
 
-    --muted: 220 20% 93%;
-    --muted-foreground: 220 10% 42%;
+    --muted: 45 16% 91%;
+    --muted-foreground: 45 8% 42%;
 
     --accent: 216 100% 96%;
     --accent-foreground: 216 90% 30%;
@@ -67,19 +76,19 @@ html {
     --info-foreground: 0 0% 100%;
 
     --surface-elevated: 0 0% 100%;
-    --surface-sunken: 220 33% 98%;
+    --surface-sunken: 45 16% 91%;
 
     --sidebar-background: 0 0% 100%;   /* matches card/surface, distinct from page bg */
     --sidebar-foreground: 222 24% 14%;
-    --sidebar-primary: 216 100% 50%;
-    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-primary: 0 0% 14%;
+    --sidebar-primary-foreground: 0 0% 98%;
     --sidebar-accent: 216 100% 96%;
     --sidebar-accent-foreground: 216 90% 30%;
     --sidebar-border: 0 0% 0% / 0;
     --sidebar-ring: 216 100% 50%;
 
     /* Legacy design-system vars for components still referencing them directly */
-    --bg: oklch(98% 0.008 255);
+    --bg: oklch(99% 0.004 255);
     --surface: #FFFFFF;
     --text: oklch(25% 0.025 255);
     --accent-bg: oklch(96% 0.025 255);
@@ -99,8 +108,8 @@ html {
     --card-foreground: 220 24% 94%;
     --popover: 222 18% 11%;
     --popover-foreground: 220 24% 94%;
-    --primary: 216 100% 55%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 0 0% 85%;
+    --primary-foreground: 0 0% 9%;
     --secondary: 222 14% 17%;
     --secondary-foreground: 220 24% 94%;
     --muted: 222 14% 17%;
@@ -114,8 +123,8 @@ html {
     --ring: 216 100% 62%;
     --sidebar-background: 222 18% 11%;
     --sidebar-foreground: 220 24% 94%;
-    --sidebar-primary: 216 100% 55%;
-    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-primary: 0 0% 85%;
+    --sidebar-primary-foreground: 0 0% 9%;
     --sidebar-accent: 216 55% 20%;
     --sidebar-accent-foreground: 214 100% 86%;
     --sidebar-border: 0 0% 0% / 0;
@@ -130,6 +139,7 @@ html {
     --sb: oklch(20% 0.025 255);
     --sb-txt: oklch(72% 0.018 255);
   }
+
 }
 
 @layer base {
@@ -138,7 +148,7 @@ html {
   }
 
   body {
-    @apply bg-background text-foreground font-sans antialiased;
+    @apply min-w-0 overflow-x-hidden bg-background text-foreground font-sans antialiased;
   }
 
   /* Global visual override: remove all solid borders across the app */
@@ -149,14 +159,13 @@ html {
   }
 
   :where(input, textarea, select, [data-field-focus="true"]) {
-    transition: background-color 120ms ease, box-shadow 120ms ease;
+    transition: background-color 120ms ease;
   }
 
   :where(input, textarea, select, [data-field-focus="true"]):focus,
   :where(input, textarea, select, [data-field-focus="true"]):focus-visible {
     outline: none;
-    background-color: hsl(var(--background));
-    box-shadow: 0 0 0 2px hsl(var(--ring) / 0.28);
+    box-shadow: none;
   }
 
   /* Thin, minimal scrollbars */
@@ -190,4 +199,151 @@ html {
   .dark ::-webkit-scrollbar-thumb:hover {
     background-color: hsl(0 0% 100% / 0.32);
   }
+}
+
+@layer components {
+  .mobile-safe-shell {
+    padding-top: env(safe-area-inset-top);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+  }
+
+  .responsive-data-grid tbody,
+  .responsive-data-grid tr,
+  .responsive-data-grid td,
+  .responsive-data-grid th[scope="row"] {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 639px) {
+  :where(input:not([type="checkbox"]):not([type="radio"]), textarea, [contenteditable="true"], [role="combobox"]) {
+    font-size: 16px;
+  }
+
+  .responsive-data-grid {
+    display: block;
+    width: 100%;
+  }
+
+  .responsive-data-grid thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+
+  .responsive-data-grid tbody {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .responsive-data-grid tbody tr {
+    display: block;
+    overflow: hidden;
+    border-radius: var(--radius);
+    background: hsl(var(--muted) / 0.42);
+  }
+
+  .responsive-data-grid tbody :where(td, th[scope="row"]) {
+    display: grid;
+    grid-template-columns: minmax(6.75rem, 36%) minmax(0, 1fr);
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    padding: 0.75rem 1rem;
+    text-align: left;
+    white-space: normal;
+  }
+
+  .responsive-data-grid tbody :where(td, th[scope="row"])::before {
+    content: attr(data-label);
+    color: hsl(var(--muted-foreground));
+    font-size: var(--text-xs);
+    font-weight: 500;
+  }
+
+  .responsive-data-grid tbody td[data-empty="true"] {
+    display: block;
+    padding: 2rem 1rem;
+    text-align: center;
+  }
+
+  .responsive-data-grid tbody td[data-empty="true"]::before {
+    content: none;
+  }
+}
+
+@media (pointer: coarse) {
+  .touch-target,
+  button:not(.compact-hit-target) {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .compact-hit-target {
+    position: relative;
+  }
+
+  .compact-hit-target::after {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    content: "";
+    transform: translate(-50%, -50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* === ZERO BORDERS/RINGS — unlayered so this beats every Tailwind utility,
+   including any focus-visible:ring-* that gets reintroduced later === */
+input,
+textarea,
+select,
+[data-slot="input"],
+[data-slot="textarea"] {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  --tw-ring-shadow: none !important;
+  --tw-shadow: none !important;
+}
+
+input:focus,
+input:focus-visible,
+textarea:focus,
+textarea:focus-visible,
+select:focus,
+select:focus-visible,
+[data-slot="input"]:focus,
+[data-slot="input"]:focus-visible,
+[data-slot="textarea"]:focus,
+[data-slot="textarea"]:focus-visible {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  --tw-ring-shadow: none !important;
+  --tw-shadow: none !important;
+}
+
+[data-slot="card"] {
+  border: none !important;
+  box-shadow: none !important;
 }

@@ -23,6 +23,7 @@ import { PublicLayout } from "@/components/PublicLayout";
 import { AuthSplitLayout } from "@/pages/public/AuthSplitLayout";
 import { RepoProvider } from "@/data/provider";
 import { useRepo } from "@/data/repo";
+import { resolveOnboardingStatus } from "@/lib/onboarding-status";
 const EventDetails = lazy(() => import("@/pages/settings/EventDetails"));
 const Library = lazy(() => import("@/pages/settings/Library"));
 const Integrations = lazy(() => import("@/pages/settings/Integrations"));
@@ -31,6 +32,7 @@ const SubmissionForms = lazy(() => import("@/pages/program/SubmissionForms"));
 const Abstracts = lazy(() => import("@/pages/program/Abstracts"));
 const Agenda = lazy(() => import("@/pages/program/Agenda"));
 const Readiness = lazy(() => import("@/pages/program/Readiness"));
+const AgentOperations = lazy(() => import("@/pages/program/AgentOperations"));
 const Evaluation = lazy(() => import("@/pages/program/Evaluation"));
 const Availability = lazy(() => import("@/pages/program/Availability"));
 const SubmissionFormBuilder = lazy(
@@ -48,6 +50,9 @@ const DashboardHome = lazy(() => import("@/pages/dashboard/DashboardHome"));
 const SubmissionPage = lazy(() => import("@/pages/public/SubmissionPage"));
 const PortalHome = lazy(() => import("@/pages/portal/PortalHome"));
 const EmbedPage = lazy(() => import("@/pages/public/EmbedPage"));
+const PublicEmbedPage = lazy(() => import("@/pages/public/PublicEmbedPage"));
+const EmbedsListPage = lazy(() => import("@/pages/cms/EmbedsListPage"));
+const EmbedEditorPage = lazy(() => import("@/pages/cms/EmbedEditorPage"));
 const OnboardingWizard = lazy(
   () => import("@/pages/onboarding/OnboardingWizard"),
 );
@@ -112,15 +117,7 @@ function RequireOnboarding() {
     void Promise.all([repo.organizers.getMine(), repo.events.listMine()])
       .then(([organizer, events]) => {
         if (!cancelled)
-          setStatus(
-            organizer
-              ? organizer.onboardingCompletedAt
-                ? "complete"
-                : "incomplete"
-              : events.length
-                ? "complete"
-                : "incomplete",
-          );
+          setStatus(resolveOnboardingStatus(organizer, events.length));
       })
       .catch(() => {
         if (!cancelled) setStatus("incomplete");
@@ -322,6 +319,7 @@ export default function App() {
                     <Route path="program/evaluation" element={<Evaluation />} />
                     <Route path="program/agenda" element={<Agenda />} />
                     <Route path="program/readiness" element={<Readiness />} />
+                    <Route path="program/agent" element={<AgentOperations />} />
                     <Route
                       path="program/availability"
                       element={<Availability />}
@@ -359,6 +357,9 @@ export default function App() {
                     />
                     <Route path="settings/api" element={<ApiKeys />} />
                     <Route path="settings/components" element={<ComponentShowcase />} />
+                    <Route path="cms/embeds" element={<EmbedsListPage />} />
+                    <Route path="cms/embeds/new" element={<EmbedEditorPage />} />
+                    <Route path="cms/embeds/:embedId" element={<EmbedEditorPage />} />
                   </Route>
                 </Route>
               </Route>
@@ -372,6 +373,7 @@ export default function App() {
                   </Suspense>
                 }
               />
+              <Route path="/embed/:embedId" element={<Suspense fallback={<main className="min-h-screen p-4 text-sm text-muted-foreground">Loading embed…</main>}><PublicEmbedPage /></Suspense>} />
               <Route
                 path="/submit/:eventSlug/:formId"
                 element={

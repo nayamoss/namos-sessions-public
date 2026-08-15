@@ -118,18 +118,18 @@ function DataGridContent<Row extends { id: string }>({
   const tableClass = isMatrix
     ? "w-full table-fixed border-separate border-spacing-1 text-left text-sm"
     : sized
-      ? `w-full table-fixed border-collapse text-left text-sm ${isEmbedded ? "min-w-[720px]" : ""}`
-      : `w-full border-collapse text-left text-sm ${isEmbedded ? "min-w-[720px]" : ""}`;
+      ? `w-full table-fixed border-collapse text-left text-sm ${isEmbedded ? "min-w-[720px]" : "responsive-data-grid"}`
+      : `w-full border-collapse text-left text-sm ${isEmbedded ? "min-w-[720px]" : "responsive-data-grid"}`;
   const headerClass = isEmbedded
     ? "sticky top-0 z-10 bg-muted text-xs text-foreground"
     : isMatrix
       ? "sticky top-0 z-10 bg-card text-xs text-muted-foreground"
-    : "text-xs text-muted-foreground";
+    : "border-b border-border/50 bg-muted/15 text-xs text-muted-foreground";
   const tableViewportClass = isEmbedded
     ? "max-h-[calc(100dvh-11rem)] overflow-auto"
     : isMatrix
       ? "max-h-[38rem] overflow-auto"
-      : "overflow-x-auto rounded-lg bg-card";
+      : "overflow-x-auto rounded-lg border border-border/50 bg-card";
   const alignmentClass = (column: DataGridColumn<Row>) =>
     column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left";
   const columnClass = (column: DataGridColumn<Row>) => {
@@ -161,7 +161,7 @@ function DataGridContent<Row extends { id: string }>({
         {column.onSort ? (
           <button
             type="button"
-            className={`inline-flex w-full items-center gap-1.5 rounded-sm py-0.5 font-medium text-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35 ${column.align === "right" ? "justify-end" : "justify-start"}`}
+            className={`inline-flex w-full items-center gap-1.5 rounded-sm py-0.5 font-medium text-foreground hover:text-foreground focus-visible:outline-none ${column.align === "right" ? "justify-end" : "justify-start"}`}
             onClick={column.onSort}
             aria-label={`Sort by ${label}${column.sortDirection ? `, currently ${column.sortDirection === "asc" ? "ascending" : "descending"}` : ""}`}
           >
@@ -208,9 +208,9 @@ function DataGridContent<Row extends { id: string }>({
           <tbody>
             {Array.from({ length: skeletonRows }, (_, row) => (
               <tr key={row}>
-                {selectable && <td className="w-12 px-4 py-3"><Skeleton className="h-4 w-4" /></td>}
+                {selectable && <td data-label="Select" className="w-12 px-4 py-3"><Skeleton className="h-4 w-4" /></td>}
                 {columns.map((column) => (
-                  <td key={column.key} className={dataCellClass(column)}>
+                  <td key={column.key} data-label={column.headerLabel ?? (typeof column.header === "string" ? column.header : column.key)} className={dataCellClass(column)}>
                     <Skeleton className="h-4 w-full max-w-40" />
                   </td>
                 ))}
@@ -255,19 +255,19 @@ function DataGridContent<Row extends { id: string }>({
                   }}
                   className={
                     activatable && selected === row.id
-                      ? "cursor-pointer bg-accent/70 outline-none ring-2 ring-inset ring-ring/20"
+                      ? "cursor-pointer border-b border-border/40 bg-primary/10 outline-none ring-2 ring-inset ring-ring/20"
                       : activatable
-                        ? `${isEmbedded ? "even:bg-muted/20" : ""} cursor-pointer outline-none hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/25`
-                        : isEmbedded ? "even:bg-muted/20" : undefined
+                        ? `${isEmbedded ? "even:bg-muted/20" : "border-b border-border/40 last:border-b-0"} cursor-pointer outline-none hover:bg-muted/15 focus-visible:bg-muted/15`
+                        : isEmbedded ? "even:bg-muted/20" : "border-b border-border/40 last:border-b-0"
                   }
                 >
-                  {selectable && <td className="w-12 px-4 py-3" onClick={(event) => event.stopPropagation()}><Checkbox aria-label={`Select ${getRowLabel(row)}`} checked={selectedIds?.includes(row.id)} onCheckedChange={(checked) => onSelectionChange?.(checked ? [...(selectedIds ?? []), row.id] : (selectedIds ?? []).filter((id) => id !== row.id))} /></td>}
+                  {selectable && <td data-label="Select" className="w-12 px-4 py-3" onClick={(event) => event.stopPropagation()}><Checkbox aria-label={`Select ${getRowLabel(row)}`} checked={selectedIds?.includes(row.id)} onCheckedChange={(checked) => onSelectionChange?.(checked ? [...(selectedIds ?? []), row.id] : (selectedIds ?? []).filter((id) => id !== row.id))} /></td>}
                   {columns.map((column) => column.kind === "row-header" ? (
-                    <th key={column.key} scope="row" className={dataCellClass(column)}>
+                    <th key={column.key} scope="row" data-label={column.headerLabel ?? (typeof column.header === "string" ? column.header : column.key)} className={dataCellClass(column)}>
                       {column.cell(row)}
                     </th>
                   ) : (
-                    <td key={column.key} className={dataCellClass(column)}>
+                    <td key={column.key} data-label={column.headerLabel ?? (typeof column.header === "string" ? column.header : column.key)} className={dataCellClass(column)}>
                       {column.cell(row)}
                     </td>
                   ))}
@@ -277,6 +277,7 @@ function DataGridContent<Row extends { id: string }>({
               <tr>
                 <td
                   colSpan={columns.length + (selectable ? 1 : 0)}
+                  data-empty="true"
                   className="px-4 py-12 text-center text-sm text-muted-foreground"
                 >
                   {empty}
@@ -314,6 +315,7 @@ function DataGridContent<Row extends { id: string }>({
                 variant="outline"
                 size="sm"
                 aria-label="Previous page"
+                title="Previous page"
                 onClick={() => setPage((current) => Math.max(1, current - 1))}
                 disabled={safePage === 1}
               >
@@ -327,6 +329,7 @@ function DataGridContent<Row extends { id: string }>({
                 variant="outline"
                 size="sm"
                 aria-label="Next page"
+                title="Next page"
                 onClick={() =>
                   setPage((current) => Math.min(pageCount, current + 1))
                 }

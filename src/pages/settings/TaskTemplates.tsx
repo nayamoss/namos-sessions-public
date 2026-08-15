@@ -182,7 +182,7 @@ export default function TaskTemplates() {
                 templates.map((template) => (
                   <article
                     key={template.id}
-                    className="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-muted p-4"
+                    className={cardSurfaceClasses("default", "flex flex-wrap items-center justify-between gap-4 bg-muted p-4")}
                   >
                     <div>
                       <div className="flex items-center gap-2">
@@ -244,7 +244,7 @@ export default function TaskTemplates() {
                   </article>
                 ))
               ) : (
-                <div className="rounded-lg bg-card px-6 py-12 text-center">
+                <div className={cardSurfaceClasses("default", "px-6 py-12 text-center")}>
                   <ClipboardList className="mx-auto h-6 w-6 text-muted-foreground" />
                   <p className="mt-3 font-medium">No templates yet</p>
                   <Button
@@ -259,7 +259,7 @@ export default function TaskTemplates() {
             </section>
 
             {editing && (
-              <section className="space-y-4 rounded-lg bg-card p-5">
+              <section className={cardSurfaceClasses("default", "space-y-4 p-5")}>
                 <div>
                   <h2 className="font-semibold">
                     {editing === "new" ? "New template" : "Edit template"}
@@ -288,7 +288,7 @@ export default function TaskTemplates() {
                   {items.map((item, index) => (
                     <div
                       key={index}
-                      className="space-y-2 rounded-lg bg-muted p-3"
+                      className={cardSurfaceClasses("default", "space-y-2 bg-muted p-3")}
                     >
                       <div className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
                         <div className="space-y-1">
@@ -474,3 +474,4 @@ export default function TaskTemplates() {
     </AppLayout>
   );
 }
+import { cardSurfaceClasses } from "@/components/ui/card";

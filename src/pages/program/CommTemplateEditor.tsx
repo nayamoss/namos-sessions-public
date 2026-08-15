@@ -6,6 +6,7 @@ import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
 import { SkeletonList } from "@/components/shared/SkeletonList";
 import { Button } from "@/components/ui/button";
+import { Card, cardSurfaceClasses } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -176,7 +177,7 @@ export default function CommTemplateEditor() {
           <SkeletonList rows={4} label="Loading template…" />
         ) : (
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
-            <div className="space-y-4 rounded-lg bg-card p-5">
+            <Card className="space-y-4 p-5">
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="template-name">Template name</Label>
@@ -238,8 +239,8 @@ export default function CommTemplateEditor() {
                   {message}
                 </p>
               )}
-            </div>
-            <aside className="space-y-3 rounded-lg bg-card p-5">
+            </Card>
+            <aside className={cardSurfaceClasses("default", "space-y-3 p-5")}>
               <div className="space-y-2">
                 <Label htmlFor="template-preview-context">Preview with</Label>
                 <Select value={templateContextId} onValueChange={setTemplateContextId}>

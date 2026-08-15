@@ -111,7 +111,7 @@ export function PortalSchedule() {
       ) : loading ? (
         <SkeletonList rows={3} label="Loading your schedule…" />
       ) : items.length === 0 ? (
-        <section className="rounded-lg bg-muted p-8 text-center">
+        <section className={cardSurfaceClasses("default", "bg-muted p-8 text-center")}>
           <p className="font-medium">No published sessions yet</p>
           <p className="mt-1 text-sm text-muted-foreground">Your confirmed schedule will appear here after the organizer publishes it.</p>
         </section>
@@ -121,7 +121,7 @@ export function PortalSchedule() {
             const start = eventDateTime(item.startTime, event.timezone);
             const end = eventDateTime(item.endTime, event.timezone);
             return (
-              <article key={item.id} className="rounded-lg bg-muted p-5">
+              <article key={item.id} className={cardSurfaceClasses("default", "bg-muted p-5")}>
                 <p className="text-sm text-muted-foreground">{formatSessionDate(item.startTime, event.timezone)}</p>
                 <h2 className="mt-1 text-base font-semibold">{item.title}</h2>
                 <p className="mt-3 text-sm">{formatClock(start.time)}–{formatClock(end.time)}</p>
@@ -145,3 +145,4 @@ export function PortalSchedule() {
     </div>
   );
 }
+import { cardSurfaceClasses } from "@/components/ui/card";

@@ -26,7 +26,7 @@ function itemKey(item: PublicEmbedAgendaItem) {
 
 /** Day, then track — the time-based view of the program. */
 function AgendaFeed({ embed }: { embed: PublicEmbed }) {
-  if (!embed.agenda.length) return <EmptyState compact className="rounded-lg bg-card" message={embedFeedEmptyCopy.agenda} />;
+  if (!embed.agenda.length) return <EmptyState compact className={cardSurfaceClasses()} message={embedFeedEmptyCopy.agenda} />;
   return (
     <section className="space-y-7">
       {agendaDayTrackGroups(embed).map(day => (
@@ -36,7 +36,7 @@ function AgendaFeed({ embed }: { embed: PublicEmbed }) {
             <div key={track} className="space-y-3">
               <h3 className="text-sm font-medium text-muted-foreground">{track}</h3>
               {items.map(item => (
-                <article key={itemKey(item)} className="rounded-lg bg-card p-4">
+                <article key={itemKey(item)} className={cardSurfaceClasses("default", "p-4")}>
                   <p className="text-xs font-medium text-muted-foreground">{time(item.startTime, embed.eventTimezone)} · {item.roomName}</p>
                   <h4 className="mt-1 font-semibold">{item.title}</h4>
                   {item.speakerNames.length > 0 && <p className="mt-1 text-sm text-muted-foreground">{item.speakerNames.join(", ")}</p>}
@@ -55,7 +55,7 @@ function AgendaFeed({ embed }: { embed: PublicEmbed }) {
  * purpose — that is what the agenda feed is for.
  */
 function SessionsFeed({ embed }: { embed: PublicEmbed }) {
-  if (!embed.agenda.length) return <EmptyState compact className="rounded-lg bg-card" message={embedFeedEmptyCopy.sessions} />;
+  if (!embed.agenda.length) return <EmptyState compact className={cardSurfaceClasses()} message={embedFeedEmptyCopy.sessions} />;
   return (
     <section className="space-y-8">
       {sessionTrackGroups(embed).map(({ track, items }) => (
@@ -66,7 +66,7 @@ function SessionsFeed({ embed }: { embed: PublicEmbed }) {
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             {items.map(item => (
-              <article key={itemKey(item)} className="rounded-lg bg-card p-5">
+              <article key={itemKey(item)} className={cardSurfaceClasses("default", "p-5")}>
                 <h3 className="font-semibold leading-6">{item.title}</h3>
                 {item.speakerNames.length > 0 && <p className="mt-2 text-sm text-muted-foreground">{item.speakerNames.join(", ")}</p>}
                 <p className="mt-3 text-xs text-muted-foreground">{item.roomName}</p>
@@ -84,7 +84,7 @@ function SessionsFeed({ embed }: { embed: PublicEmbed }) {
  * sub-grouping, so a reader can follow the event top to bottom.
  */
 function ItineraryFeed({ embed }: { embed: PublicEmbed }) {
-  if (!embed.agenda.length) return <EmptyState compact className="rounded-lg bg-card" message={embedFeedEmptyCopy.itinerary} />;
+  if (!embed.agenda.length) return <EmptyState compact className={cardSurfaceClasses()} message={embedFeedEmptyCopy.itinerary} />;
   return (
     <section className="space-y-8">
       {itineraryDayGroups(embed).map(day => (
@@ -108,11 +108,11 @@ function ItineraryFeed({ embed }: { embed: PublicEmbed }) {
 }
 
 function SpeakersFeed({ embed }: { embed: PublicEmbed }) {
-  if (!embed.speakers.length) return <EmptyState compact className="rounded-lg bg-card" message={embedFeedEmptyCopy.speakers} />;
+  if (!embed.speakers.length) return <EmptyState compact className={cardSurfaceClasses()} message={embedFeedEmptyCopy.speakers} />;
   return (
     <section className="grid gap-4 sm:grid-cols-2">
       {embed.speakers.map(speaker => (
-        <article key={speaker.name} className="rounded-lg bg-card p-5">
+        <article key={speaker.name} className={cardSurfaceClasses("default", "p-5")}>
           <div className="flex items-center gap-3">
             {speaker.headshotUrl
               ? <img src={speaker.headshotUrl} alt={`${speaker.name}'s headshot`} className="h-14 w-14 rounded-full object-cover" />
@@ -151,20 +151,20 @@ export default function EmbedPage() {
   useEffect(() => {
     let active = true;
     if (!eventSlug) return;
-    repo.publicEmbeds.get(eventSlug)
+    repo.publicEmbeds.getLegacy(eventSlug)
       .then(value => { if (active) setEmbed(value); })
       .catch(cause => { if (active) setError(cause instanceof Error ? cause.message : "Could not load this embed."); });
     return () => { active = false; };
   }, [eventSlug, repo]);
 
-  if (!isEmbedFeed(feed)) return <PublicLayout><main className="rounded-lg bg-card p-6"><h1 className="text-xl font-semibold">Page not found</h1><p className="mt-2 text-sm text-muted-foreground">This public event page does not exist.</p></main></PublicLayout>;
+  if (!isEmbedFeed(feed)) return <PublicLayout><main className={cardSurfaceClasses("default", "p-6")}><h1 className="text-xl font-semibold">Page not found</h1><p className="mt-2 text-sm text-muted-foreground">This public event page does not exist.</p></main></PublicLayout>;
   if (error) return <PublicLayout><p className="text-sm text-destructive">{error}</p></PublicLayout>;
   if (embed === undefined) return <PublicLayout><SkeletonList rows={4} label="Loading event…" /></PublicLayout>;
   if (!embed) return <PublicLayout><p className="text-sm text-muted-foreground">This published event was not found.</p></PublicLayout>;
 
   return (
     <PublicLayout>
-      <header className="rounded-lg bg-muted/60 p-5">
+      <header className={cardSurfaceClasses("default", "bg-muted/60 p-5")}>
         <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">{embed.eventName}</p>
         <h1 className="mt-1 text-2xl font-semibold">{embedFeedTitles[feed]}</h1>
       </header>
@@ -173,3 +173,4 @@ export default function EmbedPage() {
     </PublicLayout>
   );
 }
+import { cardSurfaceClasses } from "@/components/ui/card";

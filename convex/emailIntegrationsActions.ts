@@ -19,7 +19,7 @@ import type { UserIdentity } from "convex/server";
 import { action } from "./_generated/server";
 import { internal } from "./_generated/api";
 import {
-  assertEventAccessAction, credentialHint, decryptCredentials, deliveryFailure, emailPattern,
+  assertEventOrganizerAction, credentialHint, decryptCredentials, deliveryFailure, emailPattern,
   encryptCredentials, providerForAuthMethod, sendWithIntegration,
   type AuthMethod, type Credentials, type Integration,
 } from "./emailDelivery";
@@ -60,7 +60,7 @@ const testMessage = { subject: "Namos Sessions email delivery test", text: "Your
 export const save = action({
   args: { eventId: v.id("events"), authMethod, sender: v.string(), region: v.optional(v.string()), credentials: credentialsArg },
   handler: async (ctx, args) => {
-    const identity = await assertEventAccessAction(ctx, args.eventId);
+    const identity = await assertEventOrganizerAction(ctx, args.eventId);
     const sender = args.sender.trim();
     if (!emailPattern.test(sender)) throw new Error("Sender address must be a valid email address.");
     const region = args.region?.trim() ?? "";
@@ -87,7 +87,7 @@ export const save = action({
 export const test = action({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
-    const identity = await assertEventAccessAction(ctx, args.eventId);
+    const identity = await assertEventOrganizerAction(ctx, args.eventId);
     const stored = await ctx.runQuery(internal.emailIntegrations.getInternal, { eventId: args.eventId });
     if (!stored) throw new Error("No event email provider is connected yet.");
     const recipient = organizerEmail(identity);
@@ -112,7 +112,7 @@ export const test = action({
 export const disconnect = action({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
-    await assertEventAccessAction(ctx, args.eventId);
+    await assertEventOrganizerAction(ctx, args.eventId);
     const stored = await ctx.runQuery(internal.emailIntegrations.getInternal, { eventId: args.eventId });
     if (stored?.authMethod === "resend_oauth") {
       const credentials = decryptCredentials(stored.credentialEnvelope);

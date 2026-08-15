@@ -79,6 +79,22 @@ export default function EventDetails() {
   useEffect(() => {
     void load();
   }, [load]);
+  // Re-fetches only rooms/tracks (to pick up server-assigned ids for newly created rows).
+  // Deliberately does NOT touch `event` — `save()` already holds the exact fields it just
+  // persisted, and re-deriving `event` from `activeEvent` here would be wrong: that reactive
+  // query hasn't necessarily caught up with the mutation yet, so doing so previously clobbered
+  // just-saved toggles (e.g. Sponsors) back to their pre-save value for a render or two.
+  const reloadCollections = useCallback(
+    async (eventId: EventId) => {
+      const [nextRooms, nextTracks] = await Promise.all([
+        repo.events.listRooms({ eventId }),
+        repo.events.listTracks({ eventId }),
+      ]);
+      setRooms(nextRooms);
+      setTracks(nextTracks);
+    },
+    [repo],
+  );
   const save = async () => {
     setSaving(true);
     try {
@@ -106,7 +122,7 @@ export default function EventDetails() {
         ),
       );
       setEvent((current) => ({ ...current, id: eventId }));
-      await load();
+      await reloadCollections(eventId);
       setError(undefined);
     } catch (error) {
       setError(
@@ -176,7 +192,7 @@ export default function EventDetails() {
           <SkeletonList rows={4} label="Loading event settings…" />
         ) : (
           <>
-            <section className="space-y-6 rounded-lg bg-card p-6">
+            <section className={cardSurfaceClasses("default", "space-y-6 p-6")}>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <FormField label="Event Name">
                   <Input
@@ -292,7 +308,7 @@ function Collection<Item extends EditableCollectionItem>({
   onRemove: (item: Item, index: number) => Promise<void>;
 }) {
   return (
-    <section className="rounded-lg bg-card p-6">
+    <section className={cardSurfaceClasses("default", "p-6")}>
       <div className="flex items-center justify-between">
         <h2 className="text-base font-semibold">{title}</h2>
         <Button
@@ -342,3 +358,4 @@ function Collection<Item extends EditableCollectionItem>({
     </section>
   );
 }
+import { cardSurfaceClasses } from "@/components/ui/card";

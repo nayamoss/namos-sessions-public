@@ -6,6 +6,10 @@ import type {
   AssignmentFilter,
   AgendaConflict,
   AgendaItem,
+  AgentProposalId,
+  AgentRun,
+  AgentRunDetail,
+  AgentRunId,
   Availability,
   Comm,
   CommPreview,
@@ -15,6 +19,7 @@ import type {
   CrossFieldLimit,
   EmailIntegration,
   EmailIntegrationSaveInput,
+  AgentProviderSetting,
   Evaluation,
   EvaluationAssignment,
   EvaluationCriterion,
@@ -22,6 +27,7 @@ import type {
   EvaluationPlan,
   Event,
   EventId,
+  EventInviteResult,
   EventMember,
   FieldDefinition,
   FieldDefinitionWrite,
@@ -29,6 +35,10 @@ import type {
   OnboardingTask,
   Organizer,
   PublicEmbed,
+  Embed,
+  EmbedId,
+  EmbedWrite,
+  PublicEmbedView,
   PublicSubmissionFormConfig,
   PublicSubmissionFormSummary,
   ReviewerProgressRow,
@@ -57,6 +67,7 @@ import type {
   SubmissionId,
   Tag,
   TagId,
+  UserProfile,
   TaskTemplate,
   TaskTemplateItem,
   Track,
@@ -94,6 +105,12 @@ export interface EventsRepo {
 }
 export interface EventMembersRepo {
   list(scope: EventScope): Promise<EventMember[]>;
+  canManage(scope: EventScope): Promise<boolean>;
+  invite(
+    input: EventScope & { email: string; role: EventMember["role"] },
+  ): Promise<EventInviteResult>;
+  resend(input: EventScope & { memberId: string }): Promise<EventInviteResult>;
+  claimPending(): Promise<number>;
   add(
     input: EventScope & {
       email: string;
@@ -101,7 +118,7 @@ export interface EventMembersRepo {
       userId?: string;
     },
   ): Promise<string>;
-  remove(input: EventScope & { userId: string }): Promise<void>;
+  remove(input: EventScope & { memberId: string }): Promise<void>;
 }
 export interface TagsRepo {
   list(scope: EventScope): Promise<Tag[]>;
@@ -507,7 +524,15 @@ export interface AvailabilityRepo {
   upsert(input: Omit<Availability, "id">): Promise<string>;
 }
 export interface PublicEmbedsRepo {
-  get(eventSlug: string): Promise<PublicEmbed | null>;
+  list(scope: EventScope): Promise<Embed[]>;
+  getAdmin(input: EventScope & { embedId: EmbedId }): Promise<Embed | null>;
+  preview(input: Omit<EmbedWrite, "id">): Promise<PublicEmbedView | null>;
+  save(input: EmbedWrite): Promise<EmbedId>;
+  duplicate(input: EventScope & { embedId: EmbedId }): Promise<EmbedId>;
+  remove(input: EventScope & { embedId: EmbedId }): Promise<void>;
+  getPublic(embedId: string): Promise<PublicEmbedView | null>;
+  /** Legacy slug feed; retained to keep `/e/:eventSlug/:feed` links working. */
+  getLegacy(eventSlug: string): Promise<PublicEmbed | null>;
 }
 export interface PublicFormsRepo {
   listOpen(eventSlug: string): Promise<PublicSubmissionFormSummary[]>;
@@ -560,6 +585,16 @@ export interface OrganizersRepo {
   remove(userId: string): Promise<void>;
 }
 /**
+ * Onboarding-captured personalization (name, solo/team, referral source) for ANY signed-in
+ * user — deliberately separate from OrganizersRepo, whose `organizers` table only ever has a
+ * row for the bootstrap owner or someone an owner explicitly added. See schema.ts's
+ * `userProfiles` comment.
+ */
+export interface ProfilesRepo {
+  getMine(): Promise<UserProfile | null>;
+  save(input: { displayName?: string; signupRole?: "solo" | "team"; referralSource?: string }): Promise<void>;
+}
+/**
  * Per-event email provider configuration. Every method is organizer-gated server-side and
  * credentials only ever travel inbound — `status` returns a masked hint, never a secret.
  * `save` performs a live test send before it stores anything.
@@ -577,7 +612,25 @@ export interface ApiKeysRepo {
   generate(label: string): Promise<GeneratedApiKey>;
   revoke(id: string): Promise<void>;
 }
+export interface AgentRunsRepo {
+  canUse(scope: EventScope): Promise<boolean>;
+  list(scope: EventScope & { limit?: number }): Promise<AgentRun[]>;
+  get(scope: EventScope & { runId: AgentRunId }): Promise<AgentRunDetail | null>;
+  create(input: EventScope & { objective: string; idempotencyKey: string }): Promise<{ runId: AgentRunId }>;
+  respond(input: EventScope & { runId: AgentRunId; message: string; idempotencyKey: string }): Promise<void>;
+  retry(input: EventScope & { runId: AgentRunId }): Promise<void>;
+  cancel(input: EventScope & { runId: AgentRunId }): Promise<void>;
+  approveTaskProposal(input: EventScope & { proposalId: AgentProposalId; expectedPayloadHash: string }): Promise<{ createdTaskIds: string[] }>;
+  rejectProposal(input: EventScope & { proposalId: AgentProposalId; reason?: string }): Promise<void>;
+}
+export interface AgentProviderSettingsRepo {
+  status(scope: EventScope): Promise<AgentProviderSetting>;
+  saveManaged(scope: EventScope): Promise<{ mode: "managed"; status: "ready" }>;
+  saveByok(input: EventScope & { apiKey: string }): Promise<{ mode: "bring_your_own"; status: "ready" }>;
+}
 export interface Repository {
+  agentProviderSettings: AgentProviderSettingsRepo;
+  agentRuns: AgentRunsRepo;
   apiKeys: ApiKeysRepo;
   emailIntegrations: EmailIntegrationsRepo;
   events: EventsRepo;
@@ -599,6 +652,7 @@ export interface Repository {
   publicForms: PublicFormsRepo;
   portalForms: PortalFormsRepo;
   organizers: OrganizersRepo;
+  profiles: ProfilesRepo;
 }
 
 export const RepoContext = createContext<Repository | null>(null);
@@ -606,4 +660,9 @@ export function useRepo(): Repository {
   const repo = useContext(RepoContext);
   if (!repo) throw new Error("Repository provider is missing");
   return repo;
+}
+// For cross-cutting chrome (e.g. AccountMenu) that renders in contexts/tests which don't
+// always wrap a RepoProvider — degrades gracefully instead of throwing.
+export function useOptionalRepo(): Repository | null {
+  return useContext(RepoContext);
 }

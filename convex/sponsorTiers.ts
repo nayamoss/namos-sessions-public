@@ -1,10 +1,10 @@
 import { v } from "convex/values";
-import { assertEventAccess, mutation, query } from "./functions";
+import { assertEventOrganizerAccess, mutation, query } from "./functions";
 
 export const list = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     const [tiers, sponsors] = await Promise.all([
       ctx.db
         .query("sponsor_tiers")
@@ -31,7 +31,7 @@ export const create = mutation({
     benefitsDescription: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     const event = await ctx.db.get(args.eventId);
     if (!event) throw new Error("Event not found.");
     const name = args.name.trim();
@@ -70,7 +70,7 @@ export const update = mutation({
   handler: async (ctx, args) => {
     const tier = await ctx.db.get(args.tierId);
     if (!tier) throw new Error("Sponsor tier not found.");
-    await assertEventAccess(ctx, tier.eventId);
+    await assertEventOrganizerAccess(ctx, tier.eventId);
     const { tierId: _tierId, ...patch } = args;
     const name = patch.name === undefined ? tier.name : patch.name.trim();
     if (!name) throw new Error("A tier needs a name.");
@@ -103,7 +103,7 @@ export const update = mutation({
 export const reorder = mutation({
   args: { eventId: v.id("events"), tierIds: v.array(v.id("sponsor_tiers")) },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     const tiers = await ctx.db
       .query("sponsor_tiers")
       .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
@@ -127,7 +127,7 @@ export const remove = mutation({
   handler: async (ctx, args) => {
     const tier = await ctx.db.get(args.tierId);
     if (!tier) throw new Error("Sponsor tier not found.");
-    await assertEventAccess(ctx, tier.eventId);
+    await assertEventOrganizerAccess(ctx, tier.eventId);
     const assigned = await ctx.db
       .query("sponsors")
       .withIndex("by_tier", (q) => q.eq("tierId", args.tierId))
