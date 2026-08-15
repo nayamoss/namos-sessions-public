@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { Card, CardContent } from "@/components/ui/card";
 
 export function SectionCard({ title, description, action, children, className, contentClassName }: {
   title?: ReactNode;
@@ -10,7 +11,7 @@ export function SectionCard({ title, description, action, children, className, c
   contentClassName?: string;
 }) {
   return (
-    <section className={cn("rounded-lg bg-card p-6", className)}>
+    <Card className={cn("p-6", className)}>
       {(title || description || action) && (
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
@@ -20,7 +21,7 @@ export function SectionCard({ title, description, action, children, className, c
           {action}
         </div>
       )}
-      <div className={cn((title || description || action) && "mt-5", contentClassName)}>{children}</div>
-    </section>
+      <CardContent className={cn("p-0", (title || description || action) && "mt-5", contentClassName)}>{children}</CardContent>
+    </Card>
   );
 }

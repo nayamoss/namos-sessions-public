@@ -269,7 +269,7 @@ function FormEditor({
                   onClick={() => update("kind", kind)}
                   className={
                     draft.kind === kind
-                      ? "rounded-lg bg-muted p-4 text-left"
+                      ? cardSurfaceClasses("default", "bg-muted p-4 text-left")
                       : "rounded-lg bg-background p-4 text-left hover:bg-muted/70"
                   }
                 >
@@ -347,6 +347,7 @@ function FormEditor({
                     type="button"
                     variant="ghost"
                     size="icon"
+                    aria-label={`Remove ${field.label}`}
                     onClick={() =>
                       update(
                         "fields",
@@ -631,7 +632,7 @@ export default function PortalForms() {
         {loading ? (
           <SkeletonList rows={3} label="Loading portal forms…" />
         ) : !event ? (
-          <section className="rounded-lg bg-card p-6">
+          <section className={cardSurfaceClasses("default", "p-6")}>
             <p className="font-semibold">No event available</p>
             <p className="mt-1 text-sm text-muted-foreground">
               Create an event before creating portal forms.
@@ -639,27 +640,29 @@ export default function PortalForms() {
           </section>
         ) : (
           <>
-            <StatusTabs
-              ariaLabel="Portal form types"
-              value={tab}
-              onValueChange={(value) => setTab(value as "all" | PortalFormKind)}
-              tabs={[
-                { value: "all", label: "All forms", count: counts.all },
-                {
-                  value: "contact",
-                  label: "Contact forms",
-                  count: counts.contact,
-                },
-                { value: "group", label: "Group forms", count: counts.group },
-                {
-                  value: "submission_task",
-                  label: "Submission forms",
-                  count: counts.submission_task,
-                },
-              ]}
-            />
             <ContentToolbar
               ariaLabel="Portal form controls"
+              utilities={
+                <StatusTabs
+                  ariaLabel="Portal form types"
+                  value={tab}
+                  onValueChange={(value) => setTab(value as "all" | PortalFormKind)}
+                  tabs={[
+                    { value: "all", label: "All forms", count: counts.all },
+                    {
+                      value: "contact",
+                      label: "Contact forms",
+                      count: counts.contact,
+                    },
+                    { value: "group", label: "Group forms", count: counts.group },
+                    {
+                      value: "submission_task",
+                      label: "Submission forms",
+                      count: counts.submission_task,
+                    },
+                  ]}
+                />
+              }
               primaryAction={
                 <Button
                   type="button"
@@ -673,7 +676,7 @@ export default function PortalForms() {
               }
             />
             {deleteCandidate && (
-              <section className="rounded-lg bg-muted p-4">
+              <section className={cardSurfaceClasses("default", "bg-muted p-4")}>
                 <p className="font-semibold">
                   Delete “{deleteCandidate.name}”?
                 </p>
@@ -705,7 +708,7 @@ export default function PortalForms() {
                 {visible.map((form) => (
                   <div
                     key={form.id}
-                    className="flex flex-wrap items-center justify-between gap-4 rounded-lg bg-card p-5"
+                    className={cardSurfaceClasses("default", "flex flex-wrap items-center justify-between gap-4 p-5")}
                   >
                     <div>
                       <p className="text-xs text-muted-foreground">
@@ -717,7 +720,7 @@ export default function PortalForms() {
                         {form.title}
                       </p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap justify-end gap-2">
                       <Button
                         variant="ghost"
                         size="sm"
@@ -736,6 +739,7 @@ export default function PortalForms() {
                       <Button
                         variant="ghost"
                         size="icon"
+                        aria-label={`Delete ${form.name}`}
                         onClick={() => setDeleteCandidate(form)}
                       >
                         <Trash2 />
@@ -745,7 +749,7 @@ export default function PortalForms() {
                 ))}
               </div>
             ) : (
-              <section className="rounded-lg bg-card px-6 py-12 text-center">
+              <section className={cardSurfaceClasses("default", "px-6 py-12 text-center")}>
                 <p className="font-medium">No forms yet</p>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Create a form to collect information from participants.
@@ -758,3 +762,4 @@ export default function PortalForms() {
     </AppLayout>
   );
 }
+import { cardSurfaceClasses } from "@/components/ui/card";

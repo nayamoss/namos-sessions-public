@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
-import { mutation, query, assertEventAccess } from "./functions";
+import { mutation, query, assertEventAccess, assertEventOrganizerAccess } from "./functions";
 
 function normalizeName(name: string) {
   const normalized = name.trim();
@@ -30,7 +30,7 @@ async function requireUniqueName(ctx: MutationCtx, eventId: Id<"events">, name: 
 export const list = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     return ctx.db.query("tags").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect();
   },
 });
@@ -38,7 +38,7 @@ export const list = query({
 export const create = mutation({
   args: { eventId: v.id("events"), name: v.string(), color: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     const name = normalizeName(args.name);
     await requireEvent(ctx, args.eventId);
     await requireUniqueName(ctx, args.eventId, name);
@@ -56,7 +56,7 @@ export const create = mutation({
 export const rename = mutation({
   args: { eventId: v.id("events"), id: v.id("tags"), name: v.string() },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     const tag = await ctx.db.get(args.id);
     if (!tag || tag.eventId !== args.eventId) throw new Error("Tag not found for this event.");
     const name = normalizeName(args.name);
@@ -68,7 +68,7 @@ export const rename = mutation({
 export const remove = mutation({
   args: { eventId: v.id("events"), id: v.id("tags") },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     const tag = await ctx.db.get(args.id);
     if (!tag || tag.eventId !== args.eventId) throw new Error("Tag not found for this event.");
     const submissions = await ctx.db.query("submissions").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect();

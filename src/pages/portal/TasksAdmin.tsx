@@ -33,7 +33,7 @@ type OnboardingTask = {
   title: string;
   target: TaskTarget;
   targetLabel: string;
-  source: "manual" | "auto";
+  source: "manual" | "auto" | "agent";
   status: TaskStatus;
   dueLabel?: string;
 };
@@ -269,7 +269,7 @@ export default function TasksAdmin() {
       <div className="space-y-3">
         {copyOpen && (
           <section
-            className="rounded-lg bg-card p-5"
+            className={cardSurfaceClasses("default", "p-5")}
             aria-label="Copy from template"
           >
             <div className="flex items-start justify-between gap-4">
@@ -348,7 +348,7 @@ export default function TasksAdmin() {
         )}
         {addOpen && (
           <section
-            className="rounded-lg bg-card p-5"
+            className={cardSurfaceClasses("default", "p-5")}
             aria-label="Add onboarding task"
           >
             <div className="flex flex-wrap items-start justify-between gap-4">
@@ -464,23 +464,6 @@ export default function TasksAdmin() {
           </p>
         )}
 
-        <StatusTabs
-          ariaLabel="Task types"
-          value={tab}
-          onValueChange={(value) => setTab(value as "all" | TaskTarget)}
-          tabs={[
-            { value: "all", label: "All Tasks", count: counts.all },
-            { value: "contact", label: "Contact Tasks", count: counts.contact },
-            { value: "group", label: "Group Tasks", count: counts.group },
-            {
-              value: "submission",
-              label: "Submission Tasks",
-              count: counts.submission,
-            },
-            { value: "sponsor", label: "Sponsor Tasks", count: counts.sponsor },
-          ]}
-        />
-
         <ContentToolbar
           ariaLabel="Task controls"
           search={
@@ -494,6 +477,24 @@ export default function TasksAdmin() {
                 aria-label="Search tasks"
               />
             </div>
+          }
+          utilities={
+            <StatusTabs
+              ariaLabel="Task types"
+              value={tab}
+              onValueChange={(value) => setTab(value as "all" | TaskTarget)}
+              tabs={[
+                { value: "all", label: "All Tasks", count: counts.all },
+                { value: "contact", label: "Contact Tasks", count: counts.contact },
+                { value: "group", label: "Group Tasks", count: counts.group },
+                {
+                  value: "submission",
+                  label: "Submission Tasks",
+                  count: counts.submission,
+                },
+                { value: "sponsor", label: "Sponsor Tasks", count: counts.sponsor },
+              ]}
+            />
           }
           primaryAction={
             <>
@@ -531,13 +532,13 @@ export default function TasksAdmin() {
               <article
                 key={task.id}
                 id={`task-${task.id}`}
-                className="flex flex-wrap items-center justify-between gap-4 rounded-lg bg-card p-5"
+                className={cardSurfaceClasses("default", "flex flex-wrap items-center justify-between gap-4 p-5")}
               >
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="text-sm font-semibold">{task.title}</h2>
                     <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                      {task.source === "manual" ? "Manual" : "Automatic"}
+                      {task.source === "agent" ? "Operations Agent" : task.source === "manual" ? "Manual" : "Automatic"}
                     </span>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
@@ -576,7 +577,7 @@ export default function TasksAdmin() {
               </article>
             ))
           ) : (
-            <div className="rounded-lg bg-card px-6 py-12 text-center">
+            <div className={cardSurfaceClasses("default", "px-6 py-12 text-center")}>
               <ClipboardList className="mx-auto h-6 w-6 text-muted-foreground" />
               <p className="mt-3 text-sm font-medium">
                 No tasks match this view
@@ -591,3 +592,4 @@ export default function TasksAdmin() {
     </AppLayout>
   );
 }
+import { cardSurfaceClasses } from "@/components/ui/card";

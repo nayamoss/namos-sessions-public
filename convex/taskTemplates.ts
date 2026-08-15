@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { assertEventAccess, mutation, query } from "./functions";
+import { assertEventOrganizerAccess, mutation, query } from "./functions";
 
 const item = v.object({
   title: v.string(),
@@ -53,7 +53,7 @@ const cleanItems = (
 export const list = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     return ctx.db
       .query("task_templates")
       .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
@@ -64,7 +64,7 @@ export const get = query({
   args: { templateId: v.id("task_templates") },
   handler: async (ctx, args) => {
     const template = await ctx.db.get(args.templateId);
-    if (template) await assertEventAccess(ctx, template.eventId);
+    if (template) await assertEventOrganizerAccess(ctx, template.eventId);
     return template;
   },
 });
@@ -76,7 +76,7 @@ export const create = mutation({
     items,
   },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     validate(args.name, args.items);
     const now = Date.now();
     return ctx.db.insert("task_templates", {
@@ -102,7 +102,7 @@ export const update = mutation({
   handler: async (ctx, args) => {
     const template = await ctx.db.get(args.templateId);
     if (!template) throw new Error("Template not found.");
-    await assertEventAccess(ctx, template.eventId);
+    await assertEventOrganizerAccess(ctx, template.eventId);
     const name = args.name ?? template.name;
     const nextItems = args.items ?? template.items;
     validate(name, nextItems);
@@ -122,7 +122,7 @@ export const remove = mutation({
   handler: async (ctx, args) => {
     const template = await ctx.db.get(args.templateId);
     if (!template) throw new Error("Template not found.");
-    await assertEventAccess(ctx, template.eventId);
+    await assertEventOrganizerAccess(ctx, template.eventId);
     const event = await ctx.db.get(template.eventId);
     if (event?.defaultOnboardingTemplateId === args.templateId)
       throw new Error("Unset this template as the default before deleting it.");
@@ -135,7 +135,7 @@ export const setDefault = mutation({
     templateId: v.optional(v.id("task_templates")),
   },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     if (args.templateId) {
       const template = await ctx.db.get(args.templateId);
       if (!template || template.eventId !== args.eventId)
@@ -159,7 +159,7 @@ export const applyToSubmission = mutation({
     ]);
     if (!template || !submission || template.eventId !== submission.eventId)
       throw new Error("Template and submission must belong to the same event.");
-    await assertEventAccess(ctx, template.eventId);
+    await assertEventOrganizerAccess(ctx, template.eventId);
     const existing = await ctx.db
       .query("onboarding_tasks")
       .withIndex("by_submission", (q) =>
@@ -211,7 +211,7 @@ export const applyToSponsor = mutation({
     ]);
     if (!template || !sponsor || template.eventId !== sponsor.eventId)
       throw new Error("Template and sponsor must belong to the same event.");
-    await assertEventAccess(ctx, template.eventId);
+    await assertEventOrganizerAccess(ctx, template.eventId);
     const existing = await ctx.db
       .query("onboarding_tasks")
       .withIndex("by_sponsor", (q) => q.eq("sponsorId", args.sponsorId))

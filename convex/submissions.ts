@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { mutation, query, assertEventAccess } from "./functions";
+import { mutation, query, assertEventOrganizerAccess } from "./functions";
 import { assertOrganizerOrOwnsSpeaker } from "./speakers";
 import {
   assertAnswers,
@@ -57,7 +57,7 @@ export const list = query({
           }),
       );
     }
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     return ctx.db
       .query("submissions")
       .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
@@ -123,7 +123,7 @@ export async function findOrCreateSpeaker(
 export const submit = mutation({
   args: { input: v.object(submissionInput) },
   handler: async (ctx, { input }) => {
-    await assertEventAccess(ctx, input.eventId);
+    await assertEventOrganizerAccess(ctx, input.eventId);
     if (!input.title.trim()) throw new Error("A submission title is required.");
     const form = await validateForm(ctx, input.eventId, input.formId);
     const existing = await ctx.db
@@ -157,7 +157,7 @@ export const submit = mutation({
 export const saveDraft = mutation({
   args: { input: v.object(submissionInput) },
   handler: async (ctx, { input }) => {
-    await assertEventAccess(ctx, input.eventId);
+    await assertEventOrganizerAccess(ctx, input.eventId);
     await validateForm(ctx, input.eventId, input.formId);
     const speakerId = await findOrCreateSpeaker(ctx, input);
     const now = Date.now();
@@ -187,7 +187,7 @@ export const createAdmin = mutation({
     }),
   },
   handler: async (ctx, { input }) => {
-    await assertEventAccess(ctx, input.eventId);
+    await assertEventOrganizerAccess(ctx, input.eventId);
     if (!input.title.trim()) throw new Error("An abstract title is required.");
     const form = await ctx.db.get(input.formId);
     if (!form || form.eventId !== input.eventId)
@@ -221,7 +221,7 @@ export const decide = mutation({
   handler: async (ctx, args) => {
     const submission = await ctx.db.get(args.submissionId);
     if (!submission) throw new Error("Submission not found.");
-    await assertEventAccess(ctx, submission.eventId);
+    await assertEventOrganizerAccess(ctx, submission.eventId);
     const now = Date.now();
     await ctx.db.patch(args.submissionId, {
       status: args.status,
@@ -290,7 +290,7 @@ export const setStatus = mutation({
   handler: async (ctx, args) => {
     const submission = await ctx.db.get(args.submissionId);
     if (!submission) throw new Error("Submission not found.");
-    await assertEventAccess(ctx, submission.eventId);
+    await assertEventOrganizerAccess(ctx, submission.eventId);
     await ctx.db.patch(args.submissionId, {
       status: args.status,
       updatedAt: Date.now(),
@@ -305,7 +305,7 @@ export const setTags = mutation({
     tagIds: v.array(v.id("tags")),
   },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     const submission = await ctx.db.get(args.submissionId);
     if (!submission || submission.eventId !== args.eventId)
       throw new Error("Submission not found for this event.");

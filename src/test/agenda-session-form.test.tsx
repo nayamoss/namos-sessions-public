@@ -23,6 +23,44 @@ describe("AgendaSessionForm", () => {
     expect(onSave.mock.calls[0][0]).toMatchObject({ title: "Reliable systems", roomId: "room-1", trackId: "track-1", submissionId: "submission-1", speakerIds: ["speaker-1"], isPublished: false });
   });
 
+  it("preserves a customized title when editing only the time of a submission-linked session", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(
+      <AgendaSessionForm
+        event={event}
+        rooms={rooms}
+        tracks={tracks}
+        speakers={speakers}
+        submissions={submissions}
+        initial={{
+          id: "agenda-1",
+          title: "Custom program title",
+          submissionId: submissions[0].id,
+          speakerIds: [speakers[0].id],
+          trackId: tracks[0].id,
+          roomId: rooms[0].id,
+          startTime: Date.UTC(2026, 8, 15, 13),
+          endTime: Date.UTC(2026, 8, 15, 13, 45),
+          isPublished: false,
+        }}
+        onSave={onSave}
+        onCancel={() => undefined}
+      />,
+    );
+
+    expect(screen.getByLabelText("Title")).toHaveValue("Custom program title");
+    fireEvent.change(screen.getByLabelText("Start"), { target: { value: "10:00" } });
+    fireEvent.change(screen.getByLabelText("End"), { target: { value: "10:45" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save session" }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+    expect(onSave.mock.calls[0][0]).toMatchObject({
+      id: "agenda-1",
+      title: "Custom program title",
+      submissionId: "submission-1",
+    });
+  });
+
   it("keeps invalid standalone data in the pane and explains the time error", async () => {
     const onSave = vi.fn();
     render(<AgendaSessionForm event={event} rooms={rooms} tracks={tracks} speakers={speakers} submissions={submissions} onSave={onSave} onCancel={() => undefined} />);

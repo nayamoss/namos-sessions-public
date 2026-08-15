@@ -196,7 +196,7 @@ export default function Readiness() {
               {categories.map(({ category }) => (
                 <div
                   key={category}
-                  className="animate-pulse rounded-lg bg-muted/60 p-5"
+                  className={cardSurfaceClasses("default", "animate-pulse bg-muted/60 p-5")}
                 >
                   <div className="h-4 w-40 rounded bg-muted" />
                   <div className="mt-4 h-4 w-3/4 rounded bg-muted" />
@@ -236,3 +236,4 @@ export default function Readiness() {
     </AppLayout>
   );
 }
+import { cardSurfaceClasses } from "@/components/ui/card";

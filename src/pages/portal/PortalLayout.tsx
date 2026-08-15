@@ -45,24 +45,26 @@ export function PortalLayout({ children }: { children: ReactNode }) {
     >
       <div className="min-w-0 space-y-4 overflow-x-hidden">
         {handoffMismatch && !mismatchDismissed && selectedSpeaker && (
-          <section role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-muted p-4">
+          <section role="status" className={cardSurfaceClasses("default", "flex flex-wrap items-center justify-between gap-3 bg-muted p-4")}>
             <p className="text-sm">You’re viewing the portal as {selectedSpeaker.name} — your recent submission isn’t shown here because you’re signed in as a different speaker.</p>
             <Button type="button" variant="ghost" size="sm" onClick={() => setMismatchDismissed(true)}>Dismiss</Button>
           </section>
         )}
         {/* Once the signed-in account resolves to a speaker, that identity is authoritative and
-            this notice stays hidden. It only appears for accounts that don't match a speaker. */}
-        {!identityLockedByClerk && (
-          <section className="rounded-lg bg-muted p-4" aria-label="No linked speaker profile">
-            <p className="text-sm font-medium">No speaker profile found</p>
-            {error ? (
-              <p role="alert" className="mt-2 text-sm text-destructive">{error}</p>
-            ) : loading ? (
+            this notice stays hidden. There is no way to view or act as another speaker from
+            here — an account that doesn't match a speaker record simply has no portal access. */}
+        {!identityLockedByClerk && !selectedSpeaker && (
+          <section className={cardSurfaceClasses("default", "bg-muted p-4")} role="status" aria-label="No speaker profile found">
+            {loading ? (
               <SkeletonList rows={1} label="Checking your speaker access…" />
             ) : (
-              <p className="mt-1 text-sm text-muted-foreground">
-                We couldn't find a speaker profile linked to your account for {eventName ?? "this event"}. Contact the event organizer to get your account connected.
-              </p>
+              <>
+                <p className="text-sm font-medium">No speaker profile found</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  We couldn't find a speaker profile linked to your account for {eventName ?? "this event"}. Contact the event organizer if you believe this is a mistake.
+                </p>
+                {error && <p role="alert" className="mt-2 text-sm text-destructive">{error}</p>}
+              </>
             )}
           </section>
         )}
@@ -71,3 +73,4 @@ export function PortalLayout({ children }: { children: ReactNode }) {
     </DashboardLayout>
   );
 }
+import { cardSurfaceClasses } from "@/components/ui/card";

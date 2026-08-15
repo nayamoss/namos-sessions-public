@@ -20,8 +20,10 @@ const genericDocumentLists = new Set<ReadOperation>([
 function fixtureFor(operation: ReadOperation): unknown {
   const document = { _id: `${operation}-id`, _creationTime: 123, eventId: "event-a", title: "Example" };
 
-  if (operation === "events.list" || operation === "events.listMine" || operation === "events.listForPortal") return [document];
-  if (operation === "events.get" || operation === "events.getBySlug" || operation === "emailIntegrations.status" || operation === "organizers.getMine") return document;
+  if (operation === "events.list" || operation === "events.listMine" || operation === "events.listForPortal" || operation === "publicEmbeds.list") return [document];
+  if (operation === "agentRuns.list") return [document];
+  if (operation === "agentRuns.get") return { run: document, events: [document], proposals: [document] };
+  if (operation === "events.get" || operation === "events.getBySlug" || operation === "emailIntegrations.status" || operation === "organizers.getMine" || operation === "profiles.getMine" || operation === "publicEmbeds.getAdmin") return document;
   if (genericDocumentLists.has(operation)) return [document];
   if (operation === "forms.list") return [{ ...document, internalName: "Internal CFP", status: "open" }];
   if (operation === "speakers.list") return [{ ...document, firstName: "Ada", lastName: "Lovelace" }];
@@ -33,7 +35,7 @@ function fixtureFor(operation: ReadOperation): unknown {
   if (operation === "sponsors.get") return { ...document, contacts: [], tasks: [], submissions: [] };
   if (operation === "comms.list") return [{ ...document, channel: "email" }];
   if (operation === "speakers.headshotUrl") return "https://example.test/headshot";
-  if (operation === "organizers.isCurrentUserOrganizer" || operation === "organizers.canClaimOwner" || operation === "organizers.hasAdminAccess") return true;
+  if (operation === "organizers.isCurrentUserOrganizer" || operation === "organizers.canClaimOwner" || operation === "organizers.hasAdminAccess" || operation === "agentRuns.canUse") return true;
 
   return { operation, unchanged: true };
 }

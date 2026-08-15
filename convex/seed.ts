@@ -1,12 +1,12 @@
-import { internalMutation } from "./_generated/server";
+import { mutation } from "./functions";
+import { recordAgendaItemAudit } from "./agendaAudit";
 
 const eventSlug = "ai-engineer-sandbox-event";
 const seededAt = Date.UTC(2026, 8, 1, 12, 0);
 
 // Re-runnable demo fixture. It fills in missing fixture records without duplicating a
-// previously seeded event. This function is internal so it can only be run by trusted
-// server-side code or the Convex CLI: `npm run seed:demo`.
-export const demo = internalMutation({
+// previously seeded event. Run with: npx convex run seed:demo
+export const demo = mutation({
   args: {},
   handler: async (ctx) => {
     const now = Date.now();
@@ -217,7 +217,18 @@ export const demo = internalMutation({
       { title: "Reliable AI agents", submissionId: submissionIds[1], roomId: roomIds[0], trackId: trackIds[0], startTime: start + 30 * 60_000, endTime: start + 90 * 60_000, speakerIds: [speakers[0]] },
       { title: "Engineering systems clinic", submissionId: submissionIds[2], roomId: roomIds[1], trackId: trackIds[0], startTime: start + 45 * 60_000, endTime: start + 105 * 60_000, speakerIds: [speakers[2]] },
     ];
-    await Promise.all(agendaFixtures.map(async (item) => { if (!agenda.some((entry) => entry.title === item.title)) await ctx.db.insert("agenda_items", { eventId, ...item, isPublished: true, createdAt: seededAt, updatedAt: now }); }));
+    await Promise.all(agendaFixtures.map(async (item) => {
+      if (agenda.some((entry) => entry.title === item.title)) return;
+      const agendaItemId = await ctx.db.insert("agenda_items", { eventId, ...item, isPublished: true, createdAt: seededAt, updatedAt: now });
+      const created = await ctx.db.get(agendaItemId);
+      if (!created) throw new Error("Seeded agenda item disappeared while creating it.");
+      await recordAgendaItemAudit(ctx, {
+        item: created,
+        operation: "create",
+        actorUserId: "system:seed",
+        source: "seed:demo",
+      });
+    }));
 
     const comms = await ctx.db.query("comms_log").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect();
     await Promise.all((["sent", "queued", "failed"] as const).map(async (status, index) => {
@@ -239,6 +250,11 @@ export const demo = internalMutation({
         updatedAt: now,
       });
     }
+
+    const embeds = await ctx.db.query("embeds").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect();
+    const embedFields = { agenda: { title: true, time: true, room: true, track: true, speakers: true }, session: { title: true, time: true, room: true, track: true, speakers: true }, speaker: { name: true, headshot: true, bio: true, links: true, sessions: true } };
+    if (!embeds.some((embed) => embed.name === "Main event agenda")) await ctx.db.insert("embeds", { eventId, name: "Main event agenda", format: "styled_html", view: "agenda", enabled: true, theme: "system", primaryColor: "#E56B5D", dateFormat: "weekday_long", timeFormat: "12_hour", trackIds: [], fields: embedFields, createdAt: seededAt, updatedAt: now });
+    if (!embeds.some((embed) => embed.name === "Speaker gallery draft")) await ctx.db.insert("embeds", { eventId, name: "Speaker gallery draft", format: "styled_html", view: "speaker_gallery", enabled: false, theme: "system", primaryColor: "#E56B5D", dateFormat: "weekday_long", timeFormat: "12_hour", trackIds: [], fields: embedFields, createdAt: seededAt, updatedAt: now });
 
     return { eventId, created: eventWasMissing, speakers: speakers.length, submissions: submissionIds.length, cfpFormId: cfpForm._id, portalFormId: portalForm._id };
   },

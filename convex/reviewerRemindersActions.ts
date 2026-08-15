@@ -14,7 +14,7 @@
 import { v } from "convex/values";
 import { action } from "./_generated/server";
 import { api } from "./_generated/api";
-import { assertEventAccessAction, deliverEventEmail, providerNotConfigured } from "./emailDelivery";
+import { assertEventOrganizerAction, deliverEventEmail, providerNotConfigured } from "./emailDelivery";
 import { reviewersBelowThreshold, type ReviewerProgressRow } from "../src/lib/reviewer-progress";
 
 export type ReminderResult = {
@@ -63,7 +63,7 @@ export const send = action({
     thresholdPercent: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<ReminderBatch> => {
-    await assertEventAccessAction(ctx, args.eventId);
+    await assertEventOrganizerAction(ctx, args.eventId);
     const queueUrl = args.queueUrl.trim();
     if (!queueUrl) throw new Error("A reviewer queue link is required.");
     const single = args.reviewerUserId?.trim();

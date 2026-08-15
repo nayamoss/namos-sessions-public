@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query, requireIdentity, assertEventAccess, isOrganizer } from "./functions";
+import { mutation, query, requireIdentity, assertEventAccess, assertEventOrganizerAccess, isEventOrganizer } from "./functions";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { UserIdentity } from "convex/server";
@@ -7,7 +7,7 @@ import type { UserIdentity } from "convex/server";
 export const list = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     return ctx.db.query("speakers").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect();
   },
 });
@@ -33,7 +33,7 @@ const importRow = v.object({
 export const bulkImport = mutation({
   args: { eventId: v.id("events"), rows: v.array(importRow) },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     if (args.rows.length > 500) throw new Error(`This file has ${args.rows.length} rows; the limit is 500. Split it into two files.`);
     if (!await ctx.db.get(args.eventId)) throw new Error("Event not found.");
 
@@ -101,7 +101,7 @@ export const create = mutation({
     confirmationStatus: v.optional(v.union(v.literal("awaiting"), v.literal("confirmed"), v.literal("declined"))),
   },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     const event = await ctx.db.get(args.eventId);
     if (!event) throw new Error("Event not found.");
     const firstName = requiredSpeakerText(args.firstName, "First name");
@@ -130,7 +130,7 @@ export const setConfirmationStatus = mutation({
     status: v.union(v.literal("awaiting"), v.literal("confirmed"), v.literal("declined")),
   },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     const speaker = await ctx.db.get(args.speakerId);
     if (!speaker || speaker.eventId !== args.eventId) throw new Error("Speaker not found for this event.");
     await ctx.db.patch(args.speakerId, { confirmationStatus: args.status, updatedAt: Date.now() });
@@ -153,7 +153,7 @@ export function assertOwnsSpeaker(identity: UserIdentity, speaker: Doc<"speakers
 // organizer passes; anyone else must own the speaker record they're touching.
 export async function assertOrganizerOrOwnsSpeaker(ctx: QueryCtx | MutationCtx, eventId: Id<"events">, speakerId: Id<"speakers">) {
   const identity = await requireIdentity(ctx);
-  if (await isOrganizer(ctx, identity)) return identity;
+  if (await isEventOrganizer(ctx, eventId, identity)) return identity;
   const speaker = await ctx.db.get(speakerId);
   if (!speaker || speaker.eventId !== eventId) throw new Error("Speaker not found for this event.");
   assertOwnsSpeaker(identity, speaker);

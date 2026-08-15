@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { Mail } from "lucide-react";
+import { Bot, Mail } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { IntegrationCard, type IntegrationCardStatus } from "@/components/settings/IntegrationCard";
 import { EmailIntegrationForm } from "@/components/shared/EmailIntegrationForm";
+import { AgentProviderSettingsForm } from "@/components/shared/AgentProviderSettingsForm";
 import { SkeletonList } from "@/components/shared/SkeletonList";
 import {
   Dialog,
@@ -31,6 +32,14 @@ export default function Integrations() {
   const [emailStatus, setEmailStatus] = useState<IntegrationCardStatus>("not_connected");
   const [emailDetail, setEmailDetail] = useState<string>();
   const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [agentStatus, setAgentStatus] = useState<IntegrationCardStatus>("not_connected");
+  const [agentDetail, setAgentDetail] = useState<string>();
+  const [agentModalOpen, setAgentModalOpen] = useState(false);
+
+  const loadAgentStatus = useCallback(async (eventId: Event["id"]) => {
+    try { const setting = await repo.agentProviderSettings.status({ eventId }); setAgentStatus(setting.status === "ready" ? "connected" : "error"); setAgentDetail(setting.mode === "managed" ? "Namos managed" : "Organizer key"); }
+    catch { setAgentStatus("not_connected"); setAgentDetail(undefined); }
+  }, [repo]);
 
   const loadEmailStatus = useCallback(
     async (eventId: Event["id"]) => {
@@ -58,13 +67,13 @@ export default function Integrations() {
     try {
       setEvent(activeEvent);
       setError(undefined);
-      if (activeEvent) await loadEmailStatus(activeEvent.id);
+      if (activeEvent) await Promise.all([loadEmailStatus(activeEvent.id), loadAgentStatus(activeEvent.id)]);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not load integrations.");
     } finally {
       setLoading(false);
     }
-  }, [activeEvent, loadEmailStatus]);
+  }, [activeEvent, loadAgentStatus, loadEmailStatus]);
 
   useEffect(() => {
     void load();
@@ -97,9 +106,10 @@ export default function Integrations() {
               detail={emailDetail}
               onOpen={() => setEmailModalOpen(true)}
             />
+            <IntegrationCard icon={Bot} name="Operations Agent AI" description="Choose Namos-managed AI or connect this event's own OpenAI key." status={agentStatus} detail={agentDetail} onOpen={() => setAgentModalOpen(true)} />
           </div>
         ) : (
-          <div className="rounded-lg bg-muted/60 p-6">
+          <div className={cardSurfaceClasses("default", "bg-muted/60 p-6")}>
             <p className="text-sm text-muted-foreground">
               Create an event before connecting an integration.
             </p>
@@ -120,6 +130,10 @@ export default function Integrations() {
           {event && <EmailIntegrationForm eventId={event.id} />}
         </DialogContent>
       </Dialog>
+      <Dialog open={agentModalOpen} onOpenChange={(open) => { setAgentModalOpen(open); if (!open && event) void loadAgentStatus(event.id); }}>
+        <DialogContent className="max-w-2xl"><DialogHeader><DialogTitle>Operations Agent AI</DialogTitle><DialogDescription>Choose who provides and pays for model usage on new Operations Agent runs for this event.</DialogDescription></DialogHeader>{event && <AgentProviderSettingsForm eventId={event.id} onSaved={() => void loadAgentStatus(event.id)} />}</DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
+import { cardSurfaceClasses } from "@/components/ui/card";

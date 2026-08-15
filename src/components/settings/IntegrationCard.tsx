@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import { ArrowRight } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { cardSurfaceClasses } from "@/components/ui/card";
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge";
 import { cn } from "@/lib/utils";
 
@@ -38,7 +39,7 @@ export function IntegrationCard({
       type="button"
       onClick={onOpen}
       className={cn(
-        "group relative flex flex-col items-start rounded-lg bg-muted/60 p-5 text-left transition-colors hover:bg-muted",
+        cardSurfaceClasses("default", "group relative flex flex-col items-start bg-muted/60 p-5 text-left transition-colors hover:bg-muted"),
       )}
     >
       <Card className="mb-4 flex h-11 w-11 items-center justify-center bg-background p-0">

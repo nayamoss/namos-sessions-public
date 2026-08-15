@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
  */
 export function SkeletonList({ rows = 3, label = "Loading…" }: { rows?: number; label?: string }) {
   return <div className="grid gap-4" aria-busy="true" aria-live="polite">
-    {Array.from({ length: rows }, (_, row) => <div key={row} className="rounded-lg bg-card p-5">
+    {Array.from({ length: rows }, (_, row) => <div key={row} className={cardSurfaceClasses("default", "p-5")}>
       <Skeleton className="h-3 w-24" />
       <Skeleton className="mt-3 h-4 w-56" />
       <Skeleton className="mt-2 h-3 w-72" />
@@ -14,3 +14,4 @@ export function SkeletonList({ rows = 3, label = "Loading…" }: { rows?: number
     <span className="sr-only">{label}</span>
   </div>;
 }
+import { cardSurfaceClasses } from "@/components/ui/card";

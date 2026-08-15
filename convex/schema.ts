@@ -21,6 +21,16 @@ export const evaluationCriterionScore = v.object({
   text: v.optional(v.string()),
 });
 
+const agentRunStatus = v.union(
+  v.literal("queued"),
+  v.literal("running"),
+  v.literal("needs_input"),
+  v.literal("needs_approval"),
+  v.literal("completed"),
+  v.literal("failed"),
+  v.literal("cancelled"),
+);
+
 export default defineSchema({
   // Who is allowed to manage events (vs. authenticated-but-not-an-organizer). Role is a
   // database row, never an env var or hardcoded list — see convex/organizers.ts for how rows
@@ -33,12 +43,33 @@ export default defineSchema({
     onboardingCompletedAt: v.optional(v.number()),
     createdAt: v.number(),
   }).index("by_userId", ["userId"]).index("by_email", ["email"]),
+  // Onboarding-captured personalization (name, solo/team, referral source) for ANY signed-in
+  // user, not just site owners/admins. Deliberately separate from `organizers` — that table
+  // only ever gets a row for the one-time bootstrap owner or someone an owner explicitly adds
+  // (see convex/organizers.ts), so nearly every real signup never has an organizers row at
+  // all and a field living there would silently never get saved for them. This table is keyed
+  // purely on Clerk's identity.subject, with no role/authorization meaning whatsoever.
+  userProfiles: defineTable({
+    userId: v.string(),
+    displayName: v.optional(v.string()),
+    signupRole: v.optional(v.union(v.literal("solo"), v.literal("team"))),
+    referralSource: v.optional(v.string()),
+    updatedAt: v.number(),
+  }).index("by_userId", ["userId"]),
   event_members: defineTable({
     eventId: v.id("events"),
     userId: v.string(),
     email: v.string(),
     role: v.union(v.literal("organizer"), v.literal("reviewer")),
     invitedByUserId: v.string(),
+    // Kept optional for compatibility with memberships created by the earlier
+    // invitation flow. Newer writes use createdAt as the canonical timestamp.
+    clerkInvitationId: v.optional(v.string()),
+    inviteEmailStatus: v.optional(
+      v.union(v.literal("pending"), v.literal("sent"), v.literal("failed")),
+    ),
+    inviteError: v.optional(v.string()),
+    invitedAt: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_event", ["eventId"])
@@ -224,7 +255,7 @@ export default defineSchema({
     sponsorId: v.optional(v.id("sponsors")),
     title: v.string(),
     description: v.optional(v.string()),
-    source: v.union(v.literal("manual"), v.literal("auto")),
+    source: v.union(v.literal("manual"), v.literal("auto"), v.literal("agent")),
     linkedFormId: v.optional(v.id("submission_forms")),
     status: v.union(v.literal("pending"), v.literal("in_progress"), v.literal("completed")),
     dueDate: v.optional(v.number()),
@@ -232,6 +263,111 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_event", ["eventId"]).index("by_speaker", ["speakerId"]).index("by_submission", ["submissionId"]).index("by_sponsor", ["sponsorId"]).index("by_status", ["status"]),
+  agent_runs: defineTable({
+    eventId: v.id("events"),
+    threadId: v.optional(v.string()),
+    requestedByUserId: v.string(),
+    objective: v.string(),
+    status: agentRunStatus,
+    model: v.string(),
+    // Optional only for preview rows created before provider choice shipped. Every new run
+    // writes an explicit snapshot in agentRuns.create.
+    providerMode: v.optional(v.union(v.literal("managed"), v.literal("bring_your_own"))),
+    idempotencyKey: v.string(),
+    stepCount: v.number(),
+    maxSteps: v.number(),
+    inputTokens: v.optional(v.number()),
+    outputTokens: v.optional(v.number()),
+    finalSummary: v.optional(v.string()),
+    error: v.optional(v.string()),
+    startedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_event", ["eventId"])
+    .index("by_event_status", ["eventId", "status"])
+    .index("by_requester_idempotency", ["requestedByUserId", "idempotencyKey"]),
+  // One event-level provider choice. Managed runs use the deployment secret and are metered;
+  // BYOK secrets are encrypted server-side and are never projected to browser clients.
+  agent_provider_settings: defineTable({
+    eventId: v.id("events"),
+    mode: v.union(v.literal("managed"), v.literal("bring_your_own")),
+    provider: v.literal("openai"),
+    credentialHint: v.optional(v.string()),
+    credentialEnvelope: v.optional(v.object({ version: v.literal(1), iv: v.string(), ciphertext: v.string(), tag: v.string() })),
+    status: v.union(v.literal("ready"), v.literal("error")),
+    lastError: v.optional(v.string()),
+    updatedByUserId: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_event", ["eventId"]),
+  // Append-only model usage ledger. Managed rows are the billable source of truth; BYOK rows
+  // remain useful for operational cost visibility without being charged by Namos.
+  agent_usage_records: defineTable({
+    eventId: v.id("events"),
+    runId: v.id("agent_runs"),
+    providerMode: v.union(v.literal("managed"), v.literal("bring_your_own")),
+    provider: v.literal("openai"),
+    model: v.string(),
+    inputTokens: v.number(),
+    outputTokens: v.number(),
+    billable: v.boolean(),
+    createdAt: v.number(),
+  }).index("by_event", ["eventId"]).index("by_run", ["runId"]),
+  agent_run_events: defineTable({
+    eventId: v.id("events"),
+    runId: v.id("agent_runs"),
+    sequence: v.number(),
+    type: v.union(
+      v.literal("user_message"),
+      v.literal("assistant_message"),
+      v.literal("progress"),
+      v.literal("tool_call"),
+      v.literal("tool_result"),
+      v.literal("clarification"),
+      v.literal("proposal"),
+      v.literal("approval"),
+      v.literal("error"),
+    ),
+    message: v.string(),
+    toolName: v.optional(v.string()),
+    toolCallId: v.optional(v.string()),
+    detailsJson: v.optional(v.string()),
+    durationMs: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_run_sequence", ["runId", "sequence"])
+    .index("by_event", ["eventId"]),
+  agent_action_proposals: defineTable({
+    eventId: v.id("events"),
+    runId: v.id("agent_runs"),
+    kind: v.literal("create_tasks"),
+    tasks: v.array(v.object({
+      title: v.string(),
+      targetType: v.union(v.literal("contact"), v.literal("group"), v.literal("submission"), v.literal("sponsor")),
+      speakerId: v.optional(v.id("speakers")),
+      submissionId: v.optional(v.id("submissions")),
+      sponsorId: v.optional(v.id("sponsors")),
+      linkedFormId: v.optional(v.id("submission_forms")),
+      dueDate: v.optional(v.number()),
+      reason: v.string(),
+    })),
+    payloadHash: v.string(),
+    summary: v.string(),
+    status: v.union(v.literal("pending"), v.literal("rejected"), v.literal("applying"), v.literal("applied"), v.literal("failed"), v.literal("superseded")),
+    proposedByToolCallId: v.string(),
+    decidedByUserId: v.optional(v.string()),
+    decisionReason: v.optional(v.string()),
+    decidedAt: v.optional(v.number()),
+    appliedAt: v.optional(v.number()),
+    createdTaskIds: v.optional(v.array(v.id("onboarding_tasks"))),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_run", ["runId"])
+    .index("by_event_status", ["eventId", "status"]),
   task_templates: defineTable({
     eventId: v.id("events"), name: v.string(), description: v.optional(v.string()),
     items: v.array(v.object({ title: v.string(), description: v.optional(v.string()), targetType: v.union(v.literal("contact"), v.literal("group"), v.literal("submission"), v.literal("sponsor")), linkedFormId: v.optional(v.id("submission_forms")), dueDateOffsetDays: v.optional(v.number()) })),
@@ -245,6 +381,18 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_event", ["eventId"]).index("by_speaker", ["speakerId"]),
+  embeds: defineTable({
+    eventId: v.id("events"), name: v.string(), format: v.literal("styled_html"),
+    view: v.union(v.literal("agenda"), v.literal("schedule_itinerary"), v.literal("schedule_grid"), v.literal("session_list"), v.literal("speaker_gallery"), v.literal("speaker_list")),
+    enabled: v.boolean(), theme: v.union(v.literal("light"), v.literal("dark"), v.literal("system")), primaryColor: v.string(),
+    dateFormat: v.union(v.literal("weekday_long"), v.literal("weekday_short"), v.literal("numeric")),
+    timeFormat: v.union(v.literal("12_hour"), v.literal("24_hour")), trackIds: v.array(v.id("tracks")),
+    fields: v.object({
+      agenda: v.object({ title: v.boolean(), time: v.boolean(), room: v.boolean(), track: v.boolean(), speakers: v.boolean() }),
+      session: v.object({ title: v.boolean(), time: v.boolean(), room: v.boolean(), track: v.boolean(), speakers: v.boolean() }),
+      speaker: v.object({ name: v.boolean(), headshot: v.boolean(), bio: v.boolean(), links: v.boolean(), sessions: v.boolean() }),
+    }), createdAt: v.number(), updatedAt: v.number(),
+  }).index("by_event", ["eventId"]).index("by_event_enabled", ["eventId", "enabled"]),
   // Conflicts are derived by agenda.detectConflicts rather than stored here. A session can
   // deliberately be unpublished while organizers resolve its room or speaker assignment.
   agenda_items: defineTable({
@@ -267,6 +415,19 @@ export default defineSchema({
     .index("by_event", ["eventId"])
     .index("by_room", ["roomId"])
     .index("by_submission", ["submissionId"]),
+  // Append-only evidence for every application-level agenda write. A missing delete entry when
+  // a row disappears distinguishes an out-of-band dashboard/import operation from app code.
+  agenda_items_audit: defineTable({
+    eventId: v.id("events"),
+    agendaItemId: v.id("agenda_items"),
+    operation: v.union(v.literal("create"), v.literal("update"), v.literal("publish"), v.literal("delete")),
+    actorUserId: v.string(),
+    source: v.string(),
+    snapshot: v.any(),
+    createdAt: v.number(),
+  })
+    .index("by_event_createdAt", ["eventId", "createdAt"])
+    .index("by_agendaItem_createdAt", ["agendaItemId", "createdAt"]),
   comms_templates: defineTable({
     eventId: v.id("events"),
     name: v.string(),

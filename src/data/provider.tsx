@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, type ReactNode } from "react";
 import { useAuth } from "@clerk/clerk-react";
 import { RepoContext, type Repository } from "./repo";
 import { createConvexRepo } from "./convex";
@@ -21,12 +21,19 @@ function AirtableRepoProvider({ children }: { children: ReactNode }) {
 // Promise-based writes keep attaching the caller's Clerk token through the existing HTTP
 // transport. Reactive reads receive the same session through ConvexProviderWithClerk.
 function ConvexRepoProvider({ children }: { children: ReactNode }) {
-  const { getToken, isSignedIn } = useAuth();
+  const { getToken, isLoaded, isSignedIn } = useAuth();
   const repo = useMemo<Repository>(
     () => createConvexRepo(undefined, isSignedIn ? () => getToken({ template: "convex" }) : undefined),
     [getToken, isSignedIn],
   );
   const reactive = useMemo(() => createConvexReactiveTransport(), []);
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
+    void repo.eventMembers.claimPending().catch(() => {
+      // Exact email matching already grants the invited event scope. Retry this durable
+      // Clerk-subject upgrade on the next authenticated mount if the backend is unavailable.
+    });
+  }, [isLoaded, isSignedIn, repo]);
   return <RepoContext.Provider value={repo}><ReactiveContext.Provider value={reactive}>{children}</ReactiveContext.Provider></RepoContext.Provider>;
 }
 

@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
 import { ClerkProvider } from "@clerk/clerk-react";
 import App from "@/App";
+import { resolveOnboardingStatus } from "@/lib/onboarding-status";
 import { TEST_CLERK_PUBLISHABLE_KEY } from "./clerk-test-key";
 
 // App owns its own BrowserRouter, so route-guard coverage drives it via real browser
@@ -58,5 +59,26 @@ describe("organizer route guard", () => {
     expect(container.querySelector("aside")).not.toBeInTheDocument();
     expect(container.textContent).not.toContain("Good afternoon");
     expect(container.textContent).not.toContain("Claim owner access");
+  });
+});
+
+describe("onboarding status", () => {
+  it("does not send invited admins through owner onboarding", () => {
+    expect(resolveOnboardingStatus({ role: "admin" }, 0)).toBe("complete");
+  });
+
+  it("still requires an incomplete owner to finish setup", () => {
+    expect(resolveOnboardingStatus({ role: "owner" }, 0)).toBe("incomplete");
+    expect(
+      resolveOnboardingStatus(
+        { role: "owner", onboardingCompletedAt: Date.now() },
+        0,
+      ),
+    ).toBe("complete");
+  });
+
+  it("allows event-only members with an accessible event", () => {
+    expect(resolveOnboardingStatus(null, 1)).toBe("complete");
+    expect(resolveOnboardingStatus(null, 0)).toBe("incomplete");
   });
 });

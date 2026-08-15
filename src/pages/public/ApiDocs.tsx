@@ -102,23 +102,23 @@ function SectionHeading({ children, description }: { children: string; descripti
 export function ApiDocsContent({ isSignedIn = false }: { isSignedIn?: boolean }) {
   return (
     <PublicLayout width="reference">
-      <header className="flex items-center gap-3 rounded-lg bg-card px-5 py-4 sm:px-6">
+      <header className={cardSurfaceClasses("default", "flex items-center gap-3 px-5 py-4 sm:px-6")}>
         <a href="/" className="text-sm font-semibold">Namos Sessions</a>
         <span aria-hidden="true" className="text-muted-foreground">/</span>
         <span className="text-sm text-muted-foreground">API reference</span>
       </header>
 
       <nav aria-label="API reference sections" className="sticky top-0 z-10 -mx-4 flex gap-1 overflow-x-auto bg-background px-4 py-3 lg:hidden">
-        {navItems.map(([label, href]) => <a key={href} href={href} className="shrink-0 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30">{label}</a>)}
+        {navItems.map(([label, href]) => <a key={href} href={href} className="shrink-0 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none">{label}</a>)}
       </nav>
 
       <div className="grid items-start gap-10 lg:grid-cols-[11rem_minmax(0,1fr)] xl:grid-cols-[11rem_minmax(0,1fr)_minmax(23rem,0.8fr)] xl:gap-12">
         <aside className="sticky top-8 hidden lg:block">
           <p className="px-3 text-xs font-semibold text-foreground">Events API</p>
           <nav aria-label="API reference sections" className="mt-3 space-y-1">
-            {navItems.map(([label, href]) => <a key={href} href={href} className="block rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30">{label}</a>)}
+            {navItems.map(([label, href]) => <a key={href} href={href} className="block rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none">{label}</a>)}
           </nav>
-          <div className="mt-8 rounded-lg bg-muted/60 p-4 text-sm leading-6 text-muted-foreground">
+          <div className={cardSurfaceClasses("default", "mt-8 bg-muted/60 p-4 text-sm leading-6 text-muted-foreground")}>
             <p className="font-medium text-foreground">API version</p>
             <p className="mt-1 font-mono text-xs">v1 · REST · JSON</p>
           </div>
@@ -129,7 +129,7 @@ export function ApiDocsContent({ isSignedIn = false }: { isSignedIn?: boolean })
             <p className="font-mono text-xs font-medium text-success">Public API · v1</p>
             <h1 className="mt-4 max-w-3xl font-display text-5xl tracking-[-0.03em] text-balance sm:text-6xl">Events API</h1>
             <p className="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground text-pretty">Read your complete conference program from any website, integration, or internal tool.</p>
-            <dl className="mt-8 grid gap-3 rounded-lg bg-muted/60 p-5 text-sm sm:grid-cols-[7rem_minmax(0,1fr)] sm:p-6">
+            <dl className={cardSurfaceClasses("default", "mt-8 grid gap-3 bg-muted/60 p-5 text-sm sm:grid-cols-[7rem_minmax(0,1fr)] sm:p-6")}>
               <dt className="font-medium">Base URL</dt>
               <dd className="min-w-0 overflow-x-auto font-mono text-xs leading-6 text-muted-foreground">{siteUrl}/api/v1</dd>
               <dt className="font-medium">Format</dt>
@@ -152,11 +152,11 @@ export function ApiDocsContent({ isSignedIn = false }: { isSignedIn?: boolean })
               <code className="min-w-0 overflow-x-auto font-mono text-sm">/api/v1/events</code>
             </div>
             <div className="mt-7 grid gap-5 sm:grid-cols-2">
-              <div className="rounded-lg bg-muted/60 p-5">
+              <div className={cardSurfaceClasses("default", "bg-muted/60 p-5")}>
                 <p className="text-sm font-semibold">Parameters</p>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">This endpoint has no path, query, or body parameters.</p>
               </div>
-              <div className="rounded-lg bg-muted/60 p-5">
+              <div className={cardSurfaceClasses("default", "bg-muted/60 p-5")}>
                 <p className="text-sm font-semibold">Successful response</p>
                 <p className="mt-2 font-mono text-sm text-muted-foreground">200 OK · {"{ data: Event[] }"}</p>
               </div>
@@ -172,7 +172,7 @@ export function ApiDocsContent({ isSignedIn = false }: { isSignedIn?: boolean })
                 <span>Field</span><span>Type</span><span>Description</span>
               </div>
               {fields.map(([name, type, description]) => (
-                <div key={name} className="grid min-w-0 gap-1 rounded-lg bg-muted/50 px-4 py-3 sm:grid-cols-[11rem_9rem_minmax(0,1fr)] sm:gap-4">
+                <div key={name} className={cardSurfaceClasses("default", "grid min-w-0 gap-1 bg-muted/50 px-4 py-3 sm:grid-cols-[11rem_9rem_minmax(0,1fr)] sm:gap-4")}>
                   <code className="font-mono text-sm font-medium">{name}</code>
                   <span className="font-mono text-xs leading-5 text-muted-foreground">{type}</span>
                   <span className="text-sm leading-5 text-muted-foreground">{description}</span>
@@ -186,7 +186,7 @@ export function ApiDocsContent({ isSignedIn = false }: { isSignedIn?: boolean })
             <div className="mt-6"><CodeBlock label="Error response">{errorExample}</CodeBlock></div>
             <div className="mt-7 space-y-2">
               {errors.map(([status, title, description]) => (
-                <div key={status} className="grid gap-1 rounded-lg bg-muted/50 px-4 py-4 sm:grid-cols-[4rem_8rem_minmax(0,1fr)] sm:gap-4">
+                <div key={status} className={cardSurfaceClasses("default", "grid gap-1 bg-muted/50 px-4 py-4 sm:grid-cols-[4rem_8rem_minmax(0,1fr)] sm:gap-4")}>
                   <code className="font-mono text-sm font-semibold">{status}</code>
                   <span className="text-sm font-medium">{title}</span>
                   <span className="text-sm leading-5 text-muted-foreground">{description}</span>
@@ -195,7 +195,7 @@ export function ApiDocsContent({ isSignedIn = false }: { isSignedIn?: boolean })
             </div>
           </section>
 
-          <footer className="mt-4 rounded-lg bg-card px-5 py-5 text-sm text-muted-foreground">No rate limit today — fair use applies.</footer>
+          <footer className={cardSurfaceClasses("default", "mt-4 px-5 py-5 text-sm text-muted-foreground")}>No rate limit today — fair use applies.</footer>
         </article>
 
         <aside aria-label="Request and response examples" className="sticky top-8 hidden min-w-0 xl:block">
@@ -210,3 +210,4 @@ export default function ApiDocs() {
   const { isSignedIn } = useAuth();
   return <ApiDocsContent isSignedIn={isSignedIn} />;
 }
+import { cardSurfaceClasses } from "@/components/ui/card";

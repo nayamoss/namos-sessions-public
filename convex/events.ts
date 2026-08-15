@@ -4,11 +4,13 @@ import { internalQuery } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
 import {
   assertEventAccess,
+  assertEventOrganizerAccess,
   assertOrganizer,
   isOrganizer,
   requireIdentity,
 } from "./functions";
 import { assertEventSchedule } from "./eventValidation";
+import { EVENT_TEAM_MEMBER_LIMIT, normalizeEventTeamEmail } from "../src/lib/event-team";
 
 const eventFields = {
   name: v.string(),
@@ -113,11 +115,12 @@ export const save = mutation({
     ...eventFields,
   },
   handler: async (ctx, args) => {
-    let creatorUserId: string | undefined;
-    if (args.eventId) await assertEventAccess(ctx, args.eventId);
-    else creatorUserId = (await assertOrganizer(ctx)).subject;
+    const creator = args.eventId ? undefined : await requireIdentity(ctx);
+    if (args.eventId) await assertEventOrganizerAccess(ctx, args.eventId);
     if (args.eventId && args.pullTeamFromEventId)
       throw new Error("A team can only be copied while creating an event.");
+    if (args.pullTeamFromEventId)
+      await assertEventOrganizerAccess(ctx, args.pullTeamFromEventId);
     assertEventSchedule(args.timezone, args.startDate, args.endDate);
     const existing = await ctx.db
       .query("events")
@@ -136,6 +139,17 @@ export const save = mutation({
       createdAt: now,
       updatedAt: now,
     });
+    const creatorEmail = typeof creator?.email === "string" ? normalizeEventTeamEmail(creator.email) : "";
+    if (!creator || !creatorEmail) throw new Error("Your account needs an email address before it can create an event.");
+    await ctx.db.insert("event_members", {
+      eventId: newEventId,
+      userId: creator.subject,
+      email: creatorEmail,
+      role: "organizer",
+      invitedByUserId: creator.subject,
+      invitedAt: now,
+      createdAt: now,
+    });
     if (pullTeamFromEventId) {
       const source = await ctx.db.get(pullTeamFromEventId);
       if (!source)
@@ -144,13 +158,18 @@ export const save = mutation({
         .query("event_members")
         .withIndex("by_event", (q) => q.eq("eventId", pullTeamFromEventId))
         .collect();
-      for (const member of members) {
+      const copiedMembers = members.filter(
+        (member) => member.userId !== creator.subject && normalizeEventTeamEmail(member.email) !== creatorEmail,
+      );
+      if (copiedMembers.length + 1 > EVENT_TEAM_MEMBER_LIMIT)
+        throw new Error(`This event team is limited to ${EVENT_TEAM_MEMBER_LIMIT} people.`);
+      for (const member of copiedMembers) {
         await ctx.db.insert("event_members", {
           eventId: newEventId,
           userId: member.userId,
           email: member.email,
           role: member.role,
-          invitedByUserId: creatorUserId!,
+          invitedByUserId: creator.subject,
           createdAt: now,
         });
       }
@@ -169,9 +188,11 @@ export const duplicate = mutation({
     pullTeamFrom: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    await assertOrganizer(ctx);
+    const creator = await assertEventOrganizerAccess(ctx, args.sourceEventId);
     const source = await ctx.db.get(args.sourceEventId);
     if (!source) throw new Error("Source event not found.");
+    const creatorEmail = typeof creator.email === "string" ? normalizeEventTeamEmail(creator.email) : "";
+    if (!creatorEmail) throw new Error("Your account needs an email address before it can create an event.");
     assertEventSchedule(source.timezone, args.startDate, args.endDate);
     if (
       await ctx.db
@@ -219,10 +240,34 @@ export const duplicate = mutation({
             .collect()
         : Promise.resolve([]),
     ]);
+    const copiedMembers = members.filter(
+      (member) => member.userId !== creator.subject && normalizeEventTeamEmail(member.email) !== creatorEmail,
+    );
+    if (copiedMembers.length + 1 > EVENT_TEAM_MEMBER_LIMIT)
+      throw new Error(`This event team is limited to ${EVENT_TEAM_MEMBER_LIMIT} people.`);
+    await ctx.db.insert("event_members", {
+      eventId,
+      userId: creator.subject,
+      email: creatorEmail,
+      role: "organizer",
+      invitedByUserId: creator.subject,
+      invitedAt: now,
+      createdAt: now,
+    });
+    for (const member of copiedMembers) {
+      await ctx.db.insert("event_members", {
+        eventId,
+        userId: member.userId,
+        email: member.email,
+        role: member.role,
+        invitedByUserId: creator.subject,
+        createdAt: now,
+      });
+    }
     const copy = async <
       T extends { _id: unknown; _creationTime: unknown; eventId: unknown },
     >(
-      table: "comms_templates" | "event_members",
+      table: "comms_templates",
       rows: T[],
     ) =>
       Promise.all(
@@ -258,7 +303,6 @@ export const duplicate = mutation({
       });
     }
     await copy("comms_templates", templates);
-    await copy("event_members", members);
     return eventId;
   },
 });
@@ -282,7 +326,7 @@ export const saveRoom = mutation({
     sortOrder: v.number(),
   },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     const { id, ...fields } = args;
     if (id) {
       await ctx.db.patch(id, fields);
@@ -294,7 +338,7 @@ export const saveRoom = mutation({
 export const removeRoom = mutation({
   args: { eventId: v.id("events"), id: v.id("rooms") },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     const room = await ctx.db.get(args.id);
     if (!room || room.eventId !== args.eventId)
       throw new Error("Room not found for this event.");
@@ -320,7 +364,7 @@ export const saveTrack = mutation({
     sortOrder: v.number(),
   },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     const { id, ...fields } = args;
     if (id) {
       await ctx.db.patch(id, fields);
@@ -332,7 +376,7 @@ export const saveTrack = mutation({
 export const removeTrack = mutation({
   args: { eventId: v.id("events"), id: v.id("tracks") },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     const track = await ctx.db.get(args.id);
     if (!track || track.eventId !== args.eventId)
       throw new Error("Track not found for this event.");

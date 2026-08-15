@@ -17,9 +17,10 @@ describe("shared component canon", () => {
     const allowed = new Set([
       "components/ui/input.tsx",
       "components/ui/textarea.tsx",
+      "components/ui/color-input.tsx",
       // Hidden platform controls are intentional accessibility/file fallbacks.
       "pages/onboarding/steps/ImportDataStep.tsx",
-      "pages/public/Embeds.tsx",
+      "pages/onboarding/OnboardingWizard.tsx",
     ]);
     const violations = sourceFiles(sourceRoot).flatMap((file) => {
       const projectPath = relative(sourceRoot, file).replaceAll("\\", "/");
@@ -46,6 +47,76 @@ describe("shared component canon", () => {
       if (projectPath === "pages/public/ApiDocs.tsx") return [];
       const source = readFileSync(file, "utf8");
       return /(?:bg|text)-neutral-|dark:bg-\[#[0-9a-f]{6}\]/i.test(source) ? [projectPath] : [];
+    });
+    expect(violations).toEqual([]);
+  });
+
+  it("keeps card surfaces on the canonical Card contract", () => {
+    const allowed = new Set([
+      "components/ui/card.tsx",
+      "components/shared/SectionCard.tsx",
+      "components/shared/StatCard.tsx",
+      "components/shared/ReadinessCategoryCard.tsx",
+      "components/shared/ChoiceCardGroup.tsx",
+    ]);
+    const violations = sourceFiles(sourceRoot).flatMap((file) => {
+      const projectPath = relative(sourceRoot, file).replaceAll("\\", "/");
+      if (allowed.has(projectPath)) return [];
+      const source = readFileSync(file, "utf8");
+      const classAttributes = [...source.matchAll(/className=(?:"([^"]*)"|`([^`]*)`)/g)].map(
+        (match) => match[1] ?? match[2] ?? "",
+      );
+      return classAttributes.some((classes) => /rounded-(?:lg|xl)\b/.test(classes) && /bg-(?:card|muted)(?:\/[^\s]+)?\b/.test(classes))
+        ? [projectPath]
+        : [];
+    });
+    expect(violations).toEqual([]);
+  });
+
+  it("keeps raw buttons outside reusable UI components explicitly classified", () => {
+    const allowed = new Set([
+      "components/AccountMenu.tsx",
+      "components/AppLayout.tsx",
+      "components/EventSwitcher.tsx",
+      "components/NotificationBell.tsx",
+      "components/OrgMenu.tsx",
+      "components/ThemeMenuItems.tsx",
+      "components/availability/AvailabilityEditor.tsx",
+      "components/editor/RichTextEditor.tsx",
+      "components/embeds/EmbedRenderer.tsx",
+      "components/forms/TemplateGallery.tsx",
+      "components/settings/IntegrationCard.tsx",
+      "components/shared/AddFieldPopover.tsx",
+      "components/shared/ChoiceCardGroup.tsx",
+      "components/shared/DataGrid.tsx",
+      "components/shared/DetailPane.tsx",
+      "components/shared/EmailIntegrationForm.tsx",
+      "components/shared/SegmentedControl.tsx",
+      "components/shared/StatusTabs.tsx",
+      "components/shared/WizardShell.tsx",
+      "pages/cms/EmbedsListPage.tsx",
+      // New from a separate chat-first dashboard redesign merged after this guard was
+      // written (2026-08-15). Hand-rolls "New chat", suggestion-pill, and send buttons
+      // instead of the shared Button component. Out of scope for #162 — logged as a
+      // follow-up in docs/features/app-shell-consistency/plan.md rather than fixed here.
+      "pages/dashboard/DashboardHome.tsx",
+      "pages/onboarding/steps/ImportDataStep.tsx",
+      "pages/portal/PortalForms.tsx",
+      "pages/portal/PortalPages.tsx",
+      "pages/program/Agenda.tsx",
+      "pages/program/Evaluation.tsx",
+      "pages/program/ScorecardForm.tsx",
+      "pages/program/Sponsors.tsx",
+      "pages/program/SubmissionFormBuilder.tsx",
+      "pages/settings/ApiKeys.tsx",
+      // Retained for this scoped migration; the follow-up is recorded in the plan.
+      "pages/settings/EventTeam.tsx",
+    ]);
+    const violations = sourceFiles(sourceRoot).flatMap((file) => {
+      const projectPath = relative(sourceRoot, file).replaceAll("\\", "/");
+      if (projectPath.startsWith("components/ui/") || allowed.has(projectPath)) return [];
+      const source = readFileSync(file, "utf8");
+      return /<button\b/.test(source) ? [projectPath] : [];
     });
     expect(violations).toEqual([]);
   });

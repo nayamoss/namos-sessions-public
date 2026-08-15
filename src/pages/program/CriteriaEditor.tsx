@@ -32,7 +32,7 @@ export function CriteriaEditor({ criteria, scoringScaleMax, onChange, disabled }
       <p className="text-sm text-muted-foreground">Reviewers score each criterion. Weights decide how much each one counts.</p>
     </div>
     {criteria.length === 0
-      ? <div className="rounded-lg bg-muted/60 p-8 text-center">
+      ? <div className={cardSurfaceClasses("default", "bg-muted/60 p-8 text-center")}>
         <ListChecks className="mx-auto h-10 w-10 text-muted-foreground" aria-hidden />
         <p className="mt-3 font-medium">No criteria yet</p>
         <p className="mt-1 text-sm text-muted-foreground">Reviewers will record a single overall score until you add criteria.</p>
@@ -64,3 +64,4 @@ export function CriteriaEditor({ criteria, scoringScaleMax, onChange, disabled }
     {criteria.length > 0 && <Button variant="outline" size="sm" onClick={addCriterion} disabled={disabled}>Add criterion</Button>}
   </div>;
 }
+import { cardSurfaceClasses } from "@/components/ui/card";

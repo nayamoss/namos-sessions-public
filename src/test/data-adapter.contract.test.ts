@@ -46,6 +46,14 @@ function memoryTransport(options: { failOperation?: DataOperation } = {}) {
       return [...submissions.values()].filter((row) => row.eventId === input.eventId);
     }
     if (operation === "events.listForPortal") return [];
+    if (operation === "eventMembers.canManage") return true;
+    if (operation === "eventMembers.claimPending") return 2;
+    if (operation === "eventMembers.invite") {
+      return { memberId: "member-invite", status: "pending", clerkInvitationCreated: true, emailSent: true };
+    }
+    if (operation === "eventMembers.resend") {
+      return { memberId: "member-invite", status: "pending", clerkInvitationCreated: true, emailSent: true };
+    }
 
     if (operation === "submissions.decide") {
       const submission = submissions.get(input.submissionId as string);
@@ -166,6 +174,31 @@ describe.each(repositoryWrappers)("%s in-memory contract", (_name, createRepo) =
       operation: "agenda.publishSchedule",
       input: { eventId: eventA },
     });
+  });
+
+  it("keeps event-team invitation lifecycle operations behind the repository boundary", async () => {
+    const backend = memoryTransport();
+    const repo = createRepo(backend.transport);
+
+    await expect(repo.eventMembers.canManage({ eventId: eventA })).resolves.toBe(true);
+    await expect(repo.eventMembers.invite({ eventId: eventA, email: "teammate@example.test", role: "organizer" })).resolves.toMatchObject({
+      status: "pending",
+      clerkInvitationCreated: true,
+      emailSent: true,
+    });
+    await expect(repo.eventMembers.claimPending()).resolves.toBe(2);
+    await expect(repo.eventMembers.resend({ eventId: eventA, memberId: "member-invite" })).resolves.toMatchObject({
+      status: "pending",
+      clerkInvitationCreated: true,
+      emailSent: true,
+    });
+    await repo.eventMembers.remove({ eventId: eventA, memberId: "member-invite" });
+
+    expect(backend.calls).toContainEqual({ operation: "eventMembers.canManage", input: { eventId: eventA } });
+    expect(backend.calls).toContainEqual({ operation: "eventMembers.invite", input: { eventId: eventA, email: "teammate@example.test", role: "organizer" } });
+    expect(backend.calls).toContainEqual({ operation: "eventMembers.claimPending", input: {} });
+    expect(backend.calls).toContainEqual({ operation: "eventMembers.resend", input: { eventId: eventA, memberId: "member-invite" } });
+    expect(backend.calls).toContainEqual({ operation: "eventMembers.remove", input: { eventId: eventA, memberId: "member-invite" } });
   });
 
   it("uses speaker-scoped reads for portal schedule and availability", async () => {

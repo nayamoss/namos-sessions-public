@@ -75,7 +75,7 @@ export function AssignByFilterCard({ tags, tracks, submissions, plans, selectedP
 
   const selectKind = (kind: FilterKind) => { setFilterKind(kind); setFilterValue(""); };
 
-  return <section className="rounded-lg bg-card p-5">
+  return <section className={cardSurfaceClasses("default", "p-5")}>
     <h2 className="font-semibold">Assign by tag or track</h2>
     <p className="mt-1 text-sm text-muted-foreground">Assign every submission carrying one tag, or every submission in one track, to the reviewers you pick. Drafts and withdrawn submissions are skipped.</p>
     {noLibrary
@@ -126,3 +126,4 @@ export function AssignByFilterCard({ tags, tracks, submissions, plans, selectedP
       </>}
   </section>;
 }
+import { cardSurfaceClasses } from "@/components/ui/card";

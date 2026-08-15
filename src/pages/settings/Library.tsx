@@ -5,6 +5,7 @@ import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
 import { SkeletonList } from "@/components/shared/SkeletonList";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useRepo } from "@/data/repo";
@@ -132,13 +133,13 @@ export default function Library() {
         {loading ? (
           <SkeletonList rows={4} label="Loading tag library…" />
         ) : !event ? (
-          <section className="rounded-lg bg-background p-6">
+          <Card className="p-6">
             <p className="text-sm text-muted-foreground">
               Create an event before adding tags.
             </p>
-          </section>
+          </Card>
         ) : (
-          <section className="space-y-6 rounded-lg bg-background p-6">
+          <Card className="space-y-6 p-6">
             <div>
               <h2 className="text-base font-semibold">Tags</h2>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -170,7 +171,7 @@ export default function Library() {
             </div>
             <div className="space-y-3">
               {tags.map((tag) => (
-                <div key={tag.id} className="rounded-lg bg-card p-4">
+                <div key={tag.id} className={cardSurfaceClasses("default", "p-4")}>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                     <div className="flex min-w-0 flex-1 items-center gap-3">
                       <span
@@ -226,7 +227,7 @@ export default function Library() {
                     </div>
                   </div>
                   {deleteCandidate === tag.id && (
-                    <div className="mt-3 flex flex-col gap-3 rounded-lg bg-muted/60 p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className={cardSurfaceClasses("default", "mt-3 flex flex-col gap-3 bg-muted/60 p-4 sm:flex-row sm:items-center sm:justify-between")}>
                       <p className="text-sm">
                         Delete “{tag.name}”? It will also be removed from
                         assigned submissions.
@@ -260,9 +261,10 @@ export default function Library() {
                 </p>
               )}
             </div>
-          </section>
+          </Card>
         )}
       </div>
     </AppLayout>
   );
 }
+import { cardSurfaceClasses } from "@/components/ui/card";

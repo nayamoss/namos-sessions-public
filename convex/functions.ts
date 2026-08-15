@@ -58,8 +58,11 @@ export async function assertEventAccess(ctx: QueryCtx | MutationCtx, eventId: Id
 
 export async function assertEventOrganizerAccess(ctx: QueryCtx | MutationCtx, eventId: Id<"events">): Promise<UserIdentity> {
   const identity = await requireIdentity(ctx);
-  if (await isOrganizer(ctx, identity)) return identity;
-  const membership = await getEventMembership(ctx, eventId, identity);
-  if (membership?.role === "organizer") return identity;
+  if (await isEventOrganizer(ctx, eventId, identity)) return identity;
   throw new Error("Forbidden: event organizer access required.");
+}
+
+export async function isEventOrganizer(ctx: QueryCtx | MutationCtx, eventId: Id<"events">, identity: UserIdentity): Promise<boolean> {
+  if (await isOrganizer(ctx, identity)) return true;
+  return (await getEventMembership(ctx, eventId, identity))?.role === "organizer";
 }

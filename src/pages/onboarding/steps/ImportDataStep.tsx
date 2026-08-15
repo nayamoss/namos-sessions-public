@@ -6,6 +6,7 @@ import { DataGrid, type DataGridColumn } from "@/components/shared/DataGrid";
 import { SkeletonList } from "@/components/shared/SkeletonList";
 import type { EventId, SpeakerImportResult } from "@/data/types";
 import { useRepo } from "@/data/repo";
+import { friendlyErrorMessage } from "@/lib/errors";
 import { validateImportRows, type PreviewRow } from "../importCsv";
 
 const headers = ["firstName", "lastName", "email", "bio", "talkTitle", "talkAbstract"];
@@ -78,7 +79,7 @@ export function ImportDataStep({ eventId, onDone }: { eventId: EventId; onDone: 
         rows: valid.map(({ row: _row, error: _error, ...value }) => value),
       }));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not import this file.");
+      setError(friendlyErrorMessage(cause, "Could not import this file."));
     } finally {
       setImporting(false);
     }
@@ -89,11 +90,16 @@ export function ImportDataStep({ eventId, onDone }: { eventId: EventId; onDone: 
   if (result) {
     return (
       <div className="space-y-4">
-        <p className="text-sm">
-          Imported {result.importedSpeakers} speakers and {result.importedTalks} talks. {result.skipped.length} rows were skipped
-          {result.skipped.length ? `: ${result.skipped.map((item) => `row ${item.row} (${item.reason})`).join(", ")}` : "."}
-        </p>
-        <Button type="button" variant="accent" onClick={onDone}>Done</Button>
+        <div>
+          <h1 className="text-2xl font-semibold sm:text-3xl">Data imported</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Imported {result.importedSpeakers} speakers and {result.importedTalks} talks. {result.skipped.length} rows were skipped
+            {result.skipped.length ? `: ${result.skipped.map((item) => `row ${item.row} (${item.reason})`).join(", ")}` : "."}
+          </p>
+        </div>
+        <Button type="button" data-autofocus="true" className="h-11 rounded-[12px]" onClick={onDone}>
+          Finish setup
+        </Button>
       </div>
     );
   }
@@ -101,17 +107,18 @@ export function ImportDataStep({ eventId, onDone }: { eventId: EventId; onDone: 
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-lg font-semibold">Import previous conference data</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Bring in speakers and one past talk per speaker. You can always import more later.</p>
+        <h1 className="text-2xl font-semibold sm:text-3xl">Import previous conference data</h1>
+        <p className="mt-2 text-sm text-muted-foreground">Bring in speakers and one past talk per speaker. You can always import more later.</p>
       </div>
-      <Button type="button" variant="outline" size="sm" onClick={download}>
+      <Button type="button" variant="outline" size="sm" className="rounded-[10px]" onClick={download}>
         <Download className="mr-1.5 h-4 w-4" />Download CSV template
       </Button>
       {!rows ? (
         <button
           type="button"
+          data-autofocus="true"
           onClick={() => input.current?.click()}
-          className="flex w-full flex-col items-center rounded-lg bg-muted/60 p-8 text-center hover:bg-muted"
+          className="flex w-full flex-col items-center rounded-[12px] bg-card p-8 text-center transition-colors hover:bg-primary/10"
         >
           <Upload className="mb-3 h-10 w-10 text-muted-foreground" />
           <span className="font-medium">Drop a CSV file or click to choose</span>
@@ -138,7 +145,12 @@ export function ImportDataStep({ eventId, onDone }: { eventId: EventId; onDone: 
             {valid.length} rows ready to import, {rows.length - valid.length} rows have errors and will be skipped.
           </p>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="accent" disabled={!valid.length || importing} onClick={() => void importRows()}>
+            <Button
+              type="button"
+              disabled={!valid.length || importing}
+              className="h-11 rounded-[12px]"
+              onClick={() => void importRows()}
+            >
               {importing ? "Importing…" : `Import ${valid.length} speakers`}
             </Button>
             <Button type="button" variant="ghost" onClick={() => { setRows(undefined); setError(undefined); }}>
@@ -147,7 +159,7 @@ export function ImportDataStep({ eventId, onDone }: { eventId: EventId; onDone: 
           </div>
         </>
       )}
-      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {error && <p role="alert" className="rounded-[12px] bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>}
     </div>
   );
 }

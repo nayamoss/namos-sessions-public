@@ -119,18 +119,20 @@ export default function SubmissionForms() {
             {loadError}
           </p>
         )}
-        <StatusTabs
-          ariaLabel="Submission form statuses"
-          value={status}
-          onValueChange={(value) => setStatus(value as FormStatus)}
-          tabs={[
-            { value: "all", label: "All", count: forms.length },
-            { value: "open", label: "Open", count: openCount },
-            { value: "closed", label: "Closed", count: closedCount },
-          ]}
-        />
         <ContentToolbar
           ariaLabel="Submission form controls"
+          utilities={
+            <StatusTabs
+              ariaLabel="Submission form statuses"
+              value={status}
+              onValueChange={(value) => setStatus(value as FormStatus)}
+              tabs={[
+                { value: "all", label: "All", count: forms.length },
+                { value: "open", label: "Open", count: openCount },
+                { value: "closed", label: "Closed", count: closedCount },
+              ]}
+            />
+          }
           primaryAction={
             <Button
               type="button"
@@ -150,7 +152,7 @@ export default function SubmissionForms() {
               <Link
                 key={form.id}
                 to={`/events/${activeEvent.slug}/program/forms/${form.id}/edit`}
-                className="rounded-lg bg-card p-6"
+                className={cardSurfaceClasses("default", "p-6")}
               >
                 <p className="text-base font-semibold">{form.name}</p>
                 <p className="mt-2 text-sm text-muted-foreground">
@@ -161,7 +163,7 @@ export default function SubmissionForms() {
             ))}
           </div>
         ) : (
-          <div className="rounded-lg bg-card p-8 text-center">
+          <div className={cardSurfaceClasses("default", "p-8 text-center")}>
             <p className="font-medium">No submission forms in this view</p>
             <p className="mt-1 text-sm text-muted-foreground">
               Create a form to start collecting proposals for this event.
@@ -172,3 +174,4 @@ export default function SubmissionForms() {
     </AppLayout>
   );
 }
+import { cardSurfaceClasses } from "@/components/ui/card";

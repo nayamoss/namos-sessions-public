@@ -16,6 +16,8 @@ import {
   ShieldCheck,
   KeyRound,
   Handshake,
+  Bot,
+  Code2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -59,6 +61,7 @@ const navSections: DashboardNavSection[] = [
       { to: "/program/evaluation", label: "Evaluation", icon: ListTodo },
       { to: "/program/agenda", label: "Agenda", icon: CalendarDays },
       { to: "/program/readiness", label: "Readiness", icon: ShieldCheck },
+      { to: "/program/agent", label: "Operations Agent", icon: Bot },
       { to: "/program/communications", label: "Communications", icon: Mail },
       { to: "/program/availability", label: "Availability", icon: CalendarClock },
     ],
@@ -68,6 +71,12 @@ const navSections: DashboardNavSection[] = [
     items: [
       { to: "/portals/forms", label: "Forms", icon: FileText },
       { to: "/portals/tasks", label: "Tasks", icon: ListTodo },
+    ],
+  },
+  {
+    label: "CMS",
+    items: [
+      { to: "/cms/embeds", label: "Embeds", icon: Code2 },
     ],
   },
   {
@@ -124,7 +133,7 @@ function Navigation({
                   aria-label={item.label}
                   onClick={onNavigate}
                   className={cn(
-                    "group relative flex items-center rounded-md text-sm font-medium transition-colors",
+                    "touch-target group relative flex items-center rounded-md text-sm font-medium transition-colors",
                     collapsed ? "justify-center p-2" : "gap-3 px-3 py-2",
                     active
                       ? "bg-muted text-foreground"
@@ -164,13 +173,14 @@ function MobileSidebar({
       <SheetTrigger asChild>
         <button
           type="button"
-          className="fixed left-0 top-0 z-40 flex h-14 w-14 items-center justify-center text-muted-foreground hover:text-foreground lg:hidden"
+          className="touch-target fixed left-[env(safe-area-inset-left)] top-[env(safe-area-inset-top)] z-40 flex h-14 w-14 items-center justify-center text-muted-foreground hover:text-foreground lg:hidden"
           aria-label="Open navigation"
+          title="Open navigation"
         >
           <PanelLeft className="h-4 w-4" />
         </button>
       </SheetTrigger>
-      <SheetContent side="left" className="flex w-72 flex-col gap-0 bg-card p-0">
+      <SheetContent side="left" className="flex w-[min(18rem,calc(100vw-2rem))] flex-col gap-0 bg-card !px-0 !pb-[env(safe-area-inset-bottom)] !pt-[env(safe-area-inset-top)]">
         <SheetTitle className="sr-only">Navigation</SheetTitle>
         <div className="flex h-14 shrink-0 items-center px-6">
           <Link to={homeHref} className="text-sm font-semibold tracking-tight" onClick={() => setOpen(false)}>
@@ -214,7 +224,7 @@ function DesktopSidebar({
   return (
     <aside
       className={cn(
-        "fixed left-2.5 top-2.5 z-30 hidden h-[calc(100dvh-20px)] flex-col rounded-lg bg-card lg:flex",
+        cardSurfaceClasses("default", "fixed left-2.5 top-2.5 z-30 hidden h-[calc(100dvh-20px)] flex-col lg:flex"),
         collapsed ? "w-14" : "w-56",
       )}
     >
@@ -222,7 +232,7 @@ function DesktopSidebar({
         {collapsed ? (
           <button
             onClick={toggleCollapsed}
-            className="mx-auto rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="touch-target mx-auto rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
             title="Expand sidebar"
             aria-label="Expand sidebar"
           >
@@ -238,7 +248,7 @@ function DesktopSidebar({
             </Link>
             <button
               onClick={toggleCollapsed}
-              className="rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="touch-target rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
               title="Collapse sidebar"
               aria-label="Collapse sidebar"
             >
@@ -278,29 +288,36 @@ function DashboardLayoutInner({
   const { collapsed } = useSidebarState();
 
   return (
-    <div className="h-screen overflow-hidden bg-background text-foreground">
+    <div className="mobile-safe-shell h-dvh overflow-hidden bg-background text-foreground lg:p-0">
       <DesktopSidebar accountContext={accountContext} homeHref={homeHref} sections={navSections} />
       <MobileSidebar accountContext={accountContext} homeHref={homeHref} sections={navSections} />
       <main
         className={cn(
-          "flex h-screen min-w-0 flex-col overflow-hidden",
+          "flex h-full min-w-0 flex-col overflow-hidden",
           collapsed ? "lg:pl-[4.75rem]" : "lg:pl-[15.25rem]",
         )}
       >
-        <header className="flex h-14 shrink-0 items-center justify-between gap-4 pl-14 pr-4 md:pl-16 md:pr-6 lg:px-6 xl:px-8">
+        <header className="flex h-14 shrink-0 items-center justify-between gap-4 pl-14 pr-4 md:pl-16 md:pr-4 lg:px-3">
           <div className="min-w-0"><PageHeader title={title} /></div>
-          {headerEnd}
+          {headerEnd && (
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              {headerEnd}
+            </div>
+          )}
         </header>
-        <div className="flex min-h-0 min-w-0 flex-1 px-4 pb-4 md:px-6 md:pb-6 xl:px-8 xl:pb-8">
+        <div className="flex min-h-0 min-w-0 flex-1 px-3 pb-3 md:px-4 md:pb-4">
+          {/* Deliberately not a card surface. Pages paint their own cards, so a
+              fill here stacked a second surface behind them — white-on-white,
+              which erased every card edge in light mode (#171). */}
           <section
             aria-label="Page content"
-            className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto rounded-lg bg-card lg:flex-row lg:overflow-hidden"
+            className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden"
           >
             <div className="min-w-0 flex-1 p-4 md:p-5 lg:overflow-y-auto">
               {children}
             </div>
             {detail && (
-              <aside className="m-4 mt-0 w-auto shrink-0 rounded-lg bg-muted/60 p-6 lg:ml-0 lg:mt-4 lg:w-[400px] lg:overflow-y-auto">
+              <aside className={cardSurfaceClasses("default", "order-first mb-0 w-auto shrink-0 p-4 sm:p-6 lg:order-none lg:w-[400px] lg:overflow-y-auto")}>
                 {detail}
               </aside>
             )}
@@ -349,8 +366,16 @@ export function AppLayout({
   const current = useOptionalCurrentEvent()?.event;
   const repo = useContext(RepoContext);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [agentAccess, setAgentAccess] = useState(false);
+  useEffect(() => {
+    let active = true;
+    setAgentAccess(false);
+    if (!current || !repo?.agentRuns) return () => { active = false; };
+    void repo.agentRuns.canUse({ eventId: current.id }).then((allowed) => { if (active) setAgentAccess(allowed); }).catch(() => { if (active) setAgentAccess(false); });
+    return () => { active = false; };
+  }, [current, repo]);
   const openCommandPalette = useCallback(() => setCommandPaletteOpen(true), []);
-  const visibleNavSections = current ? navSections.map(section => ({ ...section, items: section.items.filter(item => item.to !== "/program/sponsors" || current.sponsorsEnabled).map(item => ({ ...item, to: `/events/${current.slug}${item.to}` })) })) : repo ? [] : navSections;
+  const visibleNavSections = current ? navSections.map(section => ({ ...section, items: section.items.filter(item => (item.to !== "/program/sponsors" || current.sponsorsEnabled) && (item.to !== "/program/agent" || agentAccess)).map(item => ({ ...item, to: `/events/${current.slug}${item.to}` })) })) : repo ? [] : navSections;
 
   return (
     <DashboardLayout
@@ -361,7 +386,7 @@ export function AppLayout({
           <button
             type="button"
             onClick={openCommandPalette}
-            className="hidden items-center gap-2 rounded-md bg-muted px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground sm:flex"
+            className="touch-target hidden items-center gap-2 rounded-md bg-muted px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground sm:flex"
             aria-label="Open command palette"
           >
             <Search className="h-3.5 w-3.5" />
@@ -381,3 +406,4 @@ export function AppLayout({
     </DashboardLayout>
   );
 }
+import { cardSurfaceClasses } from "@/components/ui/card";

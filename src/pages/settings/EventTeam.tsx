@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { Plus, Trash2, UserRound } from "lucide-react";
+import { Plus, RotateCw, Trash2, UserRound } from "lucide-react";
 import { useUser } from "@clerk/clerk-react";
 import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
+import { DetailPane } from "@/components/shared/DetailPane";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { FormField } from "@/components/shared/FormField";
+import { SectionCard } from "@/components/shared/SectionCard";
 import { SkeletonList } from "@/components/shared/SkeletonList";
 import {
   AlertDialog,
@@ -19,7 +22,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -28,21 +30,22 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useRepo } from "@/data/repo";
-import type { Event, EventMember } from "@/data/types";
-import { cleanErrorMessage } from "@/lib/errors";
+import type { Event, EventInviteResult, EventMember } from "@/data/types";
+import { cleanErrorMessage, friendlyErrorMessage } from "@/lib/errors";
+import { EVENT_TEAM_MEMBER_LIMIT, eventTeamSeatsRemaining } from "@/lib/event-team";
 
 function InviteEventMember({
   onClose,
   onSaved,
 }: {
   onClose: () => void;
-  onSaved: () => Promise<void>;
+  onSaved: (result?: EventInviteResult) => Promise<void>;
 }) {
   const { event } = useCurrentEvent();
   const repo = useRepo();
   const [mode, setMode] = useState<"invite" | "pull">("invite");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<EventMember["role"]>("reviewer");
+  const [role, setRole] = useState<EventMember["role"]>("organizer");
   const [events, setEvents] = useState<Event[]>([]);
   const [sourceEventId, setSourceEventId] = useState<Event["id"] | "">("");
   const [sourceMembers, setSourceMembers] = useState<EventMember[]>([]);
@@ -69,11 +72,11 @@ function InviteEventMember({
     setBusy(true);
     setError(undefined);
     try {
-      await repo.eventMembers.add({ eventId: event.id, email, role });
-      await onSaved();
+      const result = await repo.eventMembers.invite({ eventId: event.id, email, role });
+      await onSaved(result);
       onClose();
     } catch (cause) {
-      setError(cleanErrorMessage(cause, "Could not add event member."));
+      setError(cleanErrorMessage(cause, "Could not send the invitation."));
     } finally {
       setBusy(false);
     }
@@ -106,9 +109,8 @@ function InviteEventMember({
     }
   };
   return (
-    <div className="space-y-5">
-      <div>
-        <h2 className="text-base font-semibold">Add event member</h2>
+    <DetailPane title="Invite a teammate" onClose={onClose}>
+      <div className="space-y-5">
         <p className="mt-1 text-sm text-muted-foreground">
           Access applies only to {event.name}.
         </p>
@@ -136,8 +138,7 @@ function InviteEventMember({
       </div>
       {mode === "invite" ? (
         <>
-          <div className="space-y-2">
-            <Label htmlFor="member-email">Email</Label>
+          <FormField label="Email" htmlFor="member-email" hint="We’ll send a secure, single-use Clerk invitation link.">
             <Input
               id="member-email"
               type="email"
@@ -145,9 +146,8 @@ function InviteEventMember({
               onChange={(e) => setEmail(e.target.value)}
               autoFocus
             />
-          </div>
-          <div className="space-y-2">
-            <Label>Role</Label>
+          </FormField>
+          <FormField label="Role" hint="Organizers can manage this event; reviewers only receive review access.">
             <Select
               value={role}
               onValueChange={(value) => setRole(value as EventMember["role"])}
@@ -160,7 +160,7 @@ function InviteEventMember({
                 <SelectItem value="reviewer">Reviewer</SelectItem>
               </SelectContent>
             </Select>
-          </div>
+          </FormField>
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={onClose}>
               Cancel
@@ -169,14 +169,13 @@ function InviteEventMember({
               onClick={() => void submit()}
               disabled={busy || !email.trim()}
             >
-              {busy ? "Adding…" : "Add member"}
+              {busy ? "Sending…" : "Send invitation"}
             </Button>
           </div>
         </>
       ) : (
         <>
-          <div className="space-y-2">
-            <Label>Source event</Label>
+          <FormField label="Source event">
             <Select
               value={sourceEventId}
               onValueChange={(value) => void chooseSource(value as Event["id"])}
@@ -192,9 +191,9 @@ function InviteEventMember({
                 ))}
               </SelectContent>
             </Select>
-          </div>
+          </FormField>
           {sourceEventId && (
-            <div className="max-h-64 divide-y divide-muted overflow-y-auto rounded-lg bg-muted/40">
+            <div className={cardSurfaceClasses("default", "max-h-64 divide-y divide-muted overflow-y-auto bg-muted/40")}>
               {sourceMembers.length ? (
                 sourceMembers.map((member) => (
                   <label
@@ -239,7 +238,7 @@ function InviteEventMember({
           </div>
         </>
       )}
-    </div>
+    </DetailPane>
   );
 }
 
@@ -252,7 +251,9 @@ export default function EventTeam() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [inviting, setInviting] = useState(false);
+  const [feedback, setFeedback] = useState<{ tone: "success" | "warning"; message: string }>();
   const [remove, setRemove] = useState<EventMember>();
+  const [workingMemberId, setWorkingMemberId] = useState<string>();
   const load = useCallback(async () => {
     setLoading(true);
     setError(undefined);
@@ -284,16 +285,61 @@ export default function EventTeam() {
   }, [load]);
   const confirmRemove = async () => {
     if (!remove) return;
+    setWorkingMemberId(remove.id);
+    setError(undefined);
     try {
       await repo.eventMembers.remove({
         eventId: event.id,
-        userId: remove.userId,
+        memberId: remove.id,
+      });
+      setFeedback({
+        tone: "success",
+        message: remove.userId.startsWith("pending:")
+          ? "Invitation revoked and removed."
+          : "Event access removed.",
       });
       setRemove(undefined);
       await load();
     } catch (cause) {
-      setError(cleanErrorMessage(cause, "Could not remove event member."));
+      setError(friendlyErrorMessage(cause, "Could not remove event member."));
+    } finally {
+      setWorkingMemberId(undefined);
     }
+  };
+  const resendInvite = async (member: EventMember) => {
+    setWorkingMemberId(member.id);
+    setError(undefined);
+    setFeedback(undefined);
+    try {
+      const result = await repo.eventMembers.resend({ eventId: event.id, memberId: member.id });
+      setFeedback(
+        result.emailSent && !result.warning
+          ? { tone: "success", message: "Invitation resent with a fresh Clerk link." }
+          : {
+              tone: "warning",
+              message: result.warning || "The invitation was refreshed, but email delivery could not be confirmed.",
+            },
+      );
+      await load();
+    } catch (cause) {
+      setError(cleanErrorMessage(cause, "Could not resend the invitation."));
+    } finally {
+      setWorkingMemberId(undefined);
+    }
+  };
+  const seatsRemaining = eventTeamSeatsRemaining(members.length);
+  const handleInvited = async (result?: EventInviteResult) => {
+    if (result) {
+      setFeedback(
+        result.emailSent && !result.warning
+          ? { tone: "success", message: result.status === "active" ? "The teammate was added and notified." : "Invitation sent." }
+          : {
+              tone: "warning",
+              message: result.warning || "The invitation was saved, but email delivery could not be confirmed.",
+            },
+      );
+    }
+    await load();
   };
   return (
     <AppLayout
@@ -302,7 +348,7 @@ export default function EventTeam() {
         inviting ? (
           <InviteEventMember
             onClose={() => setInviting(false)}
-            onSaved={load}
+            onSaved={handleInvited}
           />
         ) : undefined
       }
@@ -314,15 +360,15 @@ export default function EventTeam() {
             <div>
               <h2 className="text-base font-semibold">{event.name}</h2>
               <p className="text-sm text-muted-foreground">
-                Event-scoped organizers and reviewers.
+                Event-scoped organizers and reviewers · {members.length} of {EVENT_TEAM_MEMBER_LIMIT} seats used.
               </p>
             </div>
           }
           primaryAction={
             canManage ? (
-              <Button onClick={() => setInviting(true)}>
+              <Button onClick={() => setInviting(true)} disabled={seatsRemaining === 0}>
                 <Plus className="mr-2 h-4 w-4" />
-                Add member
+                {seatsRemaining === 0 ? "Team full" : "Invite teammate"}
               </Button>
             ) : undefined
           }
@@ -332,10 +378,22 @@ export default function EventTeam() {
             {error}
           </p>
         )}
+        {feedback && (
+          <p
+            role="status"
+            className={feedback.tone === "success" ? "text-sm text-foreground" : "text-sm text-amber-700 dark:text-amber-300"}
+          >
+            {feedback.message}
+          </p>
+        )}
         {loading ? (
           <SkeletonList rows={4} label="Loading event team…" />
         ) : members.length ? (
-          <div className="divide-y divide-muted rounded-lg bg-muted/40">
+          <SectionCard
+            title="Team members"
+            description="Pending invitations can be resent or revoked here. Accepted members can be removed from this event."
+            contentClassName="divide-y divide-muted"
+          >
             {members.map((member) => (
               <div
                 key={member.id}
@@ -348,26 +406,44 @@ export default function EventTeam() {
                   <p className="truncate text-sm font-medium">{member.email}</p>
                   <p className="text-xs text-muted-foreground">
                     {member.userId.startsWith("pending:")
-                      ? "Invitation pending"
-                      : "Active"}
+                      ? member.inviteEmailStatus === "failed"
+                        ? "Pending · email needs attention"
+                        : member.inviteEmailStatus === "sent"
+                          ? "Pending · invitation sent"
+                          : "Invitation pending"
+                      : "Accepted"}
                   </p>
                 </div>
                 <span className="rounded-md bg-background px-2 py-1 text-xs font-medium capitalize">
                   {member.role}
                 </span>
                 {canManage && (
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    aria-label={`Remove ${member.email}`}
-                    onClick={() => setRemove(member)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    {member.userId.startsWith("pending:") && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={Boolean(workingMemberId)}
+                        onClick={() => void resendInvite(member)}
+                      >
+                        <RotateCw className={`mr-2 h-4 w-4 ${workingMemberId === member.id ? "animate-spin" : ""}`} />
+                        Resend
+                      </Button>
+                    )}
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      disabled={Boolean(workingMemberId)}
+                      aria-label={`${member.userId.startsWith("pending:") ? "Revoke invitation for" : "Remove"} ${member.email}`}
+                      onClick={() => setRemove(member)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 )}
               </div>
             ))}
-          </div>
+          </SectionCard>
         ) : (
           <EmptyState message="No event-specific members yet. Organization owners and admins still have access." />
         )}
@@ -380,16 +456,19 @@ export default function EventTeam() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove event access?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {remove?.userId.startsWith("pending:") ? "Revoke invitation?" : "Remove event access?"}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              {remove?.email} will no longer be able to open {event.name}{" "}
-              through this membership.
+              {remove?.userId.startsWith("pending:")
+                ? `The Clerk invitation for ${remove.email} will be revoked and its link will stop working.`
+                : `${remove?.email} will no longer be able to open ${event.name} through this membership.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void confirmRemove()}>
-              Remove access
+            <AlertDialogAction disabled={Boolean(workingMemberId)} onClick={() => void confirmRemove()}>
+              {remove?.userId.startsWith("pending:") ? "Revoke invitation" : "Remove access"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -397,3 +476,4 @@ export default function EventTeam() {
     </AppLayout>
   );
 }
+import { cardSurfaceClasses } from "@/components/ui/card";

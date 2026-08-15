@@ -114,7 +114,7 @@ export function SpeakerDocuments() {
   };
 
   return (
-    <section className="space-y-5 rounded-lg bg-card p-6">
+    <section className={cardSurfaceClasses("default", "space-y-5 p-6")}>
       <div>
         <h2 className="text-base font-semibold">Slides and documents</h2>
         <p className="mt-1 text-sm text-muted-foreground">Upload files for one of your submissions. PDF, presentation, document, or text files up to 10 MB.</p>
@@ -168,3 +168,4 @@ export function SpeakerDocuments() {
     </section>
   );
 }
+import { cardSurfaceClasses } from "@/components/ui/card";

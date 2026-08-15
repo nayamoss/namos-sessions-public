@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query, requireIdentity, assertEventAccess, isOrganizer } from "./functions";
+import { mutation, query, requireIdentity, assertEventAccess, assertEventOrganizerAccess, isEventOrganizer } from "./functions";
 import { evaluationCriterion, evaluationCriterionScore } from "./schema";
 import type { UserIdentity } from "convex/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
@@ -81,7 +81,7 @@ function isSelfReviewer(identity: UserIdentity, reviewerUserId: string): boolean
 export const list = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     const evaluations = await ctx.db.query("evaluations").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect();
     // Each row carries the criteria it was scored against (issue #56), so the organizer's
     // Abstracts grid can compute the weighted total with the same pure function the reviewer
@@ -108,7 +108,7 @@ export const list = query({
 export const listPlans = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     return ctx.db.query("evaluation_plans").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect();
   },
 });
@@ -116,7 +116,7 @@ export const listPlans = query({
 export const savePlan = mutation({
   args: { id: v.optional(v.id("evaluation_plans")), eventId: v.id("events"), name: v.string(), rounds: v.number(), scoringScaleMax: v.union(v.literal(5), v.literal(10)), aiAssistEnabled: v.boolean(), anonymized: v.optional(v.boolean()), criteria: v.optional(v.array(evaluationCriterion)) },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     const name = args.name.trim();
     if (!name) throw new Error("An evaluation plan needs a name.");
     if (name.length > 160) throw new Error("Evaluation plan names must be 160 characters or fewer.");
@@ -149,7 +149,7 @@ export const listAssignments = query({
     if (args.reviewerUserId !== undefined && !isSelfReviewer(identity, args.reviewerUserId)) {
       throw new Error("Forbidden: you can only view your own review assignments.");
     }
-    if (args.reviewerUserId === undefined && !(await isOrganizer(ctx, identity))) {
+    if (args.reviewerUserId === undefined && !(await isEventOrganizer(ctx, args.eventId, identity))) {
       throw new Error("Forbidden: organizer access required.");
     }
     const assignments = args.reviewerUserId
@@ -292,7 +292,7 @@ async function createAssignments(
 export const assign = mutation({
   args: { eventId: v.id("events"), evaluationPlanId: v.id("evaluation_plans"), submissionIds: v.array(v.id("submissions")), reviewerUserIds: v.array(v.string()), round: v.number() },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     const plan = await ctx.db.get(args.evaluationPlanId);
     if (!plan || plan.eventId !== args.eventId) throw new Error("Evaluation plan not found for this event.");
     if (!Number.isInteger(args.round) || args.round < 1 || args.round > plan.rounds) throw new Error("Assignment round must exist on this evaluation plan.");
@@ -327,7 +327,7 @@ const MAX_BULK_ASSIGNMENTS = 500;
 export const assignByFilter = mutation({
   args: { eventId: v.id("events"), evaluationPlanId: v.id("evaluation_plans"), filter: assignmentFilter, reviewerUserIds: v.array(v.string()), round: v.number() },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     const plan = await ctx.db.get(args.evaluationPlanId);
     if (!plan || plan.eventId !== args.eventId) throw new Error("Evaluation plan not found for this event.");
     if (!Number.isInteger(args.round) || args.round < 1 || args.round > plan.rounds) throw new Error("Assignment round must exist on this evaluation plan.");
@@ -374,7 +374,7 @@ export const assignByFilter = mutation({
 export const reviewerProgress = query({
   args: { eventId: v.id("events"), evaluationPlanId: v.id("evaluation_plans") },
   handler: async (ctx, args): Promise<ReviewerProgressRow[]> => {
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     const plan = await ctx.db.get(args.evaluationPlanId);
     // A stale selectedPlanId in the browser must render an empty panel, not blank the page.
     if (!plan || plan.eventId !== args.eventId) return [];
@@ -411,7 +411,7 @@ export const save = mutation({
       if (!plan || plan.eventId !== args.eventId) throw new Error("Evaluation plan not found for this assignment.");
       scoringScaleMax = plan.scoringScaleMax;
       planCriteria = plan.criteria ?? [];
-    } else if (!(await isOrganizer(ctx, identity))) {
+    } else if (!(await isEventOrganizer(ctx, args.eventId, identity))) {
       // No assignment link means this is an ad-hoc, unscoped write — only an organizer may do that.
       throw new Error("Forbidden: organizer access required.");
     }

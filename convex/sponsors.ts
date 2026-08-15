@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { assertEventAccess, mutation, query } from "./functions";
+import { assertEventOrganizerAccess, mutation, query } from "./functions";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { removeSponsorRoutingTarget } from "./categoryRouting";
@@ -24,7 +24,7 @@ async function validateTier(
 export const list = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     const [sponsors, tiers, contacts, tasks] = await Promise.all([
       ctx.db
         .query("sponsors")
@@ -62,7 +62,7 @@ export const get = query({
   handler: async (ctx, args) => {
     const sponsor = await ctx.db.get(args.sponsorId);
     if (!sponsor) return null;
-    await assertEventAccess(ctx, sponsor.eventId);
+    await assertEventOrganizerAccess(ctx, sponsor.eventId);
     const [tier, contacts, tasks, submissions] = await Promise.all([
       sponsor.tierId ? ctx.db.get(sponsor.tierId) : null,
       ctx.db
@@ -101,7 +101,7 @@ export const create = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await assertEventAccess(ctx, args.eventId);
+    await assertEventOrganizerAccess(ctx, args.eventId);
     const event = await ctx.db.get(args.eventId);
     if (!event) throw new Error("Event not found.");
     await validateTier(ctx, args.eventId, args.tierId);
@@ -133,7 +133,7 @@ export const update = mutation({
   handler: async (ctx, args) => {
     const sponsor = await ctx.db.get(args.sponsorId);
     if (!sponsor) throw new Error("Sponsor not found.");
-    await assertEventAccess(ctx, sponsor.eventId);
+    await assertEventOrganizerAccess(ctx, sponsor.eventId);
     if (args.tierId) await validateTier(ctx, sponsor.eventId, args.tierId);
     const name = args.name === undefined ? sponsor.name : args.name.trim();
     if (!name) throw new Error("A sponsor needs a name.");
@@ -159,7 +159,7 @@ export const remove = mutation({
   handler: async (ctx, args) => {
     const sponsor = await ctx.db.get(args.sponsorId);
     if (!sponsor) throw new Error("Sponsor not found.");
-    await assertEventAccess(ctx, sponsor.eventId);
+    await assertEventOrganizerAccess(ctx, sponsor.eventId);
     const [contacts, tasks, submissions, forms] = await Promise.all([
       ctx.db
         .query("sponsor_contacts")

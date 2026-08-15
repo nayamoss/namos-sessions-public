@@ -60,6 +60,20 @@ describe("DataGrid pagination", () => {
 });
 
 describe("DataGrid row activation", () => {
+  it("exposes column labels for the narrow-screen card layout", () => {
+    const grid = renderGrid(rows.slice(0, 1));
+    const table = grid.container.querySelector("table")!;
+    const cell = grid.container.querySelector("tbody td")!;
+
+    expect(table).toHaveClass("responsive-data-grid");
+    // bg-card, not bg-background: the grid is a surface sitting on the page
+    // background, which AppLayout no longer covers with a card (#171).
+    expect(table.parentElement).toHaveClass("border", "bg-card");
+    expect(table.querySelector("thead")).toHaveClass("border-b", "bg-muted/15");
+    expect(cell).toHaveAttribute("data-label", "Name");
+    grid.cleanup();
+  });
+
   it("opens a labelled row from the keyboard", () => {
     const container = document.createElement("div");
     document.body.append(container);

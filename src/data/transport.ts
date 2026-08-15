@@ -5,6 +5,9 @@ import type {
   AssignByFilterResult,
   AgendaConflict,
   AgendaItem,
+  AgentRun,
+  AgentRunDetail,
+  AgentProviderSetting,
   Availability,
   Comm,
   CommPreview,
@@ -15,11 +18,17 @@ import type {
   EvaluationAssignment,
   EvaluationPlan,
   Event,
+  EventInviteResult,
   EventMember,
   FieldDefinition,
   OnboardingTask,
   Organizer,
+  UserProfile,
   PublicEmbed,
+  Embed,
+  EmbedId,
+  EmbedWrite,
+  PublicEmbedView,
   PublicSubmissionFormConfig,
   PublicSubmissionFormSummary,
   ReviewerProgressRow,
@@ -56,6 +65,7 @@ export const readOperations = [
   "events.rooms.list",
   "events.tracks.list",
   "eventMembers.list",
+  "eventMembers.canManage",
   "tags.list",
   "forms.list",
   "forms.fields",
@@ -79,6 +89,10 @@ export const readOperations = [
   "comms.templates.list",
   "availability.list",
   "publicEmbeds.get",
+  "publicEmbeds.list",
+  "publicEmbeds.getAdmin",
+  "publicEmbeds.preview",
+  "publicEmbeds.getPublic",
   "publicForms.listOpen",
   "publicForms.get",
   "portalForms.get",
@@ -87,6 +101,7 @@ export const readOperations = [
   "organizers.isCurrentUserOrganizer",
   "organizers.canClaimOwner",
   "organizers.hasAdminAccess",
+  "profiles.getMine",
   "emailIntegrations.status",
   "evaluations.reviewerProgress",
   "comms.previewDecision",
@@ -97,6 +112,10 @@ export const readOperations = [
   "sponsors.get",
   "sponsorTiers.list",
   "sponsorContacts.listBySponsor",
+  "agentRuns.canUse",
+  "agentRuns.list",
+  "agentRuns.get",
+  "agentProviderSettings.status",
 ] as const;
 
 export type ReadOperation = (typeof readOperations)[number];
@@ -108,6 +127,9 @@ export type WriteOperation =
   | "events.tracks.save"
   | "events.tracks.remove"
   | "eventMembers.add"
+  | "eventMembers.invite"
+  | "eventMembers.resend"
+  | "eventMembers.claimPending"
   | "eventMembers.remove"
   | "tags.create"
   | "tags.rename"
@@ -142,9 +164,13 @@ export type WriteOperation =
   | "tasks.setStatus"
   | "availability.upsert"
   | "publicForms.submit"
+  | "publicEmbeds.save"
+  | "publicEmbeds.duplicate"
+  | "publicEmbeds.remove"
   | "portalForms.submit"
   | "organizers.claimOwner"
   | "organizers.completeOnboarding"
+  | "profiles.save"
   | "organizers.add"
   | "organizers.remove"
   | "speakers.bulkImport"
@@ -173,7 +199,15 @@ export type WriteOperation =
   | "sponsorTiers.remove"
   | "sponsorContacts.create"
   | "sponsorContacts.update"
-  | "sponsorContacts.remove";
+  | "sponsorContacts.remove"
+  | "agentRuns.create"
+  | "agentRuns.respond"
+  | "agentRuns.retry"
+  | "agentRuns.cancel"
+  | "agentRuns.approveTaskProposal"
+  | "agentRuns.rejectProposal"
+  | "agentProviderSettings.saveManaged"
+  | "agentProviderSettings.saveByok";
 export type DataOperation = ReadOperation | WriteOperation;
 
 export interface DataTransport {
@@ -198,6 +232,22 @@ export interface ReactiveTransport {
 // Feature code imports Repository, never a transport, Convex, or Airtable.
 export function createRepository(transport: DataTransport): Repository {
   return {
+    agentProviderSettings: {
+      status: ({ eventId }) => transport.read<AgentProviderSetting>("agentProviderSettings.status", { eventId }),
+      saveManaged: ({ eventId }) => transport.write("agentProviderSettings.saveManaged", { eventId }),
+      saveByok: (input) => transport.write("agentProviderSettings.saveByok", input),
+    },
+    agentRuns: {
+      canUse: ({ eventId }) => transport.read<boolean>("agentRuns.canUse", { eventId }),
+      list: ({ eventId, limit }) => transport.read<AgentRun[]>("agentRuns.list", { eventId, limit }),
+      get: ({ eventId, runId }) => transport.read<AgentRunDetail | null>("agentRuns.get", { eventId, runId }),
+      create: (input) => transport.write("agentRuns.create", input),
+      respond: (input) => transport.write<void>("agentRuns.respond", input),
+      retry: (input) => transport.write<void>("agentRuns.retry", input),
+      cancel: (input) => transport.write<void>("agentRuns.cancel", input),
+      approveTaskProposal: (input) => transport.write<{ createdTaskIds: string[] }>("agentRuns.approveTaskProposal", input),
+      rejectProposal: (input) => transport.write<void>("agentRuns.rejectProposal", input),
+    },
     apiKeys: {
       list: () => transport.read<ApiKey[]>("apiKeys.list", {}),
       generate: (label) =>
@@ -236,6 +286,14 @@ export function createRepository(transport: DataTransport): Repository {
     eventMembers: {
       list: ({ eventId }) =>
         transport.read<EventMember[]>("eventMembers.list", { eventId }),
+      canManage: ({ eventId }) =>
+        transport.read<boolean>("eventMembers.canManage", { eventId }),
+      invite: (input) =>
+        transport.write<EventInviteResult>("eventMembers.invite", input),
+      resend: (input) =>
+        transport.write<EventInviteResult>("eventMembers.resend", input),
+      claimPending: () =>
+        transport.write<number>("eventMembers.claimPending", {}),
       add: (input) => transport.write<string>("eventMembers.add", input),
       remove: (input) => transport.write<void>("eventMembers.remove", input),
     },
@@ -460,7 +518,14 @@ export function createRepository(transport: DataTransport): Repository {
       upsert: (input) => transport.write<string>("availability.upsert", input),
     },
     publicEmbeds: {
-      get: (eventSlug) =>
+      list: ({ eventId }) => transport.read<Embed[]>("publicEmbeds.list", { eventId }),
+      getAdmin: (input) => transport.read<Embed | null>("publicEmbeds.getAdmin", input),
+      preview: (input) => transport.read<PublicEmbedView | null>("publicEmbeds.preview", input),
+      save: (input) => transport.write<EmbedId>("publicEmbeds.save", input),
+      duplicate: (input) => transport.write<EmbedId>("publicEmbeds.duplicate", input),
+      remove: async (input) => { await transport.write<null>("publicEmbeds.remove", input); },
+      getPublic: (embedId) => transport.read<PublicEmbedView | null>("publicEmbeds.getPublic", { embedId }),
+      getLegacy: (eventSlug) =>
         transport.read<PublicEmbed | null>("publicEmbeds.get", { eventSlug }),
     },
     publicForms: {
@@ -497,6 +562,10 @@ export function createRepository(transport: DataTransport): Repository {
       add: (input) => transport.write<string>("organizers.add", input),
       remove: (userId) =>
         transport.write<void>("organizers.remove", { userId }),
+    },
+    profiles: {
+      getMine: () => transport.read<UserProfile | null>("profiles.getMine", {}),
+      save: (input) => transport.write<void>("profiles.save", input),
     },
   };
 }
