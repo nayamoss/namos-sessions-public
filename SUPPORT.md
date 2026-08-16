@@ -5,7 +5,6 @@ Namos Sessions is maintained as an open-source project. Community support is bes
 - Ask setup and usage questions in [GitHub Discussions](https://github.com/nayamoss/namos-sessions-public/discussions).
 - Use an issue form for reproducible bugs, scoped enhancements, and documentation problems.
 - Follow [SECURITY.md](SECURITY.md) for suspected vulnerabilities.
-- For anything that doesn't fit a public Discussion or issue, email **info@beeconomybuzz.com**.
 
 Include the command or workflow attempted, the relevant commit, your environment, and sanitized
 output. Never post credentials or real attendee data. There is currently no guaranteed response
