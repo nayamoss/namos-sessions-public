@@ -143,5 +143,4 @@ own accounts directly with each provider.
 
 ## Questions or help
 
-Best effort only — see [SUPPORT.md](SUPPORT.md) for what that means. For anything not suited to
-a public GitHub Discussion or issue, email **info@beeconomybuzz.com**.
+Best effort only — see [SUPPORT.md](SUPPORT.md) for what that means.
