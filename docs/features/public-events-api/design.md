@@ -1,5 +1,11 @@
 # Public Events API — Technical Design
 
+> **Partly superseded (2026-08-16).** This feature was designed when the app was
+> single-tenant. It is now multi-tenant — see `docs/features/multi-tenant-organizations/`.
+> Concretely: an API key is now scoped to the single event it was issued for, where this
+> document describes it as instance-wide. Statements below about there being no
+> `organizations` table no longer hold. Everything else still applies.
+
 ## Database / Schema Changes
 
 ### Current Schema (affected tables)
@@ -162,7 +168,7 @@ No `orgId` field — see Technical Decisions.
   - sticky request/response code rail on wide screens, stacked after the operation on narrow
     screens.
 - Elements:
-  1. **Product header** — Namos Sessions identity, "API reference" context, and a quiet link back
+  1. **Product header** — Takumi Talks identity, "API reference" context, and a quiet link back
      to the product. It establishes that this is documentation before the endpoint content.
   2. **Section navigation** — Overview, Authentication, List events, Event object, and Errors.
      Anchor links use the browser's native document behavior and remain visible on desktop.
@@ -281,11 +287,11 @@ No `orgId` field — see Technical Decisions.
 ## Technical Decisions
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| `orgId` on the Event object | **Omit it.** Document its absence explicitly on the API docs page rather than faking a value. | This app has no `organizations` table — it's single-tenant (one shared `organizers` table). Adding a fake/constant `orgId` just to match opensession's shape would be misleading API surface with no real meaning. If true multi-org support is ever built, add `orgId` then, as part of that larger feature. |
+| `orgId` on the Event object | **Omit it.** Document its absence explicitly on the API docs page rather than faking a value. | **Superseded — the app is now multi-tenant** (`organizations` table, see `docs/features/multi-tenant-organizations/`). The original rationale was that no `organizations` table existed, so a fake/constant `orgId` would be misleading API surface. Now that a real one exists, exposing `orgId` on the public Event object is a reasonable additive change, but it is deliberately not part of the tenancy fix — the API surface change should be designed on its own. |
 | `logoFileId` vs. existing `logoStorageKey` | New, separate field — do not repurpose `logoStorageKey`. | `logoStorageKey` is Convex file-storage-specific and not meant for external consumption as-is. `logoFileId` is a new, API-facing field; how it's populated (e.g. mirrored from `logoStorageKey` on save, or independently set) is an implementation detail for the build phase, not a design blocker. |
 | Additive-then-cutover migration vs. a single hard rename | Additive first (Migration steps 1–4) | The events table is read/written from ~18 files across Convex functions, pages, and tests (see Migration section). A hard rename in one commit risks a broken deploy window; additive-then-cutover has zero downtime risk at the cost of one extra migration mutation. |
 | Raw API key storage | Never stored — only `keyHash` (sha256) + `keyPrefix` (first 8 chars, cosmetic) persisted. | Standard practice; matches how this account already treats every other secret (see global "never hardcode secrets" rule) — a leaked database dump must not leak usable keys. |
-| Key scope | Instance-wide (any key, any organizer, sees all events) | No org boundary exists to scope to (see `orgId` decision above). Per-key scoping (e.g. read-only vs. read-write, or scoped to specific events) is a reasonable future improvement, not required for this issue. |
+| Key scope | **Per-event.** A key returns only the event it was issued for. | Superseded. This originally read "instance-wide (any key, any organizer, sees all events)" because no org boundary existed. That was a cross-tenant read: keys are issued per-event (`convex/apiKeys.ts`) but `http.ts` called an unscoped `listForApi`. `http.ts` now passes the authenticated key's own `eventId`. Broader per-key scoping (read-only vs. read-write) remains a future improvement. |
 
 ## Dependencies
 **Requires:** nothing outstanding — the dedicated Clerk application, Convex JWT template, and

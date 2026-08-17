@@ -91,13 +91,30 @@ import type {
 export interface EventScope {
   eventId: EventId;
 }
+export interface FilesRepo {
+  generateUploadUrl(): Promise<{ uploadUrl: string }>;
+  getUrl(storageId: string): Promise<string | null>;
+}
 export interface AnalyticsRepo {
   summary(scope: EventScope): Promise<EventAnalyticsSummary>;
 }
+/**
+ * Which event the signed-in portal user is actually a speaker on, resolved server-side.
+ * `event`/`speaker` are null when the account matches no speaker record on any reachable
+ * event; `publishedEvents` is the same list `listForPortal` returns, so the portal can still
+ * show an event shell when the caller is (for example) an organizer with no speaker profile.
+ */
+export interface PortalSpeakerIdentity {
+  event: Event | null;
+  speaker: Speaker | null;
+  publishedEvents: Event[];
+}
+
 export interface EventsRepo {
   list(): Promise<Event[]>;
   listMine(): Promise<Event[]>;
   listForPortal(): Promise<Event[]>;
+  portalSpeakerIdentity(): Promise<PortalSpeakerIdentity>;
   get(eventId: EventId): Promise<Event | null>;
   getBySlug(slug: string): Promise<Event | null>;
   save(
@@ -660,6 +677,12 @@ export interface ContentIntegrationsRepo {
   connectNotion(input: NotionConnectInput): Promise<{ status: "connected" }>;
   importNotion(scope: EventScope): Promise<NotionImportResult>;
   connectAirtable(input: AirtableConnectInput): Promise<{ status: "connected" }>;
+  startOAuth(input: import("./types").OAuthStartInput): Promise<{ url: string }>;
+  listNotionOAuthDatabases(input: { eventId: EventId; pendingId: string }): Promise<Array<{ id: string; title: string }>>;
+  finishNotionOAuth(input: { eventId: EventId; pendingId: string; databaseId: string }): Promise<{ status: "connected" }>;
+  listAirtableOAuthBases(input: { eventId: EventId; pendingId: string }): Promise<Array<{ id: string; name: string }>>;
+  listAirtableOAuthTables(input: { eventId: EventId; pendingId: string; baseId: string }): Promise<Array<{ id: string; name: string }>>;
+  finishAirtableOAuth(input: { eventId: EventId; pendingId: string; baseId: string; tableName: string }): Promise<{ status: "connected" }>;
   importAirtable(scope: EventScope): Promise<AirtableImportResult>;
   connectSanity(input: SanityConnectInput): Promise<{ status: "connected" }>;
   publishSanity(scope: EventScope): Promise<SanityPublishResult>;
@@ -701,6 +724,7 @@ export interface Repository {
   emailIntegrations: EmailIntegrationsRepo;
   contentIntegrations: ContentIntegrationsRepo;
   events: EventsRepo;
+  files: FilesRepo;
   eventMembers: EventMembersRepo;
   tags: TagsRepo;
   sponsors: SponsorsRepo;

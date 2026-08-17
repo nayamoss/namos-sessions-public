@@ -7,7 +7,7 @@
 
 ## Problem Statement
 
-Namos Sessions has internal Convex functions and a browser-facing repository adapter, but no
+Takumi Talks has internal Convex functions and a browser-facing repository adapter, but no
 stable external HTTP contract. `convex/http.ts` exports an empty router, so organizers cannot
 retrieve their events or published schedule from another system, and no safe integration path
 exists for the rest of the application.

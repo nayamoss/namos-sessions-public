@@ -9,7 +9,7 @@ An authenticated Namos Sessions organization owner, administrator, or event memb
 - The organizer is signed in through Clerk and has access to an existing event.
 - The event contains representative submissions, speakers, tasks, agenda items/conflicts, evaluation assignments, and communications.
 - `VITE_DATA_BACKEND=convex`.
-- The Convex deployment has `OPENAI_API_KEY`; `OPENAI_AGENT_MODEL` is optional.
+- The organizer chooses Namos-managed AI or supplies an event-level OpenAI key in Settings → Integrations. Managed mode uses the protected Convex `OPENAI_API_KEY`, checks the event creator’s active Clerk Billing plan/feature, and enforces its server-configured monthly run and token terms. BYOK is verified once and stored with the separate `AI_INTEGRATION_ENCRYPTION_KEY`; it is never charged by Namos. `OPENAI_AGENT_MODEL` is optional.
 - The event records are representative test data, but the agent run, tool results, proposal, approval, and resulting tasks are created through the real production code paths. No run or result is pre-baked.
 
 ## 3. Entry Point

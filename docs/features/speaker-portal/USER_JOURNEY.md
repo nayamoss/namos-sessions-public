@@ -16,11 +16,11 @@ API manipulation may supplement this journey but cannot replace it.
 The primary user is a returning, authenticated conference speaker managing their own public profile
 and files for a proposal they submitted.
 
-An authenticated organizer may enter the same portal through **Speaker portal** in the account menu,
-but unless that organizer account is itself linked to a speaker record by email, they see the same
-"no speaker profile found" notice a speaker would see if their account weren't linked — there is no
-picker or other mechanism to view the portal as a different speaker. The only supported identity
-boundary is the signed-in Clerk account matching a speaker record by verified email.
+An authenticated account that does not resolve to a speaker record for the event (including an
+organizer who is not themselves a speaker) sees a "No speaker profile found" notice instead of the
+portal, with no ability to browse or act as another speaker. There is no picker or impersonation
+path in the production app — Clerk-matched identity (by verified email) is the only way into the
+portal.
 
 ## 2. Starting state
 
@@ -63,8 +63,8 @@ access. Direct-route coverage is an additional SPA/auth test.
 
 1. **Resolve the speaker identity.** The user sees the shared dashboard shell and speaker navigation.
    The app matches the verified Clerk email to one speaker in the published event. A matched speaker
-   sees only their own record; there is no control anywhere in the portal to switch to another
-   speaker's data.
+   cannot view or act as any other speaker — there is no picker, and no client-supplied speaker id is
+   ever trusted.
 
 2. **Confirm the owned context.** On **Home**, the user sees their name, their task summary, and only
    submissions belonging to them. They open **Profile**.
@@ -141,7 +141,7 @@ visible success state by itself.
 | Failure | What the user must see | Preservation and recovery | Current state |
 |---|---|---|---|
 | Signed out or expired Clerk session | Clerk sign-in, followed by return to the portal | No other speaker is selected from an unverified identity; sign in with the verified submission email | Implemented at the route boundary; exact return path needs deployed QA |
-| Verified email does not match a speaker | No owned profile; a "no speaker profile found" notice, with no other speaker's data ever shown | A real speaker must correct/verify the Clerk email or ask the organizer to correct the speaker record | Implemented fail-closed |
+| Verified email does not match a speaker | A "No speaker profile found" notice; no picker, no fallback identity | A real speaker must correct/verify the Clerk email or ask the organizer to correct the speaker record | Implemented fail-closed |
 | Invalid or empty first/last name | A visible error saying first and last name are required | All entered profile values remain on screen; correct and select **Save** again | Implemented server-side and surfaced by the page |
 | Invalid profile link | A visible `<label> must be a valid http(s) URL.` error | Values remain on screen; correct the URL and retry | Implemented |
 | Biography exceeds 5,000 characters | Input is capped and the counter never reports a successful over-limit save | Shorten the biography and save | Implemented in the editor and server validation |

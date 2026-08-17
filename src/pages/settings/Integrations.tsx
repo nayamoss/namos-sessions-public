@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { Bot, FileText, Globe, Mail, Server, Table } from "lucide-react";
-import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { IntegrationCard, type IntegrationCardStatus } from "@/components/settings/IntegrationCard";
 import { EmailIntegrationForm } from "@/components/shared/EmailIntegrationForm";
@@ -130,7 +129,7 @@ export default function Integrations() {
   };
 
   return (
-    <AppLayout title="Integrations">
+    <>
       <div className="space-y-4">
         {error && (
           <p role="alert" className="text-sm text-destructive">
@@ -192,6 +191,9 @@ export default function Integrations() {
                 description="Publish confirmed sessions and speakers to a Sanity dataset."
                 status={sanityIntegration ? (sanityIntegration.status === "error" ? "error" : "connected") : "not_connected"}
                 detail={sanityIntegration?.config?.sanityDataset ? `Publishing to ${sanityIntegration.config.sanityDataset}` : undefined}
+                // Shipped but never verified end to end against a real Sanity project, so it
+                // stays inert rather than offering a connect flow nobody has proven works.
+                comingSoon
                 onOpen={() => setSanityModalOpen(true)}
               />
             </div>
@@ -250,7 +252,7 @@ export default function Integrations() {
           {event && <SanityIntegrationForm eventId={event.id} />}
         </DialogContent>
       </Dialog>
-    </AppLayout>
+    </>
   );
 }
 import { cardSurfaceClasses } from "@/components/ui/card";

@@ -9,7 +9,7 @@ const credentialEnvelope = v.object({
   tag: v.string(),
 });
 const provider = v.union(v.literal("notion"), v.literal("airtable"), v.literal("sanity"));
-const authMethod = v.union(v.literal("notion_internal_token"), v.literal("airtable_pat"), v.literal("sanity_token"));
+const authMethod = v.union(v.literal("notion_internal_token"), v.literal("notion_oauth"), v.literal("airtable_pat"), v.literal("airtable_oauth"), v.literal("sanity_token"));
 const direction = v.union(v.literal("pull"), v.literal("push"));
 const target = v.union(v.literal("speakers"), v.literal("submissions"), v.literal("public_program"));
 const integrationStatus = v.union(v.literal("connected"), v.literal("error"));
@@ -54,6 +54,7 @@ export const upsertInternal = internalMutation({
     config,
     credentialHint: v.string(),
     credentialEnvelope,
+    oauthExpiresAt: v.optional(v.number()),
     status: integrationStatus,
     lastError: v.optional(v.string()),
     lastSyncedAt: v.optional(v.number()),
@@ -73,6 +74,33 @@ export const upsertInternal = internalMutation({
     return ctx.db.insert("content_integrations", { ...args, createdAt: now, updatedAt: now });
   },
 });
+
+export const createOAuthStateInternal = internalMutation({ args: {
+  stateHash: v.string(), provider: v.union(v.literal("notion"), v.literal("airtable")), eventId: v.id("events"), userId: v.string(),
+  target: v.union(v.literal("speakers"), v.literal("submissions")), verifierEnvelope: v.optional(credentialEnvelope), expiresAt: v.number(),
+}, handler: (ctx, args) => ctx.db.insert("content_oauth_states", { ...args, createdAt: Date.now() }) });
+
+export const consumeOAuthStateInternal = internalMutation({ args: { stateHash: v.string() }, handler: async (ctx, args) => {
+  const state = await ctx.db.query("content_oauth_states").withIndex("by_stateHash", q => q.eq("stateHash", args.stateHash)).unique();
+  if (!state || state.expiresAt < Date.now()) { if (state) await ctx.db.delete(state._id); return null; }
+  await ctx.db.delete(state._id); return state;
+} });
+
+export const createOAuthPendingInternal = internalMutation({ args: {
+  pendingId: v.string(), provider: v.union(v.literal("notion"), v.literal("airtable")), eventId: v.id("events"), userId: v.string(),
+  target: v.union(v.literal("speakers"), v.literal("submissions")), credentialEnvelope, oauthExpiresAt: v.optional(v.number()), expiresAt: v.number(),
+}, handler: (ctx, args) => ctx.db.insert("content_oauth_pending", { ...args, createdAt: Date.now() }) });
+
+export const consumeOAuthPendingInternal = internalMutation({ args: { pendingId: v.string(), userId: v.string(), provider: v.union(v.literal("notion"), v.literal("airtable")) }, handler: async (ctx, args) => {
+  const pending = await ctx.db.query("content_oauth_pending").withIndex("by_pendingId", q => q.eq("pendingId", args.pendingId)).unique();
+  if (!pending || pending.userId !== args.userId || pending.provider !== args.provider || pending.expiresAt < Date.now()) { if (pending && pending.expiresAt < Date.now()) await ctx.db.delete(pending._id); return null; }
+  await ctx.db.delete(pending._id); return pending;
+} });
+
+export const getOAuthPendingInternal = internalQuery({ args: { pendingId: v.string(), userId: v.string(), provider: v.union(v.literal("notion"), v.literal("airtable")) }, handler: async (ctx, args) => {
+  const pending = await ctx.db.query("content_oauth_pending").withIndex("by_pendingId", q => q.eq("pendingId", args.pendingId)).unique();
+  return pending && pending.userId === args.userId && pending.provider === args.provider && pending.expiresAt >= Date.now() ? pending : null;
+} });
 
 export const removeInternal = internalMutation({
   args: { eventId: v.id("events"), provider },

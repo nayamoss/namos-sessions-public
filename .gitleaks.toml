@@ -1,0 +1,18 @@
+# Extends the bundled gitleaks ruleset — every default rule still applies.
+[extend]
+useDefault = true
+
+# Clerk publishable keys are public by design: they are compiled into the browser
+# bundle and are visible to anyone who loads the app. The `pk_` prefix is Clerk's
+# marker for exactly that. gitleaks' generic-api-key rule scores them on entropy
+# alone and cannot tell them apart from a real credential, so it blocks every
+# commit that touches wrangler.jsonc.
+#
+# This allowlist is deliberately narrow: it matches only the pk_live_/pk_test_
+# publishable prefixes. Clerk *secret* keys (sk_live_, sk_test_) are NOT matched
+# and are still caught, as is any other secret in these files.
+[[rules]]
+id = "generic-api-key"
+[rules.allowlist]
+regexTarget = "secret"
+regexes = ['''^pk_(live|test)_[A-Za-z0-9+/=_-]+$''']

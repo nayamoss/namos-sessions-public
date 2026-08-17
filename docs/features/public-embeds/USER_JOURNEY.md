@@ -20,7 +20,7 @@ inside the event website.
 ## Entry Point
 
 The organizer opens the application dashboard, finds the `CMS` section in the left sidebar, and
-selects `Embeds`. The organizer never needs to know or type `/cms/embeds`.
+selects `Embeds`. The organizer never needs to know or type the event-scoped CMS route.
 
 ## User Journey Steps
 
@@ -138,7 +138,7 @@ published agenda/session/speaker information in a mobile-friendly view.
 |---|---|---|---|
 | Select CMS > Embeds | React Router `Link` | Lazy-load list route | Embeds page and loading skeleton |
 | Search/switch tab | `setQuery` / `setStatus` | None; filter fetched `Embed[]` | Cards/count result changes immediately |
-| Add embed | `navigate('/cms/embeds/new')` | None | New editor opens with defaults |
+| Add embed | navigate to the active event's `/cms/embeds/new` | None | New editor opens with defaults |
 | Change setting | typed draft setter | Preview query/projection only | Preview rerenders, Unsaved changes appears |
 | Save | `publicEmbeds.save(draft)` | Validate event/tracks/fields; insert/patch `embeds` | Permanent route, success toast, code unlocked |
 | Copy code | `navigator.clipboard.writeText(snippet)` | None | Success toast or manual-copy recovery |

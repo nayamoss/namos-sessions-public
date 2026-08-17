@@ -33,10 +33,13 @@ import { PageContentSurface } from "@/components/shared/PageContentSurface";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { CommandPalette } from "@/components/CommandPalette";
 import { GlobalKeyboardShortcuts } from "@/components/GlobalKeyboardShortcuts";
+import { TourOverlay } from "@/components/tour/TourOverlay";
 import { EventSwitcher } from "@/components/EventSwitcher";
-import { OrgMenu } from "@/components/OrgMenu";
 import { useOptionalCurrentEvent } from "@/components/EventContext";
 import { RepoContext } from "@/data/repo";
+import { SettingsModalProvider } from "@/components/settings/SettingsModalContext";
+import { useOptionalSettingsModal } from "@/components/settings/SettingsModalContext";
+import { settingsTabFromPath } from "@/components/settings/settings-nav";
 
 export type DashboardNavItem = {
   to: string;
@@ -53,10 +56,7 @@ export type DashboardNavSection = {
 const navSections: DashboardNavSection[] = [
   {
     label: "Dashboard",
-    items: [
-      { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, end: true },
-      { to: "/analytics", label: "Analytics", icon: BarChart3 },
-    ],
+    items: [{ to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, end: true }],
   },
   // Ordered as the CFP lifecycle runs: open the call → collect submissions →
   // judge them → build the program. The old alphabet-soup order ("Forms",
@@ -78,7 +78,6 @@ const navSections: DashboardNavSection[] = [
       { to: "/program/communications", label: "Communications", icon: Mail },
       { to: "/program/availability", label: "Availability", icon: CalendarClock },
       { to: "/program/readiness", label: "Readiness", icon: ShieldCheck },
-      { to: "/program/agent", label: "Operations Agent", icon: Bot },
     ],
   },
   {
@@ -88,8 +87,17 @@ const navSections: DashboardNavSection[] = [
       { to: "/portals/tasks", label: "Speaker tasks", icon: ListTodo },
     ],
   },
+  // Running the event day-to-day, as opposed to configuring how it's set up
+  // (that split lives in "Settings" below).
   {
-    label: "Configure",
+    label: "Operations",
+    items: [
+      { to: "/analytics", label: "Analytics", icon: BarChart3 },
+      { to: "/program/agent", label: "Operations Agent", icon: Bot },
+    ],
+  },
+  {
+    label: "Settings",
     items: [
       { to: "/settings/event", label: "Event settings", icon: Settings2 },
       { to: "/settings/team", label: "Event team", icon: Users },
@@ -103,10 +111,13 @@ const navSections: DashboardNavSection[] = [
   },
 ];
 
+// Organization settings lives in the account menu at the bottom of the sidebar
+// (click the account name) instead of a standalone button up here — it was
+// sitting above the event switcher with no clear relationship to anything.
 function AdminWorkspaceMenus({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
   const repo = useContext(RepoContext);
   if (!repo?.organizers?.getMine || !repo.events?.listMine) return null;
-  return <><OrgMenu collapsed={collapsed} onNavigate={onNavigate} /><EventSwitcher collapsed={collapsed} onNavigate={onNavigate} /></>;
+  return <EventSwitcher collapsed={collapsed} onNavigate={onNavigate} />;
 }
 
 function Navigation({
@@ -119,6 +130,7 @@ function Navigation({
   sections: DashboardNavSection[];
 }) {
   const location = useLocation();
+  const settingsModal = useOptionalSettingsModal();
   const sidebar = useSidebarState();
   const collapsed = forceExpanded ? false : sidebar.collapsed;
   const [sectionState, setSectionState] = useState<Record<string, boolean>>(() => {
@@ -133,9 +145,15 @@ function Navigation({
     }
   });
 
+  // Accordion behavior: opening a section auto-collapses every other
+  // collapsible section, so only one nav group is expanded at a time.
   const toggleSection = (label: string) => {
     setSectionState((current) => {
-      const next = { ...current, [label]: current[label] === false };
+      const opening = current[label] !== true;
+      const next: Record<string, boolean> = {};
+      for (const section of sections) {
+        next[section.label] = section.label === label ? opening : false;
+      }
 
       try {
         window.localStorage.setItem("namos-sidebar-section-state", JSON.stringify(next));
@@ -156,12 +174,17 @@ function Navigation({
             ? location.pathname === item.to
             : location.pathname === item.to || location.pathname.startsWith(`${item.to}/`),
         );
-        const expanded = !isCollapsible || hasActiveItem || sectionState[section.label] !== false;
+        // Auto-collapsed by default: a section only opens if the user explicitly
+        // expanded it, or it holds the active route.
+        const expanded = !isCollapsible || hasActiveItem || sectionState[section.label] === true;
         const sectionId = `navigation-section-${section.label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+        // A lone item whose label repeats the section label (e.g. "Dashboard")
+        // needs no header above it — that would just print the name twice.
+        const showHeader = section.items.length > 1 || section.items[0]?.label !== section.label;
 
         return (
           <section key={section.label}>
-            {!collapsed && (
+            {!collapsed && showHeader && (
               <h2>
                 {isCollapsible ? (
                   <button
@@ -186,23 +209,41 @@ function Navigation({
             )}
             <div id={sectionId} hidden={!collapsed && !expanded} className={cn("space-y-1", !collapsed && "mt-1")}>
               {section.items.map((item) => {
+                const settingsTab = settingsTabFromPath(item.to);
                 const active = item.end
                   ? location.pathname === item.to
                   : location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
+                const className = cn(
+                  "touch-target group relative flex items-center rounded-md text-base font-medium transition-colors",
+                  collapsed ? "justify-center p-2" : "gap-3 px-3 py-2",
+                  active ? "bg-muted text-foreground" : "text-foreground/75 hover:bg-muted hover:text-foreground",
+                );
+                if (settingsTab && settingsModal) return (
+                  <button key={item.to} type="button" title={collapsed ? item.label : undefined} aria-label={item.label} onClick={() => { settingsModal.openSettings(settingsTab); onNavigate?.(); }} className={className}>
+                    <item.icon className="h-4 w-4 shrink-0" />
+                    {!collapsed && <span className="truncate">{item.label}</span>}
+                  </button>
+                );
                 return (
                   <Link
                     key={item.to}
                     to={item.to}
                     title={collapsed ? item.label : undefined}
                     aria-label={item.label}
+                    // Tour steps target persistent sidebar items, not the account-menu's
+                    // Settings/Speaker-portal links — those live inside a dropdown that's
+                    // already closed by the time the tour starts (menu closes before
+                    // startTour() runs), so a step aimed at them can never find its target
+                    // and the tour dead-ends with no way to advance or dismiss.
+                    data-tour={
+                      item.label === "Dashboard" ? "tour-dashboard"
+                      : item.label === "Speakers" ? "tour-program"
+                      : item.label === "Event settings" ? "tour-settings"
+                      : item.label === "Portal forms" ? "tour-portal"
+                      : undefined
+                    }
                     onClick={onNavigate}
-                    className={cn(
-                      "touch-target group relative flex items-center rounded-md text-base font-medium transition-colors",
-                      collapsed ? "justify-center p-2" : "gap-3 px-3 py-2",
-                      active
-                        ? "bg-muted text-foreground"
-                        : "text-foreground/75 hover:bg-muted hover:text-foreground",
-                    )}
+                    className={className}
                   >
                     <item.icon className="h-4 w-4 shrink-0" />
                     {!collapsed && <span className="truncate">{item.label}</span>}
@@ -437,6 +478,7 @@ export function AppLayout({
   const visibleNavSections = current ? navSections.map(section => ({ ...section, items: section.items.filter(item => (item.to !== "/program/sponsors" || current.sponsorsEnabled) && (item.to !== "/program/agent" || agentAccess)).map(item => ({ ...item, to: `/events/${current.slug}${item.to}` })) })) : repo ? [] : navSections;
 
   return (
+    <SettingsModalProvider>
     <DashboardLayout
       accountContext="admin"
       detail={detail}
@@ -462,7 +504,9 @@ export function AppLayout({
       {children}
       <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen} />
       <GlobalKeyboardShortcuts onOpenCommandPalette={openCommandPalette} />
+      <TourOverlay />
     </DashboardLayout>
+    </SettingsModalProvider>
   );
 }
 import { cardSurfaceClasses } from "@/components/ui/card";

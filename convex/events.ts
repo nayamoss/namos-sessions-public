@@ -29,6 +29,7 @@ const eventFields = {
   programPublishedAt: v.optional(v.number()),
   theme: v.optional(v.string()),
   logoStorageKey: v.optional(v.string()),
+  accentColor: v.optional(v.string()),
   backgroundStorageKey: v.optional(v.string()),
   exhibitorsEnabled: v.boolean(),
   sponsorsEnabled: v.boolean(),
@@ -128,6 +129,51 @@ export const listForPortal = query({
     );
   },
 });
+
+// Resolves which event this portal session is actually a speaker on, server-side.
+//
+// The client used to take `listForPortal()[0]` and ask only that single event for a speaker
+// record. That broke two ways, both reported live as "No speaker profile found" despite a real
+// record existing:
+//   1. Position — a speaker whose record lived on any event other than the first was never
+//      looked up at all. Organizers see every event in their org here, so [0] is arbitrary.
+//   2. Draft events — listForPortal filters to `published`, so a speaker invited to an event
+//      that hasn't been published yet had their event excluded from the candidate list entirely.
+// Scanning every reachable event and matching the caller's own verified email keeps the same
+// trust model as speakers.getMine (a verified email match is the portal credential) while no
+// longer depending on ordering or publication state.
+export const portalSpeakerIdentity = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await requireIdentity(ctx);
+    const organizationIds = await organizationIdsForUser(ctx, identity);
+    const [orgEvents, memberEvents] = await Promise.all([
+      organizationEvents(ctx, organizationIds),
+      eventMembershipEvents(ctx, identity),
+    ]);
+    const reachable = dedupeEvents([...orgEvents, ...memberEvents]);
+    const published = reachable.filter((event) => event.status === "published");
+    const email =
+      typeof identity.email === "string" && identity.emailVerified === true
+        ? identity.email.trim().toLowerCase()
+        : undefined;
+    if (email) {
+      for (const event of reachable) {
+        // Compare lowercased rather than using the by_event_email index directly: stored
+        // addresses are not normalized, so an index equality check would miss "Naya@..."
+        // records. Mirrors speakers.getMine exactly.
+        const speakers = await ctx.db
+          .query("speakers")
+          .withIndex("by_event", (q) => q.eq("eventId", event._id))
+          .collect();
+        const speaker = speakers.find((row) => row.email.trim().toLowerCase() === email);
+        if (speaker) return { event, speaker, publishedEvents: published };
+      }
+    }
+    return { event: null, speaker: null, publishedEvents: published };
+  },
+});
+
 export const get = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
@@ -162,6 +208,13 @@ export const listForApi = internalQuery({
 export const getForApi = internalQuery({
   args: { eventId: v.id("events") },
   handler: (ctx, args) => ctx.db.get(args.eventId),
+});
+
+// Used by the content-integration OAuth callback (convex/http.ts) to redirect back to the
+// right event's settings page — the callback only has eventId from the OAuth state, not a slug.
+export const getSlugInternal = internalQuery({
+  args: { eventId: v.id("events") },
+  handler: async (ctx, args) => (await ctx.db.get(args.eventId))?.slug ?? null,
 });
 
 export const save = mutation({

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { Check, ChevronDown, Copy, KeyRound } from "lucide-react";
-import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
 import { DetailPane } from "@/components/shared/DetailPane";
@@ -84,7 +83,7 @@ export default function ApiKeys() {
     </DetailPane>
   ) : undefined;
 
-  return <AppLayout title="API" detail={detail}><div className="space-y-4">
+  return <><div className="space-y-4">
     <p className="text-base text-muted-foreground">Create scoped tokens for the Namos Sessions API.</p>
     <ContentToolbar ariaLabel="API token actions" primaryAction={(loading || keys.length > 0) ? <Button variant="accent" size="sm" onClick={() => setPaneOpen(true)}><KeyRound />Create token</Button> : undefined} />
     {error && <p role="alert" className="text-sm text-destructive">{error} <button type="button" className="underline underline-offset-4" onClick={() => void load()}>Try again</button></p>}
@@ -93,6 +92,6 @@ export default function ApiKeys() {
       : <div className="space-y-3">{keys.map((key) => <article key={key.id} className={cardSurfaceClasses("default", "bg-muted/60 p-4")}><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div className="min-w-0"><h2 className="font-medium">{key.label}</h2><code className="mt-1 block truncate font-mono text-sm text-muted-foreground">{key.keyPrefix}••••••••</code><div className="mt-2 flex flex-wrap gap-1">{key.scopes.map((scope) => <Badge key={scope} variant="secondary">{scope}</Badge>)}</div><p className="mt-2 text-sm text-muted-foreground">Created {dateLabel(key.createdAt)} · {key.lastUsedAt ? `Last used ${dateLabel(key.lastUsedAt)}` : "Never used"}</p></div><Button type="button" variant="secondary" size="sm" onClick={() => setRevokeKey(key)}>Revoke</Button></div></article>)}</div>}
     <section className={cardSurfaceClasses("default", "bg-muted/60")}><button type="button" className="flex w-full items-center justify-between p-4 text-left font-medium" onClick={() => setAuditOpen((open) => !open)} aria-expanded={auditOpen}>Recent API activity <ChevronDown className={`h-4 w-4 transition-transform ${auditOpen ? "rotate-180" : ""}`} /></button>{auditOpen && <div className="px-4 pb-4"><ApiAuditLogTable eventId={event.id} /></div>}</section>
     <AlertDialog open={Boolean(revokeKey)} onOpenChange={(open) => { if (!open) setRevokeKey(undefined); }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Revoke {revokeKey?.label}?</AlertDialogTitle><AlertDialogDescription>This immediately stops the key from working. This can’t be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/85" disabled={saving} onClick={(event) => { event.preventDefault(); void revoke(); }}>{saving ? "Revoking…" : "Revoke"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
-  </div></AppLayout>;
+  </div>{detail}</>;
 }
 import { cardSurfaceClasses } from "@/components/ui/card";

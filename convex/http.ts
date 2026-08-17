@@ -31,6 +31,33 @@ function internalError(status: number, code: string) {
   return new Response(JSON.stringify({ error: code }), { status, headers: internalHeaders });
 }
 
+function oauthCallback(provider: "notion" | "airtable") {
+  return httpAction(async (ctx, request) => {
+    const url = new URL(request.url);
+    const code = url.searchParams.get("code");
+    const state = url.searchParams.get("state");
+    const error = url.searchParams.get("error");
+    const origin = process.env.PUBLIC_APP_ORIGIN?.replace(/\/$/, "");
+    if (!origin) return new Response("OAuth callback is not configured.", { status: 500 });
+    // Fallback path only used when we error out before resolving which event this OAuth flow
+    // belongs to (invalid state, exchange failure) — there is no event-scoped page to send the
+    // user back to in that case, so the generic events list is the best available landing spot.
+    const destination = new URL("/events", origin);
+    if (error || !code || !state) { destination.searchParams.set("content_oauth_error", error ?? "authorization_failed"); return Response.redirect(destination, 302); }
+    try {
+      const result = await ctx.runAction(internal.contentIntegrationsActions.completeOAuthCallback, { provider, state, code });
+      if (result.eventSlug) destination.pathname = `/events/${result.eventSlug}/settings/integrations`;
+      destination.searchParams.set("content_oauth", result.pendingId);
+      destination.searchParams.set("provider", provider);
+    } catch {
+      destination.searchParams.set("content_oauth_error", "authorization_failed");
+    }
+    return Response.redirect(destination, 302);
+  });
+}
+http.route({ path: "/oauth/notion/callback", method: "GET", handler: oauthCallback("notion") });
+http.route({ path: "/oauth/airtable/callback", method: "GET", handler: oauthCallback("airtable") });
+
 // Every route below scopes strictly to auth.eventId (the event the *token* was minted for),
 // never to a client-supplied eventId query param or path segment. A token only ever grants
 // access to the one event it was issued against — see convex/schema.ts's api_tokens comment

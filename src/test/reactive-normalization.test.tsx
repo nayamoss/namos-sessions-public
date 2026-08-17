@@ -23,6 +23,9 @@ function fixtureFor(operation: ReadOperation): unknown {
   if (operation === "events.list" || operation === "events.listMine" || operation === "events.listForPortal" || operation === "publicEmbeds.list") return [document];
   if (operation === "agentRuns.list") return [document];
   if (operation === "agentRuns.get") return { run: document, events: [document], proposals: [document] };
+  if (operation === "events.portalSpeakerIdentity") {
+    return { event: document, speaker: { ...document, firstName: "Grace", lastName: "Hopper" }, publishedEvents: [document] };
+  }
   if (operation === "events.get" || operation === "events.getBySlug" || operation === "emailIntegrations.status" || operation === "contentIntegrations.status" || operation === "organizers.getMine" || operation === "organizations.getMine" || operation === "profiles.getMine" || operation === "publicEmbeds.getAdmin") return document;
   if (genericDocumentLists.has(operation)) return [document];
   if (operation === "forms.list") return [{ ...document, internalName: "Internal CFP", status: "open" }];

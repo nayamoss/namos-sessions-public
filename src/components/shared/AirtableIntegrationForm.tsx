@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -20,10 +19,12 @@ export function AirtableIntegrationForm({ eventId }: { eventId: EventId }) {
   const repo = useRepo();
   const [integration, setIntegration] = useState<ContentIntegration | null>(null);
   const [loading, setLoading] = useState(true);
-  const [personalAccessToken, setPersonalAccessToken] = useState("");
   const [baseId, setBaseId] = useState("");
   const [tableName, setTableName] = useState("");
   const [target, setTarget] = useState<ContentIntegrationTarget>("speakers");
+  const pendingId = new URLSearchParams(window.location.search).get("provider") === "airtable" ? new URLSearchParams(window.location.search).get("content_oauth") : null;
+  const [bases, setBases] = useState<Array<{ id: string; name: string }>>([]);
+  const [tables, setTables] = useState<Array<{ id: string; name: string }>>([]);
   const [connecting, setConnecting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string>();
@@ -43,22 +44,15 @@ export function AirtableIntegrationForm({ eventId }: { eventId: EventId }) {
     }
   }, [eventId, repo]);
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => { if (!pendingId || integration) return; void repo.contentIntegrations.listAirtableOAuthBases({ eventId, pendingId }).then(setBases).catch((cause) => setError(friendlyErrorMessage(cause, "Could not load your Airtable bases."))); }, [eventId, integration, pendingId, repo]);
+  useEffect(() => { if (!pendingId || !baseId) return; void repo.contentIntegrations.listAirtableOAuthTables({ eventId, pendingId, baseId }).then(setTables).catch((cause) => setError(friendlyErrorMessage(cause, "Could not load tables for that base."))); }, [baseId, eventId, pendingId, repo]);
 
   const connect = async () => {
     setError(undefined);
     setConnecting(true);
     try {
-      await repo.contentIntegrations.connectAirtable({
-        eventId,
-        personalAccessToken: personalAccessToken.trim(),
-        baseId: baseId.trim(),
-        tableName: tableName.trim(),
-        target,
-      });
-      setPersonalAccessToken("");
-      setBaseId("");
-      setTableName("");
-      await load();
+      const result = await repo.contentIntegrations.startOAuth({ eventId, provider: "airtable", target });
+      window.location.assign(result.url);
     } catch (cause) {
       setError(friendlyErrorMessage(cause, "Could not connect to Airtable."));
     } finally {
@@ -100,25 +94,11 @@ export function AirtableIntegrationForm({ eventId }: { eventId: EventId }) {
   if (loading) return <p className="text-sm text-muted-foreground">Checking Airtable connection…</p>;
 
   if (!integration) {
-    const disabled = connecting || !personalAccessToken.trim() || !baseId.trim() || !tableName.trim();
+    const disabled = connecting;
+    const finish = async () => { if (!pendingId || !baseId || !tableName) return; setConnecting(true); setError(undefined); try { await repo.contentIntegrations.finishAirtableOAuth({ eventId, pendingId, baseId, tableName }); window.history.replaceState({}, "", "/settings/integrations"); await load(); } catch (cause) { setError(friendlyErrorMessage(cause, "Could not save the Airtable connection.")); } finally { setConnecting(false); } };
     return (
       <div className="space-y-6">
-        <p className="text-sm text-muted-foreground">
-          Create a personal access token at airtable.com/create/tokens with <code>data.records:read</code>
-          {" "}scope for the base below.
-        </p>
-        <div className="space-y-2">
-          <Label htmlFor="airtable-personal-access-token">Personal Access Token</Label>
-          <Input id="airtable-personal-access-token" type="password" autoComplete="off" placeholder="pat..." value={personalAccessToken} onChange={(change) => setPersonalAccessToken(change.target.value)} />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="airtable-base-id">Base ID</Label>
-          <Input id="airtable-base-id" autoComplete="off" placeholder="appXXXXXXXXXXXXXX" value={baseId} onChange={(change) => setBaseId(change.target.value)} />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="airtable-table-name">Table Name</Label>
-          <Input id="airtable-table-name" autoComplete="off" placeholder="Speakers" value={tableName} onChange={(change) => setTableName(change.target.value)} />
-        </div>
+        <p className="text-sm text-muted-foreground">Authorize Namos to read the Airtable bases you choose, then select a base and table to import.</p>
         <div className="space-y-2">
           <Label htmlFor="airtable-target">Import into</Label>
           <Select value={target} onValueChange={(next: ContentIntegrationTarget) => setTarget(next)}>
@@ -129,10 +109,8 @@ export function AirtableIntegrationForm({ eventId }: { eventId: EventId }) {
             </SelectContent>
           </Select>
         </div>
+        {pendingId ? <><div className="space-y-2"><Label htmlFor="airtable-base">Base</Label><Select value={baseId} onValueChange={(value) => { setBaseId(value); setTableName(""); }}><SelectTrigger id="airtable-base"><SelectValue placeholder="Choose a base" /></SelectTrigger><SelectContent>{bases.map((base) => <SelectItem key={base.id} value={base.id}>{base.name}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label htmlFor="airtable-table">Table</Label><Select value={tableName} onValueChange={setTableName} disabled={!baseId}><SelectTrigger id="airtable-table"><SelectValue placeholder="Choose a table" /></SelectTrigger><SelectContent>{tables.map((table) => <SelectItem key={table.id} value={table.name}>{table.name}</SelectItem>)}</SelectContent></Select></div><Button type="button" variant="accent" disabled={connecting || !baseId || !tableName} onClick={() => void finish()}>{connecting ? "Saving…" : "Connect base"}</Button></> : <Button type="button" variant="accent" disabled={disabled} onClick={() => void connect()}>{connecting ? "Redirecting…" : "Connect with Airtable"}</Button>}
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-        <Button type="button" variant="accent" disabled={disabled} onClick={() => void connect()}>
-          {connecting ? "Connecting…" : "Connect"}
-        </Button>
       </div>
     );
   }

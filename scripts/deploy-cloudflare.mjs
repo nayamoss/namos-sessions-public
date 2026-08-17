@@ -1,19 +1,41 @@
-import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { readWranglerConfig, requiredWranglerVars, validateWranglerConfig } from "./lib/validate-wrangler-config.mjs";
 
-const config = JSON.parse(readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8"));
-const required = ["VITE_CONVEX_URL", "VITE_CLERK_PUBLISHABLE_KEY"];
-const placeholders = ["your-project", "your-clerk-publishable-key"];
+const config = readWranglerConfig();
 const buildEnvironment = { ...process.env };
 
-for (const name of required) {
-  const value = process.env[name] || config.vars?.[name];
-  if (typeof value !== "string" || !value || placeholders.some((part) => value.includes(part))) {
-    console.error(`Configure ${name} in wrangler.jsonc before deploying to Cloudflare.`);
-    process.exit(1);
-  }
-  buildEnvironment[name] = value;
+// `npm run build` bundles the working tree, not a commit. Several agents and
+// sessions share this checkout, so a deploy run while someone else has edits in
+// flight ships their half-finished work to production — that has happened.
+// Refuse on a dirty tree. There is deliberately no override: an escape hatch
+// is the thing that gets reached for at exactly the wrong moment.
+function assertCleanTree() {
+  const status = spawnSync("git", ["status", "--porcelain"], { encoding: "utf8" });
+  // Not a git checkout, or git unavailable: nothing to verify, carry on.
+  if (status.error || status.status !== 0) return;
+
+  const dirty = status.stdout.split("\n").filter((line) => line.trim() !== "");
+  if (dirty.length === 0) return;
+
+  console.error(
+    `Refusing to deploy: ${dirty.length} uncommitted change(s) in the working tree.\n` +
+      "The build bundles the working tree, so this would ship whatever is currently\n" +
+      "checked out — including edits belonging to another session.\n",
+  );
+  for (const line of dirty.slice(0, 15)) console.error(`  ${line}`);
+  if (dirty.length > 15) console.error(`  …and ${dirty.length - 15} more`);
+  console.error(
+    "\nCommit or stash first, or deploy from a clean checkout:\n" +
+      "  git worktree add --detach /tmp/deploy origin/main",
+  );
+  process.exit(1);
 }
+
+assertCleanTree();
+
+validateWranglerConfig(config);
+
+for (const name of requiredWranglerVars) buildEnvironment[name] = process.env[name] || config.vars[name];
 
 function run(command, args, env = process.env) {
   const result = spawnSync(command, args, { env, stdio: "inherit", shell: process.platform === "win32" });

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
@@ -5,44 +7,37 @@ import { describe, expect, it } from "vitest";
 import { ClerkProvider } from "@clerk/clerk-react";
 import { FileText, Home } from "lucide-react";
 import { AppLayout, DashboardLayout } from "@/components/AppLayout";
-import { OrgMenu } from "@/components/OrgMenu";
 import { RepoContext, type Repository } from "@/data/repo";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
 import OrganizationSettings from "@/pages/settings/OrganizationSettings";
 import { TEST_CLERK_PUBLISHABLE_KEY } from "./clerk-test-key";
 
 describe("AppLayout", () => {
-  it("labels the organization shortcut by its destination, not the product name", async () => {
+  it("puts organization settings in the account menu, not a standalone sidebar button", () => {
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
-    const repo = {
-      organizers: {
-        getMine: async () => ({
-          id: "organizer-1",
-          userId: "user-1",
-          email: "owner@example.com",
-          role: "owner",
-          createdAt: 0,
-        }),
-      },
-    } as unknown as Repository;
-
-    await act(async () => {
-      root.render(
+    act(() => root.render(
+      <ClerkProvider publishableKey={TEST_CLERK_PUBLISHABLE_KEY}>
         <MemoryRouter>
-          <RepoContext.Provider value={repo}>
-            <OrgMenu collapsed={false} />
-          </RepoContext.Provider>
-        </MemoryRouter>,
-      );
-    });
+          <AppLayout title="Abstracts">
+            <p>Grid content</p>
+          </AppLayout>
+        </MemoryRouter>
+      </ClerkProvider>,
+    ));
 
-    const shortcut = container.querySelector('button[aria-label="Organization settings"]');
-    expect(shortcut).toHaveTextContent("Organization settings");
-    expect(shortcut).not.toHaveTextContent("Namos Sessions");
+    // No floating "Organization settings" button sitting above the event switcher.
+    expect(container.querySelector('aside button[aria-label="Organization settings"]')).not.toBeInTheDocument();
     act(() => root.unmount());
     container.remove();
+
+    const accountMenuSource = readFileSync(join(process.cwd(), "src/components/AccountMenu.tsx"), "utf8");
+    // The destination moved from a route link to the settings overlay in #231, so assert the
+    // entry point that exists now. What this test protects is unchanged: organization settings
+    // are reachable from the account menu and not from a floating sidebar button.
+    expect(accountMenuSource).toContain('openSettings("organization")');
+    expect(accountMenuSource).toContain("Organization settings");
   });
 
   it("keeps only the page title and notification control in shell chrome", () => {
@@ -78,8 +73,11 @@ describe("AppLayout", () => {
     expect(shellHeader.querySelector('input[aria-label="Search abstracts"]')).not.toBeInTheDocument();
     expect(content.textContent).toContain("Add Abstract");
     expect(content.querySelector('input[aria-label="Search abstracts"]')).toBeInTheDocument();
-    const dashboardSection = [...container.querySelectorAll("nav section")].find((section) => section.querySelector("h2")?.textContent === "Dashboard");
+    // Dashboard is a single link with no group header — printing "Dashboard" as both
+    // a section label and the item beneath it would just repeat the word twice.
+    const dashboardSection = [...container.querySelectorAll("nav section")].find((section) => section.querySelector('a[href="/dashboard"]'));
     const programSection = [...container.querySelectorAll("nav section")].find((section) => section.querySelector("h2")?.textContent === "Program");
+    expect(dashboardSection?.querySelector("h2")).not.toBeInTheDocument();
     expect(dashboardSection?.textContent).not.toContain("Speaker Tracking");
     expect(programSection?.querySelector('a[href="/program/speakers"]')).toHaveTextContent("Speakers");
     act(() => root.unmount());
@@ -121,6 +119,42 @@ describe("AppLayout", () => {
     expect(mobileNavigation).toBeInTheDocument();
     act(() => mobileNavigation.click());
     expect(document.querySelector('[role="dialog"]')).toHaveTextContent("Speaker portal");
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it("keeps collapsible nav sections auto-collapsed and lets only one stay open", () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    act(() => root.render(
+      <ClerkProvider publishableKey={TEST_CLERK_PUBLISHABLE_KEY}>
+        <MemoryRouter initialEntries={["/events"]}>
+          <AppLayout title="Abstracts">
+            <p>Grid content</p>
+          </AppLayout>
+        </MemoryRouter>
+      </ClerkProvider>,
+    ));
+
+    const sections = [...container.querySelectorAll("nav section")];
+    const programHeader = sections.find((section) => section.querySelector("h2")?.textContent === "Program")!;
+    const configureHeader = sections.find((section) => section.querySelector("h2")?.textContent === "Settings")!;
+    const programToggle = programHeader.querySelector("button")!;
+    const configureToggle = configureHeader.querySelector("button")!;
+
+    // No active route inside either section, so both start collapsed.
+    expect(programToggle).toHaveAttribute("aria-expanded", "false");
+    expect(configureToggle).toHaveAttribute("aria-expanded", "false");
+
+    act(() => programToggle.click());
+    expect(programHeader.querySelector("button")).toHaveAttribute("aria-expanded", "true");
+
+    // Opening Configure auto-collapses Program — only one section stays open.
+    act(() => configureHeader.querySelector("button")!.click());
+    expect(programHeader.querySelector("button")).toHaveAttribute("aria-expanded", "false");
+    expect(configureHeader.querySelector("button")).toHaveAttribute("aria-expanded", "true");
+
     act(() => root.unmount());
     container.remove();
   });

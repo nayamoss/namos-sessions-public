@@ -171,4 +171,21 @@ describe("CFP form builder", () => {
 
     await waitFor(() => expect(within(preview).getByRole("radio", { name: "Participant" })).toBeChecked());
   });
+
+  it("edits CFP appearance with a live accent preview and reset action", async () => {
+    const write = vi.fn().mockResolvedValue(undefined);
+    renderBuilder("draft", write);
+    await loaded();
+
+    fireEvent.click(screen.getByRole("button", { name: /Appearance/ }));
+    expect(await screen.findByRole("heading", { name: "Appearance" })).toBeInTheDocument();
+    expect(screen.getByText("Drop a logo here or click to upload")).toBeInTheDocument();
+
+    const hexInput = screen.getByRole("textbox", { name: "Accent color hex value" });
+    fireEvent.change(hexInput, { target: { value: "#FFFFFF" } });
+    expect(screen.getByRole("region", { name: "Submission page appearance preview" }).getAttribute("style")).toContain("--primary-foreground: 0 0% 0%");
+    fireEvent.blur(hexInput);
+    await waitFor(() => expect(write).toHaveBeenCalledWith("events.save", expect.objectContaining({ id: eventId, accentColor: "#FFFFFF" })));
+    expect(screen.getByRole("button", { name: "Reset to default" })).toBeInTheDocument();
+  });
 });

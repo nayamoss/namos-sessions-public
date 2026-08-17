@@ -12,6 +12,27 @@ import type { Event } from "@/data/types";
 type CurrentEvent = { event: Event };
 const EventContext = createContext<CurrentEvent | null>(null);
 
+// Remembers the last event a user actually visited, so signing back in drops
+// them straight into that event's dashboard instead of always stopping at the
+// bare events list — read by EventsEntry (App.tsx) on the next sign-in.
+export const LAST_EVENT_SLUG_KEY = "namos-last-event-slug";
+
+export function getLastVisitedEventSlug(): string | null {
+  try {
+    return window.localStorage.getItem(LAST_EVENT_SLUG_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function rememberVisitedEvent(slug: string) {
+  try {
+    window.localStorage.setItem(LAST_EVENT_SLUG_KEY, slug);
+  } catch {
+    // Best-effort — sign-in just falls back to the events list.
+  }
+}
+
 export function EventProvider({ children }: { children: ReactNode }) {
   const { eventSlug } = useParams<{ eventSlug: string }>();
   const repo = useRepo();
@@ -36,7 +57,10 @@ export function EventProvider({ children }: { children: ReactNode }) {
       .then((nextEvent) => {
         if (cancelled) return;
         if (!nextEvent) setError("Event not found.");
-        else setEvent(nextEvent);
+        else {
+          setEvent(nextEvent);
+          rememberVisitedEvent(nextEvent.slug);
+        }
       })
       .catch((cause) => {
         if (!cancelled)

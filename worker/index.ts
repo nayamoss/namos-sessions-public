@@ -1,11 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { handlePublicCfpSubmission } from "./public-cfp";
 
-// Replace clerk.your-project.example / your-project.convex.cloud / your-project.convex.site /
-// your-sentry-org.ingest.us.sentry.io below with your own Clerk, Convex, and (optional) Sentry
-// domains before deploying. These are client-visible by design — a CSP header ships to every
-// visitor's browser — so this is a config step, not a secret.
-const commonCsp = "default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self' https://clerk.your-project.example https://challenges.cloudflare.com https://browser.sentry-cdn.com; connect-src 'self' https://clerk.your-project.example https://your-project.convex.cloud https://your-project.convex.site https://your-sentry-org.ingest.us.sentry.io; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; frame-src https://clerk.your-project.example https://challenges.cloudflare.com; worker-src 'self' blob:";
+const commonCsp = "default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self' https://clerk.your-project.example https://challenges.cloudflare.com https://browser.sentry-cdn.com; connect-src 'self' https://clerk.your-project.example https://your-project.convex.cloud https://your-project.convex.site https://sentry-org.ingest.us.sentry.io; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; frame-src https://clerk.your-project.example https://challenges.cloudflare.com; worker-src 'self' blob:";
 
 function withSecurityHeaders(response: Response, pathname: string) {
   const headers = new Headers(response.headers);

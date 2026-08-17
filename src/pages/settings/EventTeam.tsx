@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { RotateCw, Trash2, UserRound } from "lucide-react";
 import { useUser } from "@clerk/clerk-react";
-import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
 import { DetailPane } from "@/components/shared/DetailPane";
@@ -342,9 +341,8 @@ export default function EventTeam() {
     await load();
   };
   return (
-    <AppLayout
-      title="Event team"
-      detail={
+    <>
+      {
         inviting ? (
           <InviteEventMember
             onClose={() => setInviting(false)}
@@ -352,7 +350,6 @@ export default function EventTeam() {
           />
         ) : undefined
       }
-    >
       <div className="space-y-5">
         <ContentToolbar
           ariaLabel="Event team controls"
@@ -468,7 +465,7 @@ export default function EventTeam() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </AppLayout>
+    </>
   );
 }
 import { cardSurfaceClasses } from "@/components/ui/card";

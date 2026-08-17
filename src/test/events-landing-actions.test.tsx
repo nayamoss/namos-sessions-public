@@ -5,6 +5,15 @@ import { describe, expect, it, vi } from "vitest";
 import { RepoContext, type Repository } from "@/data/repo";
 import type { Event, EventId } from "@/data/types";
 
+// Radix's DropdownMenu trigger relies on the Pointer Events API (hasPointerCapture /
+// releasePointerCapture) that jsdom doesn't implement — without these stubs the menu
+// never opens in this environment, even though it opens fine in a real browser.
+if (typeof Element !== "undefined" && !Element.prototype.hasPointerCapture) {
+  Element.prototype.hasPointerCapture = () => false;
+  Element.prototype.setPointerCapture = () => {};
+  Element.prototype.releasePointerCapture = () => {};
+}
+
 vi.mock("@/components/AppLayout", () => ({
   AppLayout: ({ title, children, detail }: { title: string; children: ReactNode; detail?: ReactNode }) => (
     <main>
@@ -55,12 +64,16 @@ describe("event row actions", () => {
   it("opens the guarded deletion dialog directly for a manageable draft", async () => {
     renderEvents([draftEvent]);
 
-    const deleteButton = await screen.findByRole("button", {
-      name: "Delete Takumi Talks Draft",
+    const menuTrigger = await screen.findByRole("button", {
+      name: "Actions for Takumi Talks Draft",
     });
-    expect(screen.getByRole("button", { name: "Duplicate Takumi Talks Draft" })).toBeVisible();
+    fireEvent.pointerDown(menuTrigger, { button: 0, ctrlKey: false, pointerType: "mouse" });
+    fireEvent.click(menuTrigger);
 
-    fireEvent.click(deleteButton);
+    const deleteItem = await screen.findByRole("menuitem", { name: "Delete" });
+    expect(screen.getByRole("menuitem", { name: "Duplicate" })).toBeVisible();
+
+    fireEvent.click(deleteItem);
 
     expect(await screen.findByRole("alertdialog")).toBeVisible();
     expect(screen.getByRole("heading", { name: "Delete Takumi Talks Draft?" })).toBeVisible();
@@ -75,9 +88,15 @@ describe("event row actions", () => {
   it("does not offer deletion for a published event", async () => {
     renderEvents([{ ...draftEvent, status: "published", name: "Published Talks" }]);
 
+    const menuTrigger = await screen.findByRole("button", {
+      name: "Actions for Published Talks",
+    });
+    fireEvent.pointerDown(menuTrigger, { button: 0, ctrlKey: false, pointerType: "mouse" });
+    fireEvent.click(menuTrigger);
+
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Duplicate Published Talks" })).toBeVisible(),
+      expect(screen.getByRole("menuitem", { name: "Duplicate" })).toBeVisible(),
     );
-    expect(screen.queryByRole("button", { name: "Delete Published Talks" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Delete" })).not.toBeInTheDocument();
   });
 });

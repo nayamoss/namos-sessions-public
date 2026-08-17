@@ -55,6 +55,12 @@ export function GlobalKeyboardShortcuts({
   }, []);
 
   useEffect(() => {
+    const openShortcuts = () => setHelpOpen(true);
+    window.addEventListener("namos:open-shortcuts", openShortcuts);
+    return () => window.removeEventListener("namos:open-shortcuts", openShortcuts);
+  }, []);
+
+  useEffect(() => {
     const clearPendingGoTo = () => {
       pendingGoTo.current = false;
       if (pendingTimer.current !== null) {

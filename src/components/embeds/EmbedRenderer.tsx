@@ -47,6 +47,43 @@ function SessionMeta({ session, embed, hideRoom }: { session: PublicEmbedSession
   );
 }
 
+// A schedule reads as a schedule when the times form a rail down the left and the
+// placement details settle against the right edge — the title column absorbs the
+// slack in between. Stacking all three left-aligned leaves the right half of a wide
+// embed empty, which is why this is a row and not a block.
+function SessionRow({ session, embed, headingLevel = "h3" }: { session: PublicEmbedSession; embed: PublicEmbedView; headingLevel?: "h2" | "h3" }) {
+  const Heading = headingLevel;
+  const hasTime = session.startTime !== undefined;
+  return (
+    <article className={cardSurfaceClasses("default", "bg-muted/60 p-4")}>
+      <div className="flex flex-col gap-2 sm:grid sm:grid-cols-[9.5rem_minmax(0,1fr)_minmax(0,10rem)_9rem_8rem] sm:items-baseline sm:gap-x-4 sm:gap-y-0">
+        <p className="text-sm font-medium tabular-nums text-muted-foreground sm:whitespace-nowrap">
+          {hasTime
+            ? `${formatTime(session.startTime, embed)}${session.endTime !== undefined ? `–${formatTime(session.endTime, embed)}` : ""}`
+            : ""}
+        </p>
+        <div className="min-w-0">
+          <Heading className="font-medium">{session.title}</Heading>
+        </div>
+        <p className="min-w-0 truncate text-sm text-muted-foreground">
+          {session.speakerNames?.join(", ")}
+        </p>
+        <p className="min-w-0 text-sm text-muted-foreground">
+          {session.roomName && (
+            <span className="inline-flex items-baseline gap-1">
+              <MapPin className="h-3.5 w-3.5 shrink-0 translate-y-0.5" />
+              <span className="truncate">{session.roomName}</span>
+            </span>
+          )}
+        </p>
+        <p className="min-w-0 truncate text-sm font-medium text-[var(--embed-primary)] sm:text-right">
+          {session.trackName}
+        </p>
+      </div>
+    </article>
+  );
+}
+
 export function EmbedRenderer({ embed }: { embed: PublicEmbedView }) {
   const [query, setQuery] = useState("");
   const [track, setTrack] = useState("all");
@@ -177,12 +214,12 @@ export function EmbedRenderer({ embed }: { embed: PublicEmbedView }) {
             {dayGroups.map((group) => (
               <section key={group.label} aria-labelledby={`day-${group.label}`}>
                 <h2 id={`day-${group.label}`} className="mb-2 text-sm font-semibold">{group.label}</h2>
-                <div className="space-y-2">{group.sessions.map((session) => <article key={session.key} className={cardSurfaceClasses("default", "bg-muted/60 p-3")}><h3 className="font-medium">{session.title}</h3><SessionMeta session={session} embed={embed} />{session.speakerNames?.length ? <p className="mt-2 text-sm text-muted-foreground">{session.speakerNames.join(", ")}</p> : null}</article>)}</div>
+                <div className="space-y-2">{group.sessions.map((session) => <SessionRow key={session.key} session={session} embed={embed} />)}</div>
               </section>
             ))}
           </div>
         ) : embed.view === "schedule_itinerary" ? (
-          <div className="space-y-5">{dayGroups.map((group) => <section key={group.label}><h2 className="mb-2 text-sm font-semibold">{group.label}</h2><div className="space-y-2">{group.sessions.map((session) => <article key={session.key} className={cardSurfaceClasses("default", "bg-muted/60 p-3")}><h3 className="font-medium">{session.title}</h3><SessionMeta session={session} embed={embed} />{session.speakerNames?.length ? <p className="mt-2 text-sm text-muted-foreground">{session.speakerNames.join(", ")}</p> : null}</article>)}</div></section>)}</div>
+          <div className="space-y-5">{dayGroups.map((group) => <section key={group.label}><h2 className="mb-2 text-sm font-semibold">{group.label}</h2><div className="space-y-2">{group.sessions.map((session) => <SessionRow key={session.key} session={session} embed={embed} />)}</div></section>)}</div>
         ) : embed.view === "schedule_grid" ? (
           <div className="space-y-6">
             {gridDayGroups.map((day) => (
@@ -227,7 +264,7 @@ export function EmbedRenderer({ embed }: { embed: PublicEmbedView }) {
             ))}
           </div>
         ) : (
-          <div className="space-y-2">{sessions.map((session) => <article key={session.key} className={cardSurfaceClasses("default", "bg-muted/60 p-3")}><h2 className="font-medium">{session.title}</h2><SessionMeta session={session} embed={embed} />{session.speakerNames?.length ? <p className="mt-2 text-sm text-muted-foreground">{session.speakerNames.join(", ")}</p> : null}</article>)}</div>
+          <div className="space-y-2">{sessions.map((session) => <SessionRow key={session.key} session={session} embed={embed} headingLevel="h2" />)}</div>
         )}
 
         {((speakerView && speakers.length === 0) || (!speakerView && sessions.length === 0)) && (

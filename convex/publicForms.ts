@@ -1,12 +1,24 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import type { MutationCtx } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { internalMutation } from "./_generated/server";
 import { createRoutingAssignments, resolveSubmissionRouting } from "./categoryRouting";
 import { mutation, query } from "./functions";
 import { findOrCreateSpeaker, validateForm } from "./submissions";
 import { assertCrossFieldLimits, assertParticipantRoleBounds } from "./publicFormValidation";
+
+async function safeLogoUrl(
+  ctx: QueryCtx,
+  storageKey: string | undefined,
+): Promise<string | undefined> {
+  if (!storageKey) return undefined;
+  try {
+    return (await ctx.storage.getUrl(storageKey as Id<"_storage">)) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export const listOpen = query({
   args: { eventSlug: v.string() },
@@ -60,8 +72,9 @@ export const get = query({
       }];
     });
 
+    const logoUrl = await safeLogoUrl(ctx, event.logoStorageKey);
     return {
-      event: { name: event.name, slug: event.slug, timezone: event.timezone, startDate: event.startDate, endDate: event.endDate },
+      event: { name: event.name, slug: event.slug, timezone: event.timezone, startDate: event.startDate, endDate: event.endDate, ...(logoUrl ? { logoUrl } : {}), ...(event.accentColor ? { accentColor: event.accentColor } : {}) },
       form: {
         externalTitle: form.externalTitle,
         pageHeading: form.pageHeading,

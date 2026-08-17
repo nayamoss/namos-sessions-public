@@ -25,6 +25,7 @@ export function IntegrationCard({
   status,
   detail,
   onOpen,
+  comingSoon = false,
 }: {
   icon: LucideIcon;
   name: string;
@@ -32,14 +33,19 @@ export function IntegrationCard({
   status: IntegrationCardStatus;
   detail?: string;
   onOpen: () => void;
+  /** Renders the card as an inert "Coming soon" tile — no modal, no connect path. */
+  comingSoon?: boolean;
 }) {
   const badge = badgeConfig[status];
   return (
     <button
       type="button"
-      onClick={onOpen}
+      onClick={comingSoon ? undefined : onOpen}
+      disabled={comingSoon}
+      aria-disabled={comingSoon || undefined}
       className={cn(
-        cardSurfaceClasses("default", "group relative flex flex-col items-start bg-muted/60 p-5 text-left transition-colors hover:bg-muted"),
+        cardSurfaceClasses("default", "group relative flex flex-col items-start bg-muted/60 p-5 text-left transition-colors"),
+        comingSoon ? "cursor-default opacity-60" : "hover:bg-muted",
       )}
     >
       <Card className="mb-4 flex h-11 w-11 items-center justify-center bg-background p-0">
@@ -48,15 +54,17 @@ export function IntegrationCard({
       <h3 className="mb-1 font-medium text-foreground">{name}</h3>
       <p className="mb-4 flex-1 text-sm text-muted-foreground">{description}</p>
       <div className="flex items-center gap-2">
-        <StatusBadge tone={badge.tone}>
-          {badge.label}
+        <StatusBadge tone={comingSoon ? "neutral" : badge.tone}>
+          {comingSoon ? "Coming soon" : badge.label}
         </StatusBadge>
-        {detail && <span className="text-xs text-muted-foreground">{detail}</span>}
+        {!comingSoon && detail && <span className="text-xs text-muted-foreground">{detail}</span>}
       </div>
-      <ArrowRight
-        className="absolute right-4 top-4 h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
-        aria-hidden="true"
-      />
+      {!comingSoon && (
+        <ArrowRight
+          className="absolute right-4 top-4 h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
+          aria-hidden="true"
+        />
+      )}
     </button>
   );
 }

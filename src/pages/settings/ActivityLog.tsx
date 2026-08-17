@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, ListChecks, RefreshCcw } from "lucide-react";
-import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
 import { StatCard } from "@/components/shared/StatCard";
@@ -39,7 +38,7 @@ export default function ActivityLog() {
   const errors24h = entries.filter((entry) => entry.status === "error" && entry.createdAt >= Date.now() - ONE_DAY_MS).length;
 
   return (
-    <AppLayout title="Activity">
+    <>
       <div className="space-y-4">
         <p className="text-base text-muted-foreground">
           Everything that happened on this event — agenda changes, comms sends, agent runs, notifications, and API requests, in one feed.
@@ -79,6 +78,6 @@ export default function ActivityLog() {
           </TabsContent>
         </Tabs>
       </div>
-    </AppLayout>
+    </>
   );
 }

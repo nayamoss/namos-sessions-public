@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { Save, Trash2 } from "lucide-react";
-import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -110,7 +109,7 @@ export default function Library() {
   };
 
   return (
-    <AppLayout title="Library">
+    <>
       <div className="space-y-4">
         <ContentToolbar
           ariaLabel="Library actions"
@@ -262,7 +261,7 @@ export default function Library() {
           </Card>
         )}
       </div>
-    </AppLayout>
+    </>
   );
 }
 import { cardSurfaceClasses } from "@/components/ui/card";

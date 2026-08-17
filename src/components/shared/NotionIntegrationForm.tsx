@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -24,9 +23,10 @@ export function NotionIntegrationForm({ eventId }: { eventId: EventId }) {
   const repo = useRepo();
   const [integration, setIntegration] = useState<ContentIntegration | null>(null);
   const [loading, setLoading] = useState(true);
-  const [token, setToken] = useState("");
-  const [databaseId, setDatabaseId] = useState("");
   const [target, setTarget] = useState<ContentIntegrationTarget>("speakers");
+  const pendingId = new URLSearchParams(window.location.search).get("provider") === "notion" ? new URLSearchParams(window.location.search).get("content_oauth") : null;
+  const [databases, setDatabases] = useState<Array<{ id: string; title: string }>>([]);
+  const [databaseId, setDatabaseId] = useState("");
   const [connecting, setConnecting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string>();
@@ -47,14 +47,19 @@ export function NotionIntegrationForm({ eventId }: { eventId: EventId }) {
   }, [eventId, repo]);
   useEffect(() => { void load(); }, [load]);
 
+  useEffect(() => {
+    if (!pendingId || integration) return;
+    void repo.contentIntegrations.listNotionOAuthDatabases({ eventId, pendingId })
+      .then(setDatabases)
+      .catch((cause) => setError(friendlyErrorMessage(cause, "Could not load your Notion databases.")));
+  }, [eventId, integration, pendingId, repo]);
+
   const connect = async () => {
     setError(undefined);
     setConnecting(true);
     try {
-      await repo.contentIntegrations.connectNotion({ eventId, notionToken: token.trim(), notionDatabaseId: databaseId.trim(), target });
-      setToken("");
-      setDatabaseId("");
-      await load();
+      const result = await repo.contentIntegrations.startOAuth({ eventId, provider: "notion", target });
+      window.location.assign(result.url);
     } catch (cause) {
       setError(friendlyErrorMessage(cause, "Could not connect to Notion."));
     } finally {
@@ -96,22 +101,17 @@ export function NotionIntegrationForm({ eventId }: { eventId: EventId }) {
   if (loading) return <p className="text-sm text-muted-foreground">Checking Notion connection…</p>;
 
   if (!integration) {
-    const disabled = connecting || !token.trim() || !databaseId.trim();
+    const disabled = connecting;
+    const finish = async () => {
+      if (!pendingId || !databaseId) return;
+      setConnecting(true); setError(undefined);
+      try { await repo.contentIntegrations.finishNotionOAuth({ eventId, pendingId, databaseId }); window.history.replaceState({}, "", "/settings/integrations"); await load(); }
+      catch (cause) { setError(friendlyErrorMessage(cause, "Could not save the Notion connection.")); }
+      finally { setConnecting(false); }
+    };
     return (
       <div className="space-y-6">
-        <p className="text-sm text-muted-foreground">
-          Create a Notion internal integration at notion.so/my-integrations, share your
-          database with it, then paste the token and database ID below.
-        </p>
-        <div className="space-y-2">
-          <Label htmlFor="notion-token">Internal Integration Token</Label>
-          <Input id="notion-token" type="password" autoComplete="off" placeholder="secret_..." value={token} onChange={(change) => setToken(change.target.value)} />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="notion-database-id">Database ID</Label>
-          <Input id="notion-database-id" autoComplete="off" placeholder="32-character Notion database ID" value={databaseId} onChange={(change) => setDatabaseId(change.target.value)} />
-          <p className="text-sm text-muted-foreground">Copy from the database URL — the 32-character segment before <code>?v=</code>.</p>
-        </div>
+        <p className="text-sm text-muted-foreground">Authorize Namos to access the Notion pages you choose, then select a database to import.</p>
         <div className="space-y-2">
           <Label htmlFor="notion-target">Import into</Label>
           <Select value={target} onValueChange={(next: ContentIntegrationTarget) => setTarget(next)}>
@@ -122,10 +122,8 @@ export function NotionIntegrationForm({ eventId }: { eventId: EventId }) {
             </SelectContent>
           </Select>
         </div>
+        {pendingId ? <><div className="space-y-2"><Label htmlFor="notion-database">Database</Label><Select value={databaseId} onValueChange={setDatabaseId}><SelectTrigger id="notion-database"><SelectValue placeholder="Choose a database" /></SelectTrigger><SelectContent>{databases.map((database) => <SelectItem key={database.id} value={database.id}>{database.title}</SelectItem>)}</SelectContent></Select></div><Button type="button" variant="accent" disabled={connecting || !databaseId} onClick={() => void finish()}>{connecting ? "Saving…" : "Connect database"}</Button></> : <Button type="button" variant="accent" disabled={disabled} onClick={() => void connect()}>{connecting ? "Redirecting…" : "Connect with Notion"}</Button>}
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-        <Button type="button" variant="accent" disabled={disabled} onClick={() => void connect()}>
-          {connecting ? "Connecting…" : "Connect"}
-        </Button>
       </div>
     );
   }

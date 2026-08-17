@@ -64,7 +64,7 @@
 - [x] T015: Wire `CriteriaEditor` into the plan form in `src/pages/program/Evaluation.tsx`; include `criteria` in the `savePlan` call.
 - [x] T016: Wire `ScorecardForm` into the reviewer queue in `src/pages/program/Evaluation.tsx`; add `criteriaScores` draft state beside the existing `scoreDraft` / `commentsDraft`; include it in the `save` call. Handle loading, error and empty states.
 - [x] T017: Show the weighted total in the organizer's submission grid; sort by it.
-- [x] T018 (partial): Verified end to end via the unit/integration test suite (`evaluation-scorecards.test.tsx` covers savePlan validation, save validation, the CriteriaEditor and ScorecardForm rendering/prefill/total, and the adapter contract) and by reading the wired-up component code. No authenticated Clerk browser session was available in this sandbox to also click through the live UI — signing in was out of scope for this agent. Someone with a signed-in session should still click through once before merge.
+- [x] T018 (partial): Verified end to end via the unit/integration test suite (`evaluation-scorecards.test.tsx` covers savePlan validation, save validation, the CriteriaEditor and ScorecardForm rendering/prefill/total, and the adapter contract) and by reading the wired-up component code. No authenticated Clerk browser session was available in this sandbox to also click through the live UI — signing in was out of scope for this agent. Someone with a signed-in session should still click through once before merge. **Done 2026-08-17 — see the production verification section at the bottom of this file.**
 
 ### Design System Check
 
@@ -92,3 +92,25 @@
 - [x] Plan with no criteria behaves exactly as before — no regressions (T020/T021)
 - [x] Weighted total verified by hand against a weighted example (`evaluation-score.test.ts`)
 - [x] Docs updated if the shape changed during implementation — merged cleanly with #57's `anonymized` field on rebase; both fields coexist on `evaluation_plans`
+
+---
+
+## Production verification — 2026-08-17 (closes the T018 gap)
+
+Clicked through as the signed-in owner on `app.your-project.example`, event *AI.Engineer Sandbox
+Event — NYC*, plan *Program committee review* — the gap T018 recorded honestly and left open.
+
+Observed in the reviewer queue:
+
+- **Per-criterion inputs, not a single score box.** `Technical depth (0–5 · weight 2) Required`
+  rendered as a star row, and `Reviewer notes Required` as a textarea.
+- **Prefill works.** Reopening an already-scored review restored 3/5 and the saved note text.
+- **Weighted total renders and recomputes live.** Shown as `Total 3.00 / 5`; clicking 5 stars moved
+  it to `Total 5.00 / 5` immediately, and clicking back to 3 returned it to `Total 3.00 / 5`.
+- **Hand-check of the formula** (FR-006): `(3 × 2) / (2 × 5) × 5 = 3.00`, and `(5 × 2) / (2 × 5) × 5
+  = 5.00`. The `text` criterion carries no weight and stays out of the total, as specified.
+- **Legacy path renders.** `Legacy score: 3/5` appeared above the scorecard on a review predating
+  the feature.
+
+Nothing was saved — the star changes were left as unsaved draft state, so no production row was
+written by this verification.

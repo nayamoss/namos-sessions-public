@@ -62,9 +62,14 @@ the feature from code or backend calls.
 - [x] T016: Build `EventsLanding` page + wire routes/nav entry
 - [x] T017: Build `OrganizationSettings` page + wire route
 - [x] T018: Build `EventTeamSettings` page + wire route + add nav item under "Configure"
-- [ ] T019: Execute every step in [`USER_JOURNEY.md`](./USER_JOURNEY.md) end-to-end through the running app, including multi-account access isolation and persistence after reload
+- [x] T019: Execute every step in [`USER_JOURNEY.md`](./USER_JOURNEY.md) end-to-end through the running app, including multi-account access isolation and persistence after reload
 
-T019 is pending: the local app reaches Clerk sign-in, but the in-app browser has no authenticated session and no connected Chrome session is available. Static verification and the complete automated suite pass.
+T019 passed on 2026-08-13 against the configured Clerk and development Convex deployment. The
+owner created and switched events, preserved slugged subpages across reload/copy, managed both
+team scopes, duplicated configuration with and without instance data, and proved event isolation
+with a disposable second identity. Browser verification found and corrected the admin-onboarding
+guard, an unscoped Abstracts field-library read, raw dashboard/Abstracts errors, and schema
+compatibility with legacy `invitedAt` membership rows; the corrected flows were retested.
 
 ## Task Dependencies
 

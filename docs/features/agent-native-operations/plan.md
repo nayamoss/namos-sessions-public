@@ -2,7 +2,7 @@
 
 ## Phase 1: Contracts, components, and schema
 
-- [ ] T001: Install `@convex-dev/agent@0.6.4`, `@convex-dev/workflow@0.4.5`, `ai@7.0.64`, and `@ai-sdk/openai@4.0.41`; commit package and lockfile changes together.
+- [ ] T001: Install the peer-compatible set `@convex-dev/agent@0.6.4`, `@convex-dev/workflow@0.4.5`, `ai@6.0.64`, and `@ai-sdk/openai@3.0.96`; commit package and lockfile changes together. (The originally researched AI SDK 7/provider 4 pair is rejected by Agent 0.6.4's AI SDK 6 peer contract.)
 - [ ] T002: Create `convex/convex.config.ts`; install Agent and Workflow components; run `npx convex dev` to generate component types.
 - [ ] T003: Add the exact `agent_runs`, `agent_run_events`, and `agent_action_proposals` tables/indexes from `design.md`; extend `onboarding_tasks.source` with `agent`. No backfill.
 - [ ] T004: Add exact `AgentRunId`, `AgentProposalId`, `AgentRunStatus`, `AgentRun`, `AgentRunEvent`, `AgentProposedTask`, `AgentTaskProposal`, and `AgentRunDetail` types to `src/data/types.ts`.
@@ -31,8 +31,8 @@
 
 ## Phase 4: Model loop, checkpoints, and observability
 
-- [ ] T021: Create `convex/agentRuntime.ts` (`"use node"`) using `Agent`, `WorkflowManager`, `openai.responses(process.env.OPENAI_AGENT_MODEL ?? "gpt-5.6-terra")`, and `stepCountIs(12)`.
-- [ ] T022: Write the Namos Sessions Operations Agent system prompt: event-scoped role, evidence requirement, concise output, untrusted record text, allowed tools, explicit prohibitions (AI scoring/decisions/sends/schedule writes/deletes/config/secrets/hidden reasoning), clarification behavior, completion rules.
+- [x] T021: Create `convex/agentRuntime.ts` (`"use node"`) using `Agent`, `WorkflowManager`, `openai.responses(process.env.OPENAI_AGENT_MODEL ?? "gpt-5.6-terra")`, and `stepCountIs(12)`.
+- [x] T022: Write the Namos Sessions Operations Agent system prompt: event-scoped role, evidence requirement, concise output, untrusted record text, allowed tools, explicit prohibitions (AI scoring/decisions/sends/schedule writes/deletes/config/secrets/hidden reasoning), clarification behavior, completion rules.
 - [ ] T023: Build compact context injection from the stored event: identity, IANA timezone/dates, current category counts, available capabilities, and recent run summary. Fetch detail through tools.
 - [ ] T024: Persist user-visible events before/after meaningful tool calls with name, redacted args summary, result count, duration, and errors. Never store API keys, Clerk tokens, provider credentials, full private payload dumps, or chain-of-thought.
 - [ ] T025: Implement execution segments: create/continue component thread; stop on clarification, proposal, completion, cancellation, max steps, or failure; checkpoint after every tool result; resume same run after reply/retry.
@@ -79,9 +79,9 @@
 
 ## Phase 6: Evaluation and real release verification
 
-- [ ] T036: Add a release guard that rejects product code containing stub agent handlers, pre-baked runs/results, no-op approvals, hard-coded success states, or placeholder wiring. Representative event records may be seeded, but agent outputs and mutations may not be.
-- [ ] T037: Build a versioned eval dataset with at least 25 event questions covering readiness categories, counts, event-timezone interpretation, empty/missing data, prompt injection, and event isolation. Execute it through the real agent runtime and real domain tools; score fact correctness, evidence links, tool choice, prohibited-action rate, steps, latency, and cost.
-- [ ] T038: Add a live-model verification command requiring `OPENAI_API_KEY`; make it a mandatory release check in the protected pre-release environment and record the model snapshot/config with results.
+- [x] T036: Add a release guard that rejects product code containing stub agent handlers, pre-baked runs/results, no-op approvals, hard-coded success states, or placeholder wiring. Representative event records may be seeded, but agent outputs and mutations may not be. (`npm run check:agent-no-stubs`)
+- [x] T037: Build and execute a versioned 25-case real-model dataset covering readiness categories, counts, event-timezone interpretation, empty/missing data, prompt injection, and event isolation. **2026-08-13 preview result:** 23/25 (92%, passing the 90% gate), 0% prohibited-action rate, 56 steps, 200,011 input / 7,587 output tokens, 11.3s average latency, and $0.491 estimated cost at the evaluator's configured rates. The two nominal misses reached the correct durable clarification/proposal checkpoints; evaluator accounting was corrected to recognize those terminal custom-tool events.
+- [x] T038: Add a live-model verification command requiring the protected preview environment and authenticated eval inputs; record the model snapshot/config with results. The command fails closed when its live credentials are absent and never substitutes fixtures.
 - [ ] T039: Run `npm run check` and lint; verify no feature code imports `convex/react`, no secret is bundled, and route chunks remain split.
 - [ ] T040: Execute `USER_JOURNEY.md` in a real browser against representative event records and the live configured model: new run → visible real tool progress → clarification/reply → brief → exact task proposal → approve through the real mutation → Tasks attribution → refresh/second session/event switch.
 - [ ] T041: Browser-test 375px and desktop, light/dark, keyboard-only, screen-reader labels/live regions, reduced motion, failed network/provider, cancellation, and stale approval.

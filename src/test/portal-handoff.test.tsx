@@ -19,7 +19,12 @@ const speakers: Speaker[] = [
 // getMine returns null and the explicit speaker list remains available.
 function stubRepo(ownSpeaker: Speaker | null = null): Repository {
   return {
-    events: { listForPortal: async () => [event] },
+    events: {
+      listForPortal: async () => [event],
+      // The provider resolves identity through this now, so a speaker on a later or
+      // still-draft event is found instead of only whatever listForPortal returned first.
+      portalSpeakerIdentity: async () => ({ event, speaker: ownSpeaker, publishedEvents: [event] }),
+    },
     speakers: { getMine: async () => ownSpeaker, list: async () => speakers },
   } as unknown as Repository;
 }

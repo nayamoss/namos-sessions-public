@@ -1,6 +1,8 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ClerkProvider } from "@clerk/clerk-react";
 import type { UserIdentity } from "convex/server";
@@ -240,6 +242,29 @@ function reviewerOnlyTransport() {
   };
   return { calls, transport: { read: (operation: ReadOperation) => invoke(operation), write: (operation: WriteOperation) => invoke(operation) } as unknown as DataTransport };
 }
+
+// T022. Organizer surfaces — the Abstracts grid, the assignment table, submission detail — must
+// keep showing every speaker name while a plan is blinded. Rather than re-render each of those
+// surfaces, this asserts the property that makes them safe by construction: the blinding flag is
+// readable in exactly two backend files, so no organizer-facing query can consult it even by
+// accident. If a third file starts reading `anonymized`, this fails and someone has to justify it.
+describe("blind review does not reach organizer surfaces", () => {
+  it("keeps the anonymized flag confined to the schema and the reviewer query", () => {
+    const convexDir = join(process.cwd(), "convex");
+    const readers = readdirSync(convexDir)
+      .filter((entry) => entry.endsWith(".ts"))
+      .filter((entry) => readFileSync(join(convexDir, entry), "utf8").includes("anonymized"));
+
+    expect(readers.sort()).toEqual(["evaluations.ts", "schema.ts"]);
+  });
+
+  it("resolves speaker names in the organizer submission path without consulting the flag", () => {
+    const submissionsSource = readFileSync(join(process.cwd(), "convex/submissions.ts"), "utf8");
+
+    expect(submissionsSource).toContain("speakerId");
+    expect(submissionsSource).not.toContain("anonymized");
+  });
+});
 
 describe("reviewer queue (adapters)", () => {
   it("reads the queue with no event scope and no organizer-gated call", async () => {

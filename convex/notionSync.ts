@@ -71,6 +71,16 @@ export async function verifyNotionDatabase(token: string, databaseId: string): P
   if (!response.ok) throw new Error(`Notion rejected the database lookup (${response.status}).`);
 }
 
+export type NotionDatabaseOption = { id: string; title: string };
+/** Lists databases selected for the public OAuth integration; no URL-derived ID is required. */
+export async function listNotionDatabases(token: string): Promise<NotionDatabaseOption[]> {
+  const response = await fetch(`${NOTION_API}/search`, { method: "POST", headers: notionHeaders(token), body: JSON.stringify({ filter: { property: "object", value: "database" }, page_size: 100 }) });
+  if (response.status === 401) throw new Error("Notion authorization expired. Reconnect Notion to continue.");
+  if (!response.ok) throw new Error(`Notion could not list databases (${response.status}).`);
+  const body = await response.json() as { results?: Array<{ id: string; title?: NotionRichText }> };
+  return (body.results ?? []).map((database) => ({ id: database.id, title: (database.title ?? []).map((part) => part.plain_text).join("").trim() || "Untitled database" }));
+}
+
 export async function queryNotionDatabase(
   token: string,
   databaseId: string,

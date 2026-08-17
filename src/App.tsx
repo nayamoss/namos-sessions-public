@@ -8,6 +8,8 @@ import {
   Route,
   Routes,
   useLocation,
+  useNavigate,
+  useParams,
 } from "react-router-dom";
 import {
   SignedIn,
@@ -20,7 +22,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { AppLayout } from "@/components/AppLayout";
-import { EventProvider } from "@/components/EventContext";
+import { EventProvider, getLastVisitedEventSlug } from "@/components/EventContext";
 import { PublicLayout } from "@/components/PublicLayout";
 import { AuthSplitLayout } from "@/pages/public/AuthSplitLayout";
 import { RepoProvider } from "@/data/provider";
@@ -28,10 +30,9 @@ import { useRepo } from "@/data/repo";
 import { resolveOnboardingStatus } from "@/lib/onboarding-status";
 import { AnalyticsRuntime } from "@/components/AnalyticsConsent";
 import { track } from "@/lib/analytics";
-const EventDetails = lazy(() => import("@/pages/settings/EventDetails"));
-const Library = lazy(() => import("@/pages/settings/Library"));
-const Integrations = lazy(() => import("@/pages/settings/Integrations"));
-const TaskTemplates = lazy(() => import("@/pages/settings/TaskTemplates"));
+// EventDetails/Library/Integrations/TaskTemplates are no longer standalone routed pages —
+// they render as tab panels inside SettingsModal instead (see settings-modal-refactor).
+import type { Event } from "@/data/types";
 const SubmissionForms = lazy(() => import("@/pages/program/SubmissionForms"));
 const Abstracts = lazy(() => import("@/pages/program/Abstracts"));
 const Agenda = lazy(() => import("@/pages/program/Agenda"));
@@ -62,15 +63,10 @@ const EmbedEditorPage = lazy(() => import("@/pages/cms/EmbedEditorPage"));
 const OnboardingWizard = lazy(
   () => import("@/pages/onboarding/OnboardingWizard"),
 );
-const ApiKeys = lazy(() => import("@/pages/settings/ApiKeys"));
-const ActivityLog = lazy(() => import("@/pages/settings/ActivityLog"));
 const ApiDocs = lazy(() => import("@/pages/public/ApiDocs"));
 const EventsLanding = lazy(() => import("@/pages/events/EventsLanding"));
-const OrganizationSettings = lazy(
-  () => import("@/pages/settings/OrganizationSettings"),
-);
-const EventTeam = lazy(() => import("@/pages/settings/EventTeam"));
 const ComponentShowcase = lazy(() => import("@/pages/settings/ComponentShowcase"));
+const Updates = lazy(() => import("@/pages/Updates"));
 
 function FeaturePlaceholder({ title }: { title: string }) {
   return (
@@ -203,6 +199,17 @@ function LegacySpeakersRedirect() {
   return <Navigate to="/events" replace />;
 }
 
+// Exported for a direct unit test — signing in should drop you where you left
+// off: the last event you actually visited, not always the bare list, as long
+// as that event still exists and you still have access to it. Falls back to
+// the old "only one event, skip the list" shortcut, then the list itself.
+export function resolveEventsEntryDestination(events: Pick<Event, "slug">[], lastVisitedSlug: string | null): string {
+  const lastVisited = lastVisitedSlug && events.some((event) => event.slug === lastVisitedSlug) ? lastVisitedSlug : undefined;
+  if (lastVisited) return `/events/${lastVisited}/dashboard`;
+  if (events.length === 1) return `/events/${events[0].slug}/dashboard`;
+  return "/events";
+}
+
 function EventsEntry() {
   const repo = useRepo();
   const [destination, setDestination] = useState<string>();
@@ -211,12 +218,7 @@ function EventsEntry() {
     void repo.events
       .listMine()
       .then((events) => {
-        if (!cancelled)
-          setDestination(
-            events.length === 1
-              ? `/events/${events.at(0)!.slug}/dashboard`
-              : "/events",
-          );
+        if (!cancelled) setDestination(resolveEventsEntryDestination(events, getLastVisitedEventSlug()));
       })
       .catch(() => {
         if (!cancelled) setDestination("/events");
@@ -230,6 +232,20 @@ function EventsEntry() {
   ) : (
     <p className="p-6 text-sm text-muted-foreground">Loading events…</p>
   );
+}
+
+function LegacySettingsEntry() {
+  const repo = useRepo();
+  const navigate = useNavigate();
+  const { tab = "event" } = useParams();
+  useEffect(() => {
+    let cancelled = false;
+    void repo.events.listMine().then((events) => {
+      if (!cancelled) navigate(events[0] ? `/events/${events[0].slug}/settings/${tab}` : "/events", { replace: true });
+    }).catch(() => { if (!cancelled) navigate("/events", { replace: true }); });
+    return () => { cancelled = true; };
+  }, [navigate, repo, tab]);
+  return <p className="p-6 text-sm text-muted-foreground">Loading settings…</p>;
 }
 
 export default function App() {
@@ -246,6 +262,7 @@ export default function App() {
             }
           >
             <Routes>
+              <Route path="/updates" element={<Updates />} />
               <Route
                 path="/sign-in/*"
                 element={
@@ -307,8 +324,9 @@ export default function App() {
                   <Route path="/events" element={<EventsLanding />} />
                   <Route
                     path="/settings/organization"
-                    element={<OrganizationSettings />}
+                    element={<EventsLanding />}
                   />
+                  <Route path="/settings/:tab" element={<LegacySettingsEntry />} />
                   <Route
                     path="/dashboard"
                     element={<Navigate to="/events" replace />}
@@ -363,27 +381,27 @@ export default function App() {
                   />
                   <Route
                     path="/settings/event"
-                    element={<Navigate to="/events" replace />}
+                    element={<LegacySettingsEntry />}
                   />
                   <Route
                     path="/settings/library"
-                    element={<Navigate to="/events" replace />}
+                    element={<LegacySettingsEntry />}
                   />
                   <Route
                     path="/settings/task-templates"
-                    element={<Navigate to="/events" replace />}
+                    element={<LegacySettingsEntry />}
                   />
                   <Route
                     path="/settings/email"
-                    element={<Navigate to="/events" replace />}
+                    element={<Navigate to="/settings/integrations" replace />}
                   />
                   <Route
                     path="/settings/api"
-                    element={<Navigate to="/events" replace />}
+                    element={<LegacySettingsEntry />}
                   />
                   <Route
                     path="/settings/activity"
-                    element={<Navigate to="/events" replace />}
+                    element={<LegacySettingsEntry />}
                   />
                   <Route
                     path="/events/:eventSlug"
@@ -421,18 +439,18 @@ export default function App() {
                     />
                     <Route path="portals/forms" element={<PortalForms />} />
                     <Route path="portals/tasks" element={<TasksAdmin />} />
-                    <Route path="settings/event" element={<EventDetails />} />
-                    <Route path="settings/team" element={<EventTeam />} />
-                    <Route path="settings/library" element={<Library />} />
+                    <Route path="settings/event" element={<DashboardHome />} />
+                    <Route path="settings/team" element={<DashboardHome />} />
+                    <Route path="settings/library" element={<DashboardHome />} />
                     <Route
                       path="settings/task-templates"
-                      element={<TaskTemplates />}
+                      element={<DashboardHome />}
                     />
                     {/* Organizer-only and useless signed out — every call it makes needs a
                     verified identity. */}
                     <Route
                       path="settings/integrations"
-                      element={<Integrations />}
+                      element={<DashboardHome />}
                     />
                     {/* Old URL kept working — bookmarks/links to the previous
                     single-provider page still land. */}
@@ -442,13 +460,13 @@ export default function App() {
                         <Navigate to="../settings/integrations" replace />
                       }
                     />
-                    <Route path="settings/api" element={<ApiKeys />} />
-                    <Route path="settings/activity" element={<ActivityLog />} />
-                    <Route path="settings/components" element={<ComponentShowcase />} />
+                    <Route path="settings/api" element={<DashboardHome />} />
+                    <Route path="settings/activity" element={<DashboardHome />} />
                     <Route path="cms/embeds" element={<EmbedsListPage />} />
                     <Route path="cms/embeds/new" element={<EmbedEditorPage />} />
                     <Route path="cms/embeds/:embedId" element={<EmbedEditorPage />} />
                   </Route>
+                  <Route path="/dev/components" element={<ComponentShowcase />} />
                 </Route>
               </Route>
               <Route

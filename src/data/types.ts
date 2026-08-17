@@ -17,7 +17,7 @@ export type SubmissionStatus =
   | "maybe" | "decline_queue" | "declined" | "withdrawn";
 
 export type EventStatus = "draft" | "published" | "archived";
-export interface Event { id: EventId; name: string; slug: string; type?: string; websiteUrl?: string; location?: string; timezone: string; startDate: number; endDate: number; description?: string; contactEmail?: string; logoFileId?: string; programPublishedAt?: number; theme?: string; logoStorageKey?: string; backgroundStorageKey?: string; exhibitorsEnabled: boolean; sponsorsEnabled: boolean; defaultOnboardingTemplateId?: string; status: EventStatus; }
+export interface Event { id: EventId; name: string; slug: string; type?: string; websiteUrl?: string; location?: string; timezone: string; startDate: number; endDate: number; description?: string; contactEmail?: string; logoFileId?: string; programPublishedAt?: number; theme?: string; logoStorageKey?: string; accentColor?: string; backgroundStorageKey?: string; exhibitorsEnabled: boolean; sponsorsEnabled: boolean; defaultOnboardingTemplateId?: string; status: EventStatus; }
 
 export type ApiScope = "events:read" | "submissions:read" | "submissions:write" | "speakers:read" | "agenda:read" | "tasks:read";
 export interface ApiKey { id: string; label: string; keyPrefix: string; scopes: ApiScope[]; createdAt: number; lastUsedAt?: number; revokedAt?: number; }
@@ -247,6 +247,7 @@ export interface AirtableConnectInput {
   tableName: string;
   target: ContentIntegrationTarget;
 }
+export interface OAuthStartInput { eventId: EventId; provider: "notion" | "airtable"; target: ContentIntegrationTarget; }
 export interface SanityConnectInput {
   eventId: EventId;
   projectId: string;
@@ -317,7 +318,7 @@ export interface PublicEmbed { eventName: string; eventTimezone: string; eventSt
 // administrative fields intentionally do not appear here.
 export interface PublicSubmissionField { key: string; label: string; type: string; required: boolean; maxChars?: number; options?: string[]; showIf?: { fieldKey: string; equals: string }; }
 export interface PublicSubmissionFormConfig {
-  event: { name: string; slug: string; timezone: string; startDate: number; endDate: number };
+  event: { name: string; slug: string; timezone: string; startDate: number; endDate: number; logoUrl?: string; accentColor?: string };
   form: {
     externalTitle: string; pageHeading: string; kind: SubmissionFormKind; collectParticipants: boolean;
     welcomeMessage?: string; showWelcomeMessage: boolean;

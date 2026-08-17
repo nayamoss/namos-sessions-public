@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { ClipboardList, MoreHorizontal, Trash2 } from "lucide-react";
-import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
 import { DataGrid, type DataGridColumn } from "@/components/shared/DataGrid";
@@ -223,7 +222,7 @@ export default function TaskTemplates() {
   ];
 
   return (
-    <AppLayout title="Task Templates">
+    <>
       <div className="space-y-4">
         <ContentToolbar
           ariaLabel="Task template actions"
@@ -461,7 +460,7 @@ export default function TaskTemplates() {
           </AlertDialogContent>
         </AlertDialog>
       </div>
-    </AppLayout>
+    </>
   );
 }
 import { cardSurfaceClasses } from "@/components/ui/card";
