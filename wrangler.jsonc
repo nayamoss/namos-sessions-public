@@ -1,16 +1,38 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "namos-sessions-public",
+  "main": "worker/index.ts",
   "compatibility_date": "2026-08-13",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "preview_urls": true,
   "assets": {
+    "binding": "ASSETS",
     "directory": "dist",
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
+    "run_worker_first": true
   },
+  "durable_objects": {
+    "bindings": [
+      { "name": "CFP_RATE_LIMITER", "class_name": "CfpRateLimiter" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1-cfp-rate-limiter", "new_sqlite_classes": ["CfpRateLimiter"] }
+  ],
   "vars": {
     "VITE_CONVEX_URL": "https://your-project.convex.cloud",
-    "VITE_CLERK_PUBLISHABLE_KEY": "pk_test_your-clerk-publishable-key"
+    "VITE_CLERK_PUBLISHABLE_KEY": "pk_test_your-clerk-publishable-key",
+    "VITE_TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
+    "CONVEX_SITE_URL": "https://your-project.convex.site",
+    "TURNSTILE_ALLOWED_HOSTNAMES": "your-domain.example",
+    "TURNSTILE_EXPECTED_ACTION": "cfp-submit",
+    "TURNSTILE_TEST_MODE": "true",
+    "CFP_RATE_LIMIT_IP_MAX": "30",
+    "CFP_RATE_LIMIT_IP_WINDOW_SECONDS": "600",
+    "CFP_RATE_LIMIT_FORM_MAX": "300",
+    "CFP_RATE_LIMIT_FORM_WINDOW_SECONDS": "3600",
+    "CFP_RATE_LIMIT_EMAIL_MAX": "5",
+    "CFP_RATE_LIMIT_EMAIL_WINDOW_SECONDS": "3600"
   }
 }
