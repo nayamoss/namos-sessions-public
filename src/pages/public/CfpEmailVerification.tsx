@@ -14,6 +14,13 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp
 
 type Status = "unverified" | "sending" | "code-sent" | "verifying" | "verified" | "error" | "session-conflict";
 
+/** Statuses in which the submitter may still change the address they are verifying.
+ *  session-conflict belongs here: the whole reason for the conflict may be that they
+ *  want to submit under a different email than the one this browser is signed in as. */
+export function emailEditable(status: Status) {
+  return status === "unverified" || status === "error" || status === "session-conflict";
+}
+
 export function useCfpEmailVerification(email: string) {
   const { isLoaded: signUpLoaded, signUp, setActive: setActiveFromSignUp } = useSignUp();
   const { isLoaded: signInLoaded, signIn, setActive: setActiveFromSignIn } = useSignIn();
@@ -92,6 +99,11 @@ export function useCfpEmailVerification(email: string) {
 
   const reset = () => { setStatus("unverified"); setCode(""); setError(undefined); };
 
+  const signOutAndEdit = async () => {
+    await clerk.signOut({ redirectUrl: window.location.pathname + window.location.search });
+    reset();
+  };
+
   const signOutAndRetry = async () => {
     // Clerk's signOut() redirects to "/" by default, which would bounce the submitter off the
     // CFP entirely (and straight into RequireAuth's sign-in redirect, since "/" is dashboard).
@@ -101,7 +113,7 @@ export function useCfpEmailVerification(email: string) {
     await sendCode();
   };
 
-  return { status, code, setCode, error, sendCode, verifyCode, reset, signOutAndRetry, verifiedEmail, conflictingEmail: user?.primaryEmailAddress?.emailAddress, ready: signUpLoaded && signInLoaded && authLoaded };
+  return { status, code, setCode, error, sendCode, verifyCode, reset, signOutAndRetry, signOutAndEdit, verifiedEmail, conflictingEmail: user?.primaryEmailAddress?.emailAddress, ready: signUpLoaded && signInLoaded && authLoaded };
 }
 
 function isClerkError(cause: unknown, code: string): boolean {
@@ -115,15 +127,18 @@ function clerkErrorMessage(cause: unknown, fallback: string): string {
 }
 
 export function CfpEmailVerificationPanel({ verification, emailValid }: { verification: ReturnType<typeof useCfpEmailVerification>; emailValid: boolean }) {
-  const { status, code, setCode, error, sendCode, verifyCode, reset, signOutAndRetry, conflictingEmail, ready } = verification;
+  const { status, code, setCode, error, sendCode, verifyCode, reset, signOutAndRetry, signOutAndEdit, conflictingEmail, ready } = verification;
 
   if (status === "verified") return <p role="status" className="text-sm">Email verified.</p>;
 
   if (status === "session-conflict") {
     return (
       <div className="space-y-3 rounded-md bg-muted p-4">
-        <p className="text-sm">This browser is already signed in{conflictingEmail ? ` as ${conflictingEmail}` : ""}. Sign out to submit under a different email.</p>
-        <Button type="button" variant="accent" size="sm" onClick={() => void signOutAndRetry()}>Sign out and send code</Button>
+        <p className="text-sm">This browser is already signed in{conflictingEmail ? ` as ${conflictingEmail}` : ""}. Sign out to keep going.</p>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="accent" size="sm" onClick={() => void signOutAndRetry()}>Sign out and send code</Button>
+          <Button type="button" variant="ghost" size="sm" onClick={() => void signOutAndEdit()}>Sign out and change email</Button>
+        </div>
       </div>
     );
   }

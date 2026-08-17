@@ -11,22 +11,27 @@ const day1 = Date.UTC(2026, 8, 15, 14);
 const day2 = Date.UTC(2026, 8, 16, 14);
 
 function item(partial: Partial<PublicEmbedAgendaItem> & { title: string; startTime: number }): PublicEmbedAgendaItem {
-  return { endTime: partial.startTime + 3_600_000, roomName: "Main Hall", speakerNames: [], ...partial };
+  return { sessionKey: partial.title.toLowerCase().replace(/\s/g, "-"), endTime: partial.startTime + 3_600_000, roomName: "Main Hall", speakers: [], ...partial };
 }
 
 const published: PublicEmbed = {
   eventName: "Test Conf",
   eventTimezone: timezone,
+  eventStartDate: day1,
+  eventEndDate: day2,
+  lastUpdatedAt: day1,
+  roomNames: ["Main Hall"],
+  trackNames: ["Agents", "Platforms"],
   // Exactly what `publicEmbeds.get` projects: published items and accepted speakers only.
   agenda: [
-    item({ title: "Zebra opener", startTime: day1, trackName: "Platforms", speakerNames: ["Ada Lovelace"] }),
+    item({ title: "Zebra opener", startTime: day1, trackName: "Platforms", speakers: [{ speakerKey: "speaker-ada", name: "Ada Lovelace" }] }),
     item({ title: "Agents deep dive", startTime: day1 + 3_600_000, trackName: "Agents" }),
     item({ title: "Closing notes", startTime: day2, trackName: "Platforms" }),
   ],
-  speakers: [{ name: "Ada Lovelace", bio: "<p>First programmer &amp; computing pioneer.</p>", links: [] }],
+  speakers: [{ speakerKey: "speaker-ada", name: "Ada Lovelace", bio: "<p>First programmer &amp; computing pioneer.</p>", links: [] }],
 };
 
-const empty: PublicEmbed = { eventName: "Test Conf", eventTimezone: timezone, agenda: [], speakers: [] };
+const empty: PublicEmbed = { eventName: "Test Conf", eventTimezone: timezone, eventStartDate: day1, eventEndDate: day2, lastUpdatedAt: day1, roomNames: [], trackNames: [], agenda: [], speakers: [] };
 
 let root: Root | undefined;
 let container: HTMLDivElement | undefined;
@@ -82,6 +87,23 @@ describe("list of sessions embed", () => {
   it("shows its own empty state", async () => {
     const { element } = await renderFeed("sessions", empty);
     expect(element.textContent).toContain("The session catalog has not been published yet.");
+  });
+
+  it("uses collision-safe session keys when title and start time are identical", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const collisions = {
+      ...published,
+      agenda: [
+        item({ sessionKey: "session-one", title: "Repeated session", startTime: day1, trackName: "Agents" }),
+        item({ sessionKey: "session-two", title: "Repeated session", startTime: day1, trackName: "Agents" }),
+      ],
+    };
+
+    const { element } = await renderFeed("sessions", collisions);
+
+    expect(element.querySelectorAll("article")).toHaveLength(2);
+    expect(error.mock.calls.some(call => call.some(value => String(value).includes("same key")))).toBe(false);
+    error.mockRestore();
   });
 });
 

@@ -1,3 +1,6 @@
+import { v } from "convex/values";
+import { internalMutation } from "./_generated/server";
+
 type TemplateFieldType = "text" | "wysiwyg" | "dropdown" | "multiselect" | "email" | "phone" | "file" | "date" | "number";
 type TemplateKind = "abstract" | "session" | "contact" | "group" | "submission_task";
 
@@ -230,3 +233,25 @@ export const FORM_TEMPLATES: ServerFormTemplate[] = [
     portalFormSettings: { sendConfirmationEmail: true },
   },
 ];
+
+// Find-or-create a lightweight default submission form for a content-integration import
+// (Notion today; Airtable/Sanity reuse this the same way). Mirrors the inline
+// `getImportForm` pattern in `speakers.ts:bulkImport` — same minimal shape, just named per
+// the calling integration rather than "Imported from CSV" — rather than routing through the
+// full `FORM_TEMPLATES` catalog + field-definition machinery, which is scoped to CFP/portal
+// form building, not a one-off import target.
+export const ensureImportForm = internalMutation({
+  args: { eventId: v.id("events"), internalName: v.string() },
+  handler: async (ctx, args) => {
+    const forms = await ctx.db.query("submission_forms").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect();
+    const existing = forms.find((form) => form.internalName === args.internalName);
+    if (existing) return existing._id;
+    const now = Date.now();
+    return ctx.db.insert("submission_forms", {
+      eventId: args.eventId, internalName: args.internalName, externalTitle: args.internalName, pageHeading: args.internalName, version: 1,
+      kind: "session", collectParticipants: false, showWelcomeMessage: false, sections: [], participantRoles: [], crossFieldLimits: [], routingRules: [],
+      allowMultipleDrafts: false, autoRedirectToPortal: false, reminderEmailEnabled: false, adminUserIds: [], notifyAdminsOnNew: [], notifyAdminsOnUpdate: [], sendSubmitterConfirmation: false,
+      status: "closed", createdAt: now, updatedAt: now,
+    });
+  },
+});

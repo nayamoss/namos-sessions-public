@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { GripVertical, Plus, Trash2 } from "lucide-react";
+import { GripVertical, Trash2 } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { cardSurfaceClasses } from "@/components/ui/card";
 import { RichTextEditor } from "@/components/editor/RichTextEditor";
+import {
+  CfpPreviewPanel,
+  type CfpPreviewDraft,
+} from "@/components/forms/CfpPreviewPanel";
 import {
   RoutingRulesEditor,
   type RoutingFieldOption,
@@ -34,6 +38,7 @@ import type {
   FieldDefinition,
   Sponsor,
   SubmissionForm,
+  SubmissionFormStatus,
   SubmissionRoutingRule,
   Tag,
   Track,
@@ -100,6 +105,14 @@ type StoredField = FieldDefinition & {
   locked?: boolean;
   maxChars?: number;
   options?: string[];
+};
+
+const PREVIEW_STORAGE_KEY = "namos-cfp-builder-preview";
+
+const statusLabels: Record<SubmissionFormStatus, string> = {
+  draft: "Draft — not accepting submissions",
+  open: "Open — accepting submissions",
+  closed: "Closed — not accepting submissions",
 };
 
 const steps: WizardStep[] = [
@@ -260,7 +273,7 @@ function FieldRows({
           </p>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={add}>
-          <Plus /> Add field
+          Add field
         </Button>
       </div>
       <div className="space-y-2">
@@ -549,7 +562,8 @@ export default function SubmissionFormBuilder() {
   // save silently reverts an existing form to "new form" defaults: an open,
   // live form flips to draft (pulling it from the public CFP), reminder
   // emails get disabled, and admin notification recipients are wiped.
-  const [existingStatus, setExistingStatus] = useState<"draft" | "open" | "closed">("draft");
+  const [existingStatus, setExistingStatus] = useState<SubmissionFormStatus>("draft");
+  const [statusSaving, setStatusSaving] = useState(false);
   const [existingReminderEmailEnabled, setExistingReminderEmailEnabled] = useState(false);
   const [existingAdminUserIds, setExistingAdminUserIds] = useState<string[]>([]);
   const [existingNotifyAdminsOnNew, setExistingNotifyAdminsOnNew] = useState<string[]>([]);
@@ -607,6 +621,12 @@ export default function SubmissionFormBuilder() {
   const [availableSponsors, setAvailableSponsors] = useState<Sponsor[]>([]);
   const [confirmationEnabled, setConfirmationEnabled] = useState(true);
   const [saved, setSaved] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(() => {
+    try { return localStorage.getItem(PREVIEW_STORAGE_KEY) !== "false"; } catch { return true; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(PREVIEW_STORAGE_KEY, String(previewOpen)); } catch { /* the builder still works without storage */ }
+  }, [previewOpen]);
   const isHeadingTooLong = pageHeading.length > 15;
   const current = steps[activeStep];
   const publicUrl = event && formId ? `/submit/${event.slug}/${formId}` : "#";
@@ -930,8 +950,114 @@ export default function SubmissionFormBuilder() {
     }
   };
 
+  // Everything the public CFP renders, derived from live wizard state rather than the
+  // saved record — the preview has to move on keystroke, and has to work on a form that
+  // has never been saved. Field ids follow the builder's `recordId ?? id` convention so
+  // conditional fields and combined-character limits resolve the same way they will
+  // once persisted.
+  const previewDraft = useMemo<CfpPreviewDraft>(() => ({
+    eventName: event?.name ?? "Your event",
+    eventStartDate: event?.startDate,
+    eventEndDate: event?.endDate,
+    timezone: event?.timezone,
+    externalTitle,
+    pageHeading,
+    welcomeMessage,
+    showWelcomeMessage,
+    abstractSection,
+    participantSection,
+    abstractFields,
+    participantFields,
+    collectParticipants,
+    roles,
+    closeDate,
+    submissionLimit,
+    submissionLimitValue,
+    successMessage,
+    confirmationEnabled,
+    autoRedirectToPortal: autoRedirect,
+    crossFieldLimits:
+      crossFieldEnabled && crossFieldRule.fieldIds.length
+        ? [{
+            id: crossFieldRule.id || "printed-program",
+            label: crossFieldRule.label.trim() || "Combined character limit",
+            fieldIds: crossFieldRule.fieldIds,
+            maxCombinedChars: Number(crossFieldRule.maxCombinedChars) || 0,
+            perParticipant: crossFieldRule.perParticipant,
+          }]
+        : [],
+  }), [
+    abstractFields,
+    abstractSection,
+    autoRedirect,
+    closeDate,
+    collectParticipants,
+    confirmationEnabled,
+    crossFieldEnabled,
+    crossFieldRule,
+    event,
+    externalTitle,
+    pageHeading,
+    participantFields,
+    participantSection,
+    roles,
+    showWelcomeMessage,
+    submissionLimit,
+    submissionLimitValue,
+    successMessage,
+    welcomeMessage,
+  ]);
+
+  // Opening the CFP is what makes the public URL reachable, so it is its own explicit
+  // action rather than a side effect of Save — and it round-trips through the dedicated
+  // `forms.setStatus` mutation, which never rides along with an unrelated field edit.
+  const changeStatus = async (nextStatus: SubmissionFormStatus) => {
+    if (!event || !formId) return;
+    setStatusSaving(true);
+    setLoadError(undefined);
+    try {
+      setExistingStatus(await repo.forms.setStatus({ id: formId, eventId: event.id, status: nextStatus }));
+    } catch (cause) {
+      setLoadError(
+        cause instanceof Error
+          ? cause.message
+          : "Could not change this form's status.",
+      );
+    } finally {
+      setStatusSaving(false);
+    }
+  };
+
   const headerActions = (
     <>
+      <span
+        className="text-xs text-muted-foreground"
+        aria-label={`Form status: ${statusLabels[existingStatus]}`}
+      >
+        {statusLabels[existingStatus]}
+      </span>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={!event || !formId || statusSaving}
+        onClick={() => void changeStatus(existingStatus === "open" ? "closed" : "open")}
+      >
+        {statusSaving
+          ? "Saving…"
+          : existingStatus === "open"
+            ? "Close submissions"
+            : "Open submissions"}
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        aria-pressed={previewOpen}
+        onClick={() => setPreviewOpen((open) => !open)}
+      >
+        {previewOpen ? "Hide preview" : "Show preview"}
+      </Button>
       <Button asChild variant="outline" size="sm" disabled={!event || !formId}>
         <Link to={publicUrl}>View form</Link>
       </Button>
@@ -1009,9 +1135,11 @@ export default function SubmissionFormBuilder() {
           <div className="grid gap-4 md:grid-cols-2">
             <FormField
               label="Internal form name"
+              htmlFor="form-internal-name"
               hint={`${internalName.length}/255`}
             >
               <Input
+                id="form-internal-name"
                 maxLength={255}
                 value={internalName}
                 onChange={(event) => setInternalName(event.target.value)}
@@ -1019,9 +1147,11 @@ export default function SubmissionFormBuilder() {
             </FormField>
             <FormField
               label="External form title"
+              htmlFor="form-external-title"
               hint={`${externalTitle.length}/255`}
             >
               <Input
+                id="form-external-title"
                 maxLength={255}
                 value={externalTitle}
                 onChange={(event) => setExternalTitle(event.target.value)}
@@ -1231,7 +1361,7 @@ export default function SubmissionFormBuilder() {
                   ])
                 }
               >
-                <Plus /> Add role
+                Add role
               </Button>
               <FieldRows
                 title="Participant"
@@ -1461,15 +1591,31 @@ export default function SubmissionFormBuilder() {
         {loading ? (
           <SkeletonList rows={4} label="Loading submission form…" />
         ) : (
-          <WizardShell
-            steps={steps}
-            activeStep={activeStep}
-            onStepChange={setActiveStep}
-            onBack={() => setActiveStep(Math.max(0, activeStep - 1))}
-            onNext={next}
+          <div
+            className={
+              previewOpen
+                ? "grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(380px,0.85fr)] xl:items-start"
+                : "grid gap-4"
+            }
           >
-            {content}
-          </WizardShell>
+            <WizardShell
+              steps={steps}
+              // Side by side, the wizard's own step rail would eat the width the preview
+              // needs, so it stacks above the editor once the preview is showing.
+              layout={previewOpen ? "stack" : "row"}
+              activeStep={activeStep}
+              onStepChange={setActiveStep}
+              onBack={() => setActiveStep(Math.max(0, activeStep - 1))}
+              onNext={next}
+            >
+              {content}
+            </WizardShell>
+            {previewOpen && (
+              <div className="xl:sticky xl:top-4 xl:max-h-[calc(100vh-7rem)] xl:overflow-hidden">
+                <CfpPreviewPanel draft={previewDraft} wizardStepId={current.id} />
+              </div>
+            )}
+          </div>
         )}
       </div>
     </AppLayout>

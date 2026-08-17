@@ -2,19 +2,21 @@ import "@testing-library/jest-dom";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-Object.defineProperty(window, "matchMedia", {
-  writable: true,
-  value: (query: string) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: () => {},
-    removeListener: () => {},
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    dispatchEvent: () => {},
-  }),
-});
+if (typeof window !== "undefined") {
+  Object.defineProperty(window, "matchMedia", {
+    writable: true,
+    value: (query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => {},
+    }),
+  });
+}
 
 class ResizeObserverMock implements ResizeObserver {
   observe() {}
@@ -22,16 +24,20 @@ class ResizeObserverMock implements ResizeObserver {
   disconnect() {}
 }
 
-Object.defineProperty(window, "ResizeObserver", {
-  writable: true,
-  value: ResizeObserverMock,
-});
+if (typeof window !== "undefined") {
+  Object.defineProperty(window, "ResizeObserver", {
+    writable: true,
+    value: ResizeObserverMock,
+  });
+}
 Object.defineProperty(globalThis, "ResizeObserver", {
   writable: true,
   value: ResizeObserverMock,
 });
 
-Object.defineProperty(Element.prototype, "scrollIntoView", {
-  writable: true,
-  value: () => {},
-});
+if (typeof Element !== "undefined") {
+  Object.defineProperty(Element.prototype, "scrollIntoView", {
+    writable: true,
+    value: () => {},
+  });
+}

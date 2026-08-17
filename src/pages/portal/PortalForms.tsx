@@ -6,6 +6,7 @@ import { useCurrentEvent } from "@/components/EventContext";
 import { TemplateGallery } from "@/components/forms/TemplateGallery";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
 import { FormField } from "@/components/shared/FormField";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -15,7 +16,7 @@ import {
 } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { SkeletonList } from "@/components/shared/SkeletonList";
-import { StatusTabs } from "@/components/shared/StatusTabs";
+import { FilterMenu } from "@/components/shared/StatusTabs";
 import { WizardShell } from "@/components/shared/WizardShell";
 import { useRepo } from "@/data/repo";
 import type { Event, FieldDefinition, SubmissionForm } from "@/data/types";
@@ -125,7 +126,7 @@ function FieldLibrary({
     <Popover>
       <PopoverTrigger asChild>
         <Button type="button" variant="outline" size="sm">
-          <Plus /> Add field
+          Add field
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 space-y-3 p-3">
@@ -609,7 +610,7 @@ export default function PortalForms() {
     );
   if (showGallery)
     return (
-      <AppLayout title="Forms">
+      <AppLayout title="Portal forms">
         <TemplateGallery
           appliesTo="portal"
           onSelect={selectTemplate}
@@ -622,7 +623,7 @@ export default function PortalForms() {
       </AppLayout>
     );
   return (
-    <AppLayout title="Forms">
+    <AppLayout title="Portal forms">
       <div className="space-y-3">
         {error && (
           <p role="alert" className="text-sm text-destructive">
@@ -632,18 +633,13 @@ export default function PortalForms() {
         {loading ? (
           <SkeletonList rows={3} label="Loading portal forms…" />
         ) : !event ? (
-          <section className={cardSurfaceClasses("default", "p-6")}>
-            <p className="font-semibold">No event available</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Create an event before creating portal forms.
-            </p>
-          </section>
+          <EmptyState icon={LockKeyhole} title="No event available" message="Create an event before creating portal forms." />
         ) : (
           <>
             <ContentToolbar
               ariaLabel="Portal form controls"
               utilities={
-                <StatusTabs
+                <FilterMenu
                   ariaLabel="Portal form types"
                   value={tab}
                   onValueChange={(value) => setTab(value as "all" | PortalFormKind)}
@@ -671,7 +667,7 @@ export default function PortalForms() {
                   disabled={!event}
                   onClick={() => setShowGallery(true)}
                 >
-                  <Plus /> Add form
+                  Add form
                 </Button>
               }
             />
@@ -749,12 +745,12 @@ export default function PortalForms() {
                 ))}
               </div>
             ) : (
-              <section className={cardSurfaceClasses("default", "px-6 py-12 text-center")}>
-                <p className="font-medium">No forms yet</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Create a form to collect information from participants.
-                </p>
-              </section>
+              <EmptyState
+                icon={Plus}
+                title="No forms yet"
+                message="Create a form when you are ready to collect participant information."
+                action={<Button variant="accent" size="sm" onClick={() => setShowGallery(true)}>Add form</Button>}
+              />
             )}
           </>
         )}

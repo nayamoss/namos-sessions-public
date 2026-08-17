@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, ChevronDown, CalendarDays, Plus } from "lucide-react";
+import { Check, ChevronDown, CalendarDays } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useRepo } from "@/data/repo";
 import type { Event } from "@/data/types";
@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { track } from "@/lib/analytics";
 
 const statusColor: Record<Event["status"], string> = {
   draft: "bg-amber-500",
@@ -58,6 +59,7 @@ export function EventSwitcher({
     const match = location.pathname.match(/^\/events\/[^/]+(\/.*)?$/);
     const suffix = match?.[1] || "/dashboard";
     navigate(`/events/${event.slug}${suffix}`);
+    if (event.id !== current?.id) track("event_switched", {});
     onNavigate?.();
   };
   return (
@@ -130,10 +132,9 @@ export function EventSwitcher({
           <div className="pt-1.5">
             {canCreate && (
               <DropdownMenuItem
-                onSelect={() => navigate("/events?new=1")}
+                onSelect={() => { track("cta_converted", { destination: "event_create" }); navigate("/events?new=1"); }}
                 className="gap-2.5 rounded-md px-2.5 py-2"
               >
-                <Plus className="h-4 w-4" />
                 New event
               </DropdownMenuItem>
             )}

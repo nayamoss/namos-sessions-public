@@ -32,7 +32,11 @@ function fakeCtx({ identity, planCriteria }: { identity?: UserIdentity; planCrit
   const patched: Array<[string, Record<string, unknown>]> = [];
   const inserted: Array<[string, Record<string, unknown>]> = [];
   const tables: Record<string, Row[]> = {
-    organizers: [{ _id: "organizer-1", userId: "clerk|organizer", email: "organizer@example.test", role: "owner" }],
+    // The organizer and the event must share an organization: authorization is tenant-scoped,
+    // and a guard that cannot resolve an event's organizationId denies rather than allows.
+    organizations: [{ _id: "org-1", name: "Test org", createdByUserId: "clerk|organizer" }],
+    organizers: [{ _id: "organizer-1", organizationId: "org-1", userId: "clerk|organizer", email: "organizer@example.test", role: "owner" }],
+    events: [{ _id: "event-1", organizationId: "org-1", name: "Test event", slug: "test-event", status: "published" }],
     submissions: [{ _id: "submission-1", eventId: "event-1", title: "Reliable systems" }],
     evaluation_plans: [{ _id: "plan-1", eventId: "event-1", name: "Program committee", rounds: 1, scoringScaleMax: 5, aiAssistEnabled: false, criteria: planCriteria }],
     evaluation_assignments: [{ _id: "assignment-1", eventId: "event-1", evaluationPlanId: "plan-1", submissionId: "submission-1", reviewerUserId: "reviewer@example.test", round: 1 }],
@@ -188,7 +192,7 @@ describe("reviewer scorecard surface", () => {
     expect(container.textContent).toContain("Notes");
     // (4×3 + 5×1) / (3×5 + 1×5) × 5 = 17/20 × 5 = 4.25 — the worked example from requirements.md.
     expect(container.textContent).toContain("Total 4.25 / 5");
-    expect(container.querySelector('[aria-label="Originality: 4"]')?.getAttribute("aria-pressed")).toBe("true");
+    expect(container.querySelector('[aria-label="Originality: 4 of 5"]')?.getAttribute("aria-checked")).toBe("true");
     cleanup();
   });
 

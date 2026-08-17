@@ -44,7 +44,7 @@ describe("bulk assignment filter predicate", () => {
   });
 
   it("treats every other status as eligible", () => {
-    const statuses: SubmissionStatus[] = ["pending", "accept_queue", "accepted", "decline_queue", "declined"];
+    const statuses: SubmissionStatus[] = ["pending", "accept_queue", "accepted", "maybe", "decline_queue", "declined"];
     for (const status of statuses) expect(isAssignableSubmission({ status })).toBe(true);
     expect(isAssignableSubmission({ status: "draft" })).toBe(false);
     expect(isAssignableSubmission({ status: "withdrawn" })).toBe(false);

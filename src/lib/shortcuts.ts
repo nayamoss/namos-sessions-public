@@ -19,7 +19,7 @@ export type ShortcutBinding = {
   shift?: boolean;
 };
 
-export type ShortcutId = "palette" | "sidebar" | "rightPanel" | "help";
+export type ShortcutId = "palette" | "sidebar" | "rightPanel" | "help" | "voice";
 
 const CODE_LABELS: Record<string, string> = {
   Slash: "/",
@@ -29,6 +29,16 @@ const CODE_LABELS: Record<string, string> = {
   Period: ".",
   Space: "Space",
 };
+
+/**
+ * Dispatched on `window` when the global Alt+V shortcut fires. Every page
+ * that hosts an Operations Agent composer (DashboardHome, AgentOperations)
+ * listens for this and opens its own VoiceSessionPanel, scoped to whatever
+ * event it already has in context — mirrors Imori's `imori:toggle-voice`
+ * pattern (app/dashboard/layout-client.tsx), one global shortcut fanning out
+ * to whichever chat surface is actually mounted.
+ */
+export const VOICE_TOGGLE_EVENT = "namos:toggle-voice";
 
 export function matchesShortcut(event: KeyboardEvent, binding: ShortcutBinding): boolean {
   return event.code === binding.code
@@ -85,6 +95,9 @@ export const SHORTCUTS: Record<ShortcutId, ShortcutBinding> = {
   sidebar: { code: "Slash", meta: true },
   rightPanel: { code: "Backslash", meta: true },
   help: { code: "Slash", shift: true },
+  // Deliberately Alt, not Cmd/Ctrl+Shift+V — that's "paste without
+  // formatting" in every browser and OS. Matches Imori's binding exactly.
+  voice: { code: "KeyV", alt: true },
 };
 
 export type GoToSequence = {
@@ -98,10 +111,10 @@ export type GoToSequence = {
 export const GO_TO_SEQUENCES: readonly GoToSequence[] = [
   { key: "d", code: "KeyD", to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "s", code: "KeyS", to: "/program/speakers", label: "Speakers", icon: Users },
-  { key: "f", code: "KeyF", to: "/program/forms", label: "Forms", icon: FileText },
-  { key: "a", code: "KeyA", to: "/program/abstracts", label: "Abstracts", icon: ClipboardList },
-  { key: "e", code: "KeyE", to: "/program/evaluation", label: "Evaluation", icon: ListTodo },
-  { key: "g", code: "KeyG", to: "/program/agenda", label: "Agenda", icon: CalendarDays },
+  { key: "f", code: "KeyF", to: "/program/forms", label: "Calls for papers", icon: FileText },
+  { key: "a", code: "KeyA", to: "/program/abstracts", label: "Submissions", icon: ClipboardList },
+  { key: "e", code: "KeyE", to: "/program/evaluation", label: "Judge submissions", icon: ListTodo },
+  { key: "g", code: "KeyG", to: "/program/agenda", label: "Schedule", icon: CalendarDays },
   { key: "c", code: "KeyC", to: "/program/communications", label: "Communications", icon: Mail },
   { key: "v", code: "KeyV", to: "/program/availability", label: "Availability", icon: CalendarClock },
   { key: "t", code: "KeyT", to: "/portals/tasks", label: "Portal tasks", icon: ListTodo },
@@ -138,6 +151,9 @@ export const SHORTCUT_HELP: readonly ShortcutHelpGroup[] = [
   },
   {
     group: "General",
-    items: [{ keys: ["?"], label: "Show keyboard shortcuts" }],
+    items: [
+      { keys: ["?"], label: "Show keyboard shortcuts" },
+      { keys: formatShortcut(SHORTCUTS.voice), label: "Start voice chat with the Operations Agent" },
+    ],
   },
 ] as const;

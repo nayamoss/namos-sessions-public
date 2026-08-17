@@ -15,7 +15,7 @@ const portalNavigation: DashboardNavSection[] = [
       { to: "/portal/profile", label: "Profile", icon: UserRound },
       { to: "/portal/availability", label: "Availability", icon: CalendarClock },
       { to: "/portal/schedule", label: "Schedule", icon: CalendarDays },
-      { to: "/portal/tasks", label: "Tasks", icon: ListTodo },
+      { to: "/portal/tasks", label: "Tasks & files", icon: ListTodo },
     ],
   },
 ];
@@ -26,7 +26,7 @@ function portalTitle(pathname: string) {
   if (pathname.startsWith("/portal/profile")) return "Profile";
   if (pathname.startsWith("/portal/availability")) return "Availability";
   if (pathname.startsWith("/portal/schedule")) return "Schedule";
-  if (pathname.startsWith("/portal/tasks")) return "Tasks";
+  if (pathname.startsWith("/portal/tasks")) return "Tasks & files";
   if (pathname.startsWith("/portal/forms")) return "Task form";
   return "Home";
 }

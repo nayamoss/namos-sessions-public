@@ -1,66 +1,65 @@
-import { useRef, type KeyboardEvent } from "react";
-import { cn } from "@/lib/utils";
+import { Filter, PanelsTopLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export type StatusTab = { value: string; label: string; count?: number };
-export function StatusTabs({
+export function FilterMenu({
   tabs,
   value,
   onValueChange,
   ariaLabel = "Views",
+  kind = "filter",
 }: {
   tabs: StatusTab[];
   value: string;
   onValueChange: (value: string) => void;
   ariaLabel?: string;
+  kind?: "filter" | "view";
 }) {
-  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
-
-  const activate = (index: number) => {
-    const tab = tabs[index];
-    if (!tab) return;
-    tabRefs.current[index]?.focus();
-    onValueChange(tab.value);
-  };
-
-  const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
-    let nextIndex: number | undefined;
-    if (event.key === "ArrowRight") nextIndex = (index + 1) % tabs.length;
-    if (event.key === "ArrowLeft") nextIndex = (index - 1 + tabs.length) % tabs.length;
-    if (event.key === "Home") nextIndex = 0;
-    if (event.key === "End") nextIndex = tabs.length - 1;
-    if (nextIndex === undefined) return;
-    event.preventDefault();
-    activate(nextIndex);
-  };
+  const selected = tabs.find((tab) => tab.value === value);
+  const actionLabel = kind === "filter" ? "Filter" : "View";
+  const Icon = kind === "filter" ? Filter : PanelsTopLeft;
 
   return (
-    <div className="min-w-0 overflow-x-auto" data-status-tabs-scroll>
-      <div className="flex min-w-max flex-nowrap gap-1" role="tablist" aria-label={ariaLabel}>
-        {tabs.map((tab, index) => {
-          const selected = tab.value === value;
-          return (
-            <button
-              key={tab.value}
-              ref={(element) => { tabRefs.current[index] = element; }}
-              type="button"
-              role="tab"
-              tabIndex={selected ? 0 : -1}
-              aria-selected={selected}
-              onClick={() => onValueChange(tab.value)}
-              onKeyDown={(event) => handleKeyDown(event, index)}
-              className={cn(
-                "touch-target shrink-0 rounded-md px-3 py-1.5 text-sm transition-colors",
-                selected
-                  ? "bg-muted text-foreground"
-                  : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          aria-label={`${ariaLabel}: ${selected?.label ?? actionLabel}`}
+          className="max-w-[15rem]"
+        >
+          <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>{actionLabel}</span>
+          <span className="truncate text-muted-foreground">{selected?.label ?? "All"}</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuLabel>{ariaLabel}</DropdownMenuLabel>
+        <DropdownMenuRadioGroup value={value} onValueChange={onValueChange}>
+          {tabs.map((tab) => (
+            <DropdownMenuRadioItem key={tab.value} value={tab.value}>
+              <span>{tab.label}</span>
+              {tab.count !== undefined && (
+                <span className="ml-auto pl-6 text-xs text-muted-foreground">
+                  {tab.count}
+                </span>
               )}
-            >
-              {tab.label}
-              {tab.count !== undefined && <span className="ml-1.5 text-xs text-muted-foreground">{tab.count}</span>}
-            </button>
-          );
-        })}
-      </div>
-    </div>
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
+
+/** @deprecated Use FilterMenu for table and list controls. */
+export const StatusTabs = FilterMenu;

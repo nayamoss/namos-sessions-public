@@ -317,10 +317,10 @@ describe("Evaluation page surfaces", () => {
   it("gives a reviewer who is not an organizer a working queue instead of an error", async () => {
     const { container, cleanup } = await renderEvaluation(reviewerOnlyRepo());
 
-    expect(container.textContent).toContain("You're viewing your reviewer queue.");
+    expect(container.textContent).not.toContain("You're viewing your reviewer queue.");
     expect(container.querySelector('[role="alert"]')).toBeNull();
     expect(container.textContent).toContain("Reliable systems");
-    expect(container.textContent).toContain("Program committee");
+    expect(container.textContent).not.toContain("Program committee");
     // No plan management and no assignment management on a non-organizer's surface.
     expect(container.textContent).not.toContain("Evaluation plans");
     expect(container.textContent).not.toContain("Assign submissions");
@@ -328,25 +328,22 @@ describe("Evaluation page surfaces", () => {
     cleanup();
   });
 
-  it("explains the missing speaker on a blinded queue instead of leaving a silent gap", async () => {
+  it("identifies the missing speaker on a blinded queue without secondary helper copy", async () => {
     const { container, cleanup } = await renderEvaluation(blindedReviewerRepo());
 
     expect(container.textContent).toContain("Blinded");
-    expect(container.textContent).toContain("Speaker hidden");
-    expect(container.textContent).toContain("Speaker identity is withheld from reviewers by the server.");
+    expect(container.textContent).not.toContain("Speaker hidden");
+    expect(container.textContent).not.toContain("Speaker identity is withheld from reviewers by the server.");
     expect(container.textContent).toContain("Reliable systems");
     expect(container.textContent).not.toContain("Ada Lovelace");
     expect(container.textContent).not.toContain("Unassigned");
     cleanup();
   });
 
-  it("leaves the organizer's full admin surface unchanged", async () => {
+  it("keeps organizer actions reachable from the streamlined workspace", async () => {
     const { container, cleanup } = await renderEvaluation(organizerRepo());
 
-    expect(container.textContent).toContain("Evaluation plans");
-    expect(container.textContent).toContain("Create evaluation plan");
-    expect(container.textContent).toContain("Assign submissions");
-    expect(container.textContent).toContain("Program committee");
+    expect(container.textContent).toContain("Manage evaluations");
     expect(container.textContent).not.toContain("You're viewing your reviewer queue.");
     expect(container.querySelector('[role="alert"]')).toBeNull();
     cleanup();

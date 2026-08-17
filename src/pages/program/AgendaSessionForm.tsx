@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -29,9 +30,10 @@ type Props = {
   initial?: AgendaSessionValue;
   onSave: (value: AgendaSessionValue) => Promise<void>;
   onCancel: () => void;
+  onDelete?: () => void;
 };
 
-export function AgendaSessionForm({ event, rooms, tracks, speakers, submissions, initial, onSave, onCancel }: Props) {
+export function AgendaSessionForm({ event, rooms, tracks, speakers, submissions, initial, onSave, onCancel, onDelete }: Props) {
   const eventDate = utcCalendarDate(event.startDate);
   const initialStart = initial ? eventDateTime(initial.startTime, event.timezone) : { date: eventDate, time: "09:00" };
   const initialEnd = initial ? eventDateTime(initial.endTime, event.timezone) : { date: eventDate, time: "09:45" };
@@ -116,7 +118,7 @@ export function AgendaSessionForm({ event, rooms, tracks, speakers, submissions,
       <div className="grid gap-3 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor="agenda-start">Start</Label><Input id="agenda-start" type="time" step={900} value={start} onChange={(event) => setStart(event.target.value)} /></div><div className="space-y-2"><Label htmlFor="agenda-end">End</Label><Input id="agenda-end" type="time" step={900} value={end} onChange={(event) => setEnd(event.target.value)} /></div></div>
       <div className="flex items-center justify-between gap-3"><div><Label htmlFor="agenda-published">Published</Label><p className="text-xs text-muted-foreground">Visible to assigned speakers.</p></div><Switch id="agenda-published" checked={published} onCheckedChange={setPublished} /></div>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      <div className="flex gap-2"><Button type="submit" variant="accent" disabled={saving || (mode === "submission" && submissionId === "none")}>{saving ? "Saving…" : "Save session"}</Button><Button type="button" variant="ghost" disabled={saving} onClick={onCancel}>Cancel</Button></div>
+      <div className="flex flex-wrap items-center gap-2"><Button type="submit" variant="accent" disabled={saving || (mode === "submission" && submissionId === "none")}>{saving ? "Saving…" : "Save session"}</Button><Button type="button" variant="ghost" disabled={saving} onClick={onCancel}>Cancel</Button>{onDelete && <Button type="button" variant="ghost" className="ml-auto text-destructive hover:text-destructive" disabled={saving} onClick={onDelete}><Trash2 />Delete</Button>}</div>
     </form>
   );
 }

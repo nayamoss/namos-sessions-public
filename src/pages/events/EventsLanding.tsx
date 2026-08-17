@@ -1,16 +1,33 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, Copy, Plus } from "lucide-react";
+import { CalendarDays, Copy, MoreHorizontal, Trash2 } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
 import { DetailPane } from "@/components/shared/DetailPane";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { DataGrid, type DataGridColumn } from "@/components/shared/DataGrid";
 import { SegmentedControl } from "@/components/shared/SegmentedControl";
 import { SkeletonList } from "@/components/shared/SkeletonList";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -224,6 +241,9 @@ export default function EventsLanding() {
   const [error, setError] = useState<string>();
   const [filter, setFilter] = useState<"all" | EventStatus>("all");
   const [editor, setEditor] = useState<Editor>();
+  const [deleteCandidate, setDeleteCandidate] = useState<Event>();
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [deleting, setDeleting] = useState(false);
   const [manageableEventIds, setManageableEventIds] = useState<Set<string>>(new Set());
   const load = useCallback(async () => {
     setLoading(true);
@@ -266,6 +286,87 @@ export default function EventsLanding() {
       { replace: true },
     );
   };
+  const closeDelete = (force = false) => {
+    if (deleting && !force) return;
+    setDeleteCandidate(undefined);
+    setDeleteConfirmation("");
+  };
+  const removeEvent = async () => {
+    if (!deleteCandidate || deleteConfirmation !== deleteCandidate.name) return;
+    setDeleting(true);
+    setError(undefined);
+    try {
+      await repo.events.remove(deleteCandidate.id);
+      closeDelete(true);
+      await load();
+    } catch (cause) {
+      setError(cleanErrorMessage(cause, "Could not delete event."));
+    } finally {
+      setDeleting(false);
+    }
+  };
+  const columns: DataGridColumn<Event>[] = [
+    {
+      key: "event",
+      header: "Event",
+      kind: "row-header",
+      cell: (event) => (
+        <div className="min-w-0">
+          <p className="truncate font-semibold text-foreground">{event.name}</p>
+          <p className="mt-0.5 truncate text-xs font-normal text-muted-foreground">/events/{event.slug}</p>
+        </div>
+      ),
+    },
+    {
+      key: "dates",
+      header: "Dates",
+      width: "13rem",
+      cell: (event) => <span className="text-muted-foreground">{formatDates(event)}</span>,
+    },
+    {
+      key: "status",
+      header: "Status",
+      width: "8rem",
+      cell: (event) => (
+        <span className="inline-flex rounded-full bg-muted px-2.5 py-1 text-xs font-medium capitalize text-foreground">
+          {event.status}
+        </span>
+      ),
+    },
+    {
+      key: "actions",
+      header: "",
+      headerLabel: "Actions",
+      width: "9rem",
+      align: "right",
+      cell: (event) => (
+        <div className="flex items-center justify-end gap-1.5">
+          <Button size="sm" onClick={() => navigate(`/events/${event.slug}/dashboard`)}>
+            Open
+          </Button>
+          {manageableEventIds.has(event.id) && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="icon" variant="ghost" aria-label={`More actions for ${event.name}`}>
+                  <MoreHorizontal />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => setEditor({ mode: "duplicate", source: event })}>
+                  <Copy className="mr-2 h-4 w-4" /> Duplicate
+                </DropdownMenuItem>
+                {event.status === "draft" && (
+                  <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => setDeleteCandidate(event)}>
+                    <Trash2 className="mr-2 h-4 w-4" /> Delete draft
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
+      ),
+    },
+  ];
   return (
     <AppLayout
       title="Events"
@@ -293,7 +394,6 @@ export default function EventsLanding() {
           }
           primaryAction={
             <Button onClick={() => setEditor({ mode: "new" })}>
-              <Plus className="mr-2 h-4 w-4" />
               New event
             </Button>
           }
@@ -311,54 +411,21 @@ export default function EventsLanding() {
         {loading ? (
           <SkeletonList rows={3} label="Loading events…" />
         ) : visible.length ? (
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {visible.map((event) => (
-              <article key={event.id} className={cardSurfaceClasses("default", "bg-muted/60 p-5")}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h2 className="truncate text-base font-semibold">
-                      {event.name}
-                    </h2>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {formatDates(event)}
-                    </p>
-                  </div>
-                  <span className="rounded-md bg-background px-2 py-1 text-xs font-medium capitalize">
-                    {event.status}
-                  </span>
-                </div>
-                <div className="mt-5 flex gap-2">
-                  <Button
-                    size="sm"
-                    onClick={() => navigate(`/events/${event.slug}/dashboard`)}
-                  >
-                    Open
-                  </Button>
-                  {manageableEventIds.has(event.id) && (
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() =>
-                        setEditor({ mode: "duplicate", source: event })
-                      }
-                    >
-                      <Copy className="mr-2 h-4 w-4" />
-                      Duplicate
-                    </Button>
-                  )}
-                </div>
-              </article>
-            ))}
-          </div>
+          <DataGrid
+            rows={visible}
+            columns={columns}
+            empty="No events match this status."
+            ariaLabel="Events"
+            rowActivation="none"
+            minWidth={680}
+          />
         ) : (
-          <div className={cardSurfaceClasses("default", "bg-muted/50 p-6")}>
+          <div className={cardSurfaceClasses("default")}>
             <EmptyState
-              message={
-                events.length
-                  ? "No events match this status."
-                  : "No events yet."
-              }
-              action={
+              icon={CalendarDays}
+              title={events.length ? "No events match this status" : "Create your first event"}
+              message={events.length ? "Choose another status to return to your event list." : "Set the dates, timezone, and call for papers so your team has a workspace to build the program."}
+              action={events.length ? <Button variant="outline" onClick={() => setFilter("all")}>Show all events</Button> :
                 <Button onClick={() => setEditor({ mode: "new" })}>
                   <CalendarDays className="mr-2 h-4 w-4" />
                   Create your first event
@@ -367,6 +434,41 @@ export default function EventsLanding() {
             />
           </div>
         )}
+        <AlertDialog open={Boolean(deleteCandidate)} onOpenChange={(open) => !open && closeDelete()}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete {deleteCandidate?.name}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This permanently deletes the draft event and all of its program data. This cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="space-y-2">
+              <Label htmlFor="delete-event-confirmation">
+                Type <span className="font-medium text-foreground">{deleteCandidate?.name}</span> to confirm
+              </Label>
+              <Input
+                id="delete-event-confirmation"
+                value={deleteConfirmation}
+                onChange={(event) => setDeleteConfirmation(event.target.value)}
+                autoComplete="off"
+                disabled={deleting}
+              />
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleting}>Keep event</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/85"
+                disabled={deleting || deleteConfirmation !== deleteCandidate?.name}
+                onClick={(event) => {
+                  event.preventDefault();
+                  void removeEvent();
+                }}
+              >
+                {deleting ? "Deleting…" : "Delete event"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </AppLayout>
   );

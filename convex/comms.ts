@@ -3,6 +3,7 @@ import { mutation, query, assertEventAccess, assertEventOrganizerAccess } from "
 import { internalMutation } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import { resolveCommTemplate } from "../src/lib/comms-template-tokens";
+import { eventOrganizers, notifyEvent } from "./notifications";
 
 const templateKind = v.union(
   v.literal("submission_confirmation"),
@@ -193,7 +194,7 @@ async function insertDeliveryLog(ctx: MutationCtx, args: RecordDeliveryArgs) {
       throw new Error("Template not found for this event.");
   }
   const now = Date.now();
-  return ctx.db.insert("comms_log", {
+  const logId = await ctx.db.insert("comms_log", {
     ...args,
     toEmail: args.toEmail.trim(),
     subject: args.subject.trim(),
@@ -201,6 +202,20 @@ async function insertDeliveryLog(ctx: MutationCtx, args: RecordDeliveryArgs) {
     sentAt: args.status === "sent" ? (args.sentAt ?? now) : args.sentAt,
     createdAt: now,
   });
+  if (args.status === "failed") {
+    const event = await ctx.db.get(args.eventId);
+    await notifyEvent(ctx, {
+      eventId: args.eventId,
+      kind: "comms_delivery_failed",
+      title: "Communication delivery failed",
+      body: `${args.toEmail.trim()} · ${args.subject.trim()}`,
+      linkPath: event ? `/events/${event.slug}/program/communications` : undefined,
+      relatedId: logId,
+      recipientUserIds: await eventOrganizers(ctx, args.eventId),
+      highPriority: true,
+    });
+  }
+  return logId;
 }
 
 export const recordDelivery = mutation({

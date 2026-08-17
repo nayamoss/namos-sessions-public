@@ -1,6 +1,8 @@
 import type { Repository } from "./repo";
 import type {
+  ActivityEntry,
   ApiKey,
+  ApiAuditLogEntry,
   GeneratedApiKey,
   AssignByFilterResult,
   AgendaConflict,
@@ -13,16 +15,25 @@ import type {
   CommPreview,
   CommSendResult,
   CommTemplate,
+  AirtableConnectInput,
+  AirtableImportResult,
+  ContentIntegration,
+  NotionConnectInput,
+  NotionImportResult,
+  SanityConnectInput,
+  SanityPublishResult,
   EmailIntegration,
   Evaluation,
   EvaluationAssignment,
   EvaluationPlan,
+  EventAnalyticsSummary,
   Event,
   EventInviteResult,
   EventMember,
   FieldDefinition,
   OnboardingTask,
   Organizer,
+  Organization,
   UserProfile,
   PublicEmbed,
   Embed,
@@ -39,12 +50,14 @@ import type {
   SpeakerAgendaItem,
   SpeakerDocument,
   SpeakerImportResult,
+  SpeakerNote,
   Sponsor,
   SponsorContact,
   SponsorDetail,
   SponsorTier,
   Submission,
   SubmissionForm,
+  SubmissionFormStatus,
   Tag,
   TaskTemplate,
   Track,
@@ -55,8 +68,10 @@ import type {
   SubmissionEditView,
   SubmissionSpeakerUpdateResult,
 } from "./repo";
+import { analyticsErrorCategory, track, type AnalyticsEventProperties } from "@/lib/analytics";
 
 export const readOperations = [
+  "analytics.summary",
   "events.list",
   "events.listMine",
   "events.listForPortal",
@@ -76,6 +91,7 @@ export const readOperations = [
   "speakers.getMine",
   "speakers.headshotUrl",
   "speakers.documents.list",
+  "speakerNotes.list",
   "evaluations.list",
   "evaluations.plans.list",
   "evaluations.assignments.list",
@@ -87,6 +103,7 @@ export const readOperations = [
   "taskTemplates.list",
   "comms.list",
   "comms.templates.list",
+  "notifications.unreadCount",
   "availability.list",
   "publicEmbeds.get",
   "publicEmbeds.list",
@@ -99,15 +116,19 @@ export const readOperations = [
   "organizers.list",
   "organizers.getMine",
   "organizers.isCurrentUserOrganizer",
-  "organizers.canClaimOwner",
+  "organizations.listMine",
+  "organizations.getMine",
   "organizers.hasAdminAccess",
   "profiles.getMine",
   "emailIntegrations.status",
+  "contentIntegrations.status",
   "evaluations.reviewerProgress",
   "comms.previewDecision",
   "comms.previewReminder",
   "comms.previewConsolidatedDecision",
   "apiKeys.list",
+  "apiKeys.auditLog",
+  "activity.list",
   "sponsors.list",
   "sponsors.get",
   "sponsorTiers.list",
@@ -122,6 +143,7 @@ export type ReadOperation = (typeof readOperations)[number];
 export type WriteOperation =
   | "events.save"
   | "events.duplicate"
+  | "events.remove"
   | "events.rooms.save"
   | "events.rooms.remove"
   | "events.tracks.save"
@@ -139,6 +161,7 @@ export type WriteOperation =
   | "forms.createFromTemplate"
   | "forms.duplicate"
   | "forms.remove"
+  | "forms.setStatus"
   | "submissions.submit"
   | "submissions.saveDraft"
   | "submissions.createAdmin"
@@ -154,11 +177,14 @@ export type WriteOperation =
   | "speakers.documents.requestUpload"
   | "speakers.documents.save"
   | "speakers.documents.remove"
+  | "speakerNotes.create"
+  | "speakerNotes.remove"
   | "evaluations.save"
   | "evaluations.plans.save"
   | "evaluations.assignments.assign"
   | "evaluations.assignments.assignByFilter"
   | "agenda.save"
+  | "agenda.remove"
   | "agenda.publishSchedule"
   | "tasks.create"
   | "tasks.setStatus"
@@ -168,7 +194,8 @@ export type WriteOperation =
   | "publicEmbeds.duplicate"
   | "publicEmbeds.remove"
   | "portalForms.submit"
-  | "organizers.claimOwner"
+  | "organizations.createForCurrentUser"
+  | "organizations.rename"
   | "organizers.completeOnboarding"
   | "profiles.save"
   | "organizers.add"
@@ -177,6 +204,13 @@ export type WriteOperation =
   | "emailIntegrations.save"
   | "emailIntegrations.test"
   | "emailIntegrations.disconnect"
+  | "contentIntegrations.connectNotion"
+  | "contentIntegrations.importNotion"
+  | "contentIntegrations.connectAirtable"
+  | "contentIntegrations.importAirtable"
+  | "contentIntegrations.connectSanity"
+  | "contentIntegrations.publishSanity"
+  | "contentIntegrations.disconnect"
   | "evaluations.sendReviewerReminders"
   | "taskTemplates.create"
   | "taskTemplates.update"
@@ -207,7 +241,9 @@ export type WriteOperation =
   | "agentRuns.approveTaskProposal"
   | "agentRuns.rejectProposal"
   | "agentProviderSettings.saveManaged"
-  | "agentProviderSettings.saveByok";
+  | "agentProviderSettings.saveByok"
+  | "agentProviderSettings.disconnectByok"
+  | "agentProviderSettings.assignBillingOwner";
 export type DataOperation = ReadOperation | WriteOperation;
 
 export interface DataTransport {
@@ -228,14 +264,124 @@ export interface ReactiveTransport {
   ): ReadState<Result>;
 }
 
+function object(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? value as Record<string, unknown> : {};
+}
+
+function normalizedSubmissionStatus(value: unknown) {
+  if (value === "accept_queue" || value === "maybe" || value === "decline_queue") return "in_review" as const;
+  return value === "draft" || value === "pending" || value === "accepted" || value === "declined" || value === "withdrawn" ? value : "pending";
+}
+
+function trackWriteSuccess(operation: WriteOperation, inputValue: object, resultValue: unknown) {
+  const input = object(inputValue);
+  const result = object(resultValue);
+  switch (operation) {
+    case "events.save": track(input.id ? "event_updated" : "event_created", { event_status: input.status as "draft" | "published" | "archived" | undefined }); break;
+    case "events.duplicate": track("event_created", { event_status: "draft" }); break;
+    case "forms.save": track("form_saved", { mode: input.id ? "updated" : "created", form_kind: input.kind as never }); break;
+    case "forms.setStatus": track("form_status_updated", { form_status: input.status as never }); break;
+    case "forms.duplicate": case "forms.createFromTemplate": track("form_duplicated", {}); break;
+    case "forms.remove": track("record_removed", { record_type: "form" }); break;
+    case "submissions.createAdmin": {
+      const status = normalizedSubmissionStatus(object(input.input).status);
+      track("submission_created", { source: "organizer", submission_status: status === "accepted" || status === "declined" || status === "draft" ? status : "pending" });
+      break;
+    }
+    case "submissions.submit": case "submissions.saveDraft": track("submission_created", { source: "organizer", submission_status: operation === "submissions.saveDraft" ? "draft" : "pending" }); break;
+    case "submissions.decide": case "submissions.setStatus": track("submission_status_updated", { submission_status: normalizedSubmissionStatus(input.status) }); break;
+    case "publicForms.submit": track("public_submission_completed", { participant_count: Array.isArray(object(input.input).participants) ? (object(input.input).participants as unknown[]).length : 0 }); break;
+    case "speakers.create": track("speaker_created", {}); break;
+    case "speakers.bulkImport": track("speakers_imported", { imported_count: Number(result.importedSpeakers || 0), skipped_count: Array.isArray(result.skipped) ? result.skipped.length : 0 }); break;
+    case "speakers.setConfirmationStatus": track("speaker_confirmation_updated", { confirmation_status: input.status as never }); break;
+    case "speakers.updateProfile": track("speaker_profile_updated", { has_bio: Boolean(input.bio) }); break;
+    case "speakers.saveHeadshot": track("speaker_profile_updated", { has_headshot: true }); break;
+    case "speakers.documents.remove": track("record_removed", { record_type: "speaker_document" }); break;
+    case "sponsors.create": track("sponsor_saved", { mode: "created", sponsor_status: input.status as never }); break;
+    case "sponsors.update": track("sponsor_saved", { mode: "updated", sponsor_status: input.status as never }); break;
+    case "sponsors.remove": track("record_removed", { record_type: "sponsor" }); break;
+    case "evaluations.plans.save": track("review_plan_saved", { mode: input.id ? "updated" : "created", round_count: typeof input.rounds === "number" ? input.rounds : undefined, anonymized: typeof input.anonymized === "boolean" ? input.anonymized : undefined }); break;
+    case "evaluations.assignments.assign": track("review_assignments_created", { created_count: 1 }); break;
+    case "evaluations.assignments.assignByFilter": track("review_assignments_created", { created_count: Number(result.created || 0), skipped_count: Number(result.skipped || 0) }); break;
+    case "evaluations.save": track("review_completed", { has_scorecard: Array.isArray(input.criteriaScores) }); break;
+    case "evaluations.sendReviewerReminders": track("reviewer_reminders_sent", { sent_count: Number(result.sent || 0), failed_count: Number(result.failed || 0) }); break;
+    case "agenda.save": track("agenda_session_saved", { mode: input.id ? "updated" : "created", published: typeof input.isPublished === "boolean" ? input.isPublished : undefined }); break;
+    case "agenda.publishSchedule": track("agenda_published", { published_count: typeof result === "number" ? result : undefined }); break;
+    case "agenda.remove": track("record_removed", { record_type: "agenda_session" }); break;
+    case "comms.templates.save": track("communication_template_saved", { mode: input.id ? "updated" : "created", communication_kind: input.kind as never }); break;
+    case "comms.sendDecision": case "comms.sendReminder": case "comms.sendConsolidatedDecision": track("communication_sent", { communication_kind: operation === "comms.sendDecision" ? "decision" : operation === "comms.sendReminder" ? "reminder" : "consolidated_decision", sent_count: Number(result.sent || 0), failed_count: Number(result.failed || 0) }); break;
+    case "tasks.create": track("task_created", { task_target: input.targetType as never, source: "manual" }); break;
+    case "tasks.setStatus": track("task_status_updated", { task_status: input.status as never }); break;
+    case "taskTemplates.remove": track("record_removed", { record_type: "task_template" }); break;
+    case "emailIntegrations.save": track("integration_connected", { integration: "email" }); break;
+    case "emailIntegrations.test": track("integration_tested", { integration: "email", outcome: "succeeded" }); break;
+    case "emailIntegrations.disconnect": track("integration_disconnected", { integration: "email" }); break;
+    case "agentProviderSettings.saveManaged": case "agentProviderSettings.saveByok": track("integration_connected", { integration: "ai_provider" }); break;
+    case "agentProviderSettings.disconnectByok": track("integration_disconnected", { integration: "ai_provider" }); break;
+    case "apiKeys.generate": track("api_key_created", { scope_count: Array.isArray(input.scopes) ? input.scopes.length : 1 }); break;
+    case "apiKeys.revoke": track("api_key_revoked", {}); break;
+    case "publicEmbeds.save": track("embed_saved", { mode: input.id ? "updated" : "created", enabled: typeof input.enabled === "boolean" ? input.enabled : undefined, embed_view: input.view as never }); break;
+    case "publicEmbeds.duplicate": track("embed_duplicated", {}); break;
+    case "publicEmbeds.remove": track("embed_removed", {}); break;
+    case "portalForms.submit": track("portal_form_completed", {}); break;
+    case "availability.upsert": track("availability_updated", { unavailable_count: Array.isArray(input.unavailable) ? input.unavailable.length : 0 }); break;
+    case "organizers.completeOnboarding": track("onboarding_completed", {}); break;
+  }
+}
+
+function workflowFor(operation: WriteOperation): AnalyticsEventProperties["workflow_failed"]["workflow"] | undefined {
+  if (operation.startsWith("agenda.")) return "agenda";
+  if (operation.startsWith("apiKeys.")) return "api_key";
+  if (operation.startsWith("publicEmbeds.")) return "embed";
+  if (operation.startsWith("events.")) return "event";
+  if (operation.startsWith("forms.")) return "form";
+  if (operation.startsWith("emailIntegrations.") || operation.startsWith("agentProviderSettings.")) return "integration";
+  if (operation === "organizers.completeOnboarding" || operation.startsWith("organizations.")) return "onboarding";
+  if (operation.startsWith("evaluations.")) return "review";
+  if (operation.startsWith("speakers.")) return "speaker";
+  if (operation.startsWith("sponsors.") || operation.startsWith("sponsor")) return "sponsor";
+  if (operation.startsWith("submissions.") || operation === "publicForms.submit") return "submission";
+  if (operation.startsWith("tasks.") || operation.startsWith("taskTemplates.")) return "task";
+  return undefined;
+}
+
 // This is the sole translation point between domain operations and a backend.
 // Feature code imports Repository, never a transport, Convex, or Airtable.
 export function createRepository(transport: DataTransport): Repository {
+  const baseTransport = transport;
+  transport = {
+    read: (operation, input) => baseTransport.read(operation, input),
+    write: async <Result>(operation: WriteOperation, input: object): Promise<Result> => {
+      try {
+        const result = await baseTransport.write<Result>(operation, input);
+        trackWriteSuccess(operation, input, result);
+        return result;
+      } catch (error) {
+        if (operation === "publicForms.submit") track("public_submission_failed", { error_category: analyticsErrorCategory(error) });
+        else if (operation === "emailIntegrations.test") track("integration_tested", { integration: "email", outcome: "failed" });
+        else if (operation === "comms.sendDecision" || operation === "comms.sendReminder" || operation === "comms.sendConsolidatedDecision") track("communication_failed", { communication_kind: operation === "comms.sendDecision" ? "decision" : operation === "comms.sendReminder" ? "reminder" : "consolidated_decision", error_category: analyticsErrorCategory(error) });
+        else {
+          const workflow = workflowFor(operation);
+          if (workflow) track("workflow_failed", { workflow, error_category: analyticsErrorCategory(error) });
+        }
+        throw error;
+      }
+    },
+  };
   return {
+    activity: {
+      list: ({ eventId }) => transport.read<ActivityEntry[]>("activity.list", { eventId }),
+    },
+    analytics: {
+      summary: ({ eventId }) =>
+        transport.read<EventAnalyticsSummary>("analytics.summary", { eventId }),
+    },
     agentProviderSettings: {
       status: ({ eventId }) => transport.read<AgentProviderSetting>("agentProviderSettings.status", { eventId }),
       saveManaged: ({ eventId }) => transport.write("agentProviderSettings.saveManaged", { eventId }),
       saveByok: (input) => transport.write("agentProviderSettings.saveByok", input),
+      disconnectByok: ({ eventId }) => transport.write("agentProviderSettings.disconnectByok", { eventId }),
+      assignBillingOwner: ({ eventId }) => transport.write("agentProviderSettings.assignBillingOwner", { eventId }),
     },
     agentRuns: {
       canUse: ({ eventId }) => transport.read<boolean>("agentRuns.canUse", { eventId }),
@@ -249,10 +395,11 @@ export function createRepository(transport: DataTransport): Repository {
       rejectProposal: (input) => transport.write<void>("agentRuns.rejectProposal", input),
     },
     apiKeys: {
-      list: () => transport.read<ApiKey[]>("apiKeys.list", {}),
-      generate: (label) =>
-        transport.write<GeneratedApiKey>("apiKeys.generate", { label }),
-      revoke: (id) => transport.write<void>("apiKeys.revoke", { id }),
+      list: ({ eventId }) => transport.read<ApiKey[]>("apiKeys.list", { eventId }),
+      generate: ({ eventId, label, scopes = ["events:read"] }) =>
+        transport.write<GeneratedApiKey>("apiKeys.generate", { eventId, label, scopes }),
+      revoke: ({ eventId, id }) => transport.write<void>("apiKeys.revoke", { eventId, id }),
+      auditLog: ({ eventId }) => transport.read<ApiAuditLogEntry[]>("apiKeys.auditLog", { eventId }),
     },
     emailIntegrations: {
       status: ({ eventId }) =>
@@ -265,6 +412,30 @@ export function createRepository(transport: DataTransport): Repository {
       disconnect: ({ eventId }) =>
         transport.write("emailIntegrations.disconnect", { eventId }),
     },
+    contentIntegrations: {
+      status: ({ eventId, provider }) =>
+        transport.read<ContentIntegration | null>("contentIntegrations.status", {
+          eventId,
+          provider,
+        }),
+      connectNotion: (input: NotionConnectInput) =>
+        transport.write<{ status: "connected" }>("contentIntegrations.connectNotion", input),
+      importNotion: ({ eventId }) =>
+        transport.write<NotionImportResult>("contentIntegrations.importNotion", { eventId }),
+      connectAirtable: (input: AirtableConnectInput) =>
+        transport.write<{ status: "connected" }>("contentIntegrations.connectAirtable", input),
+      importAirtable: ({ eventId }) =>
+        transport.write<AirtableImportResult>("contentIntegrations.importAirtable", { eventId }),
+      connectSanity: (input: SanityConnectInput) =>
+        transport.write<{ status: "connected" }>("contentIntegrations.connectSanity", input),
+      publishSanity: ({ eventId }) =>
+        transport.write<SanityPublishResult>("contentIntegrations.publishSanity", { eventId }),
+      disconnect: ({ eventId, provider }) =>
+        transport.write<{ status: "disconnected" }>("contentIntegrations.disconnect", {
+          eventId,
+          provider,
+        }),
+    },
     events: {
       list: () => transport.read<Event[]>("events.list", {}),
       listMine: () => transport.read<Event[]>("events.listMine", {}),
@@ -274,6 +445,7 @@ export function createRepository(transport: DataTransport): Repository {
         transport.read<Event | null>("events.getBySlug", { slug }),
       save: (event) => transport.write("events.save", event),
       duplicate: (input) => transport.write("events.duplicate", input),
+      remove: (eventId) => transport.write("events.remove", { eventId }),
       listRooms: ({ eventId }) =>
         transport.read<Room[]>("events.rooms.list", { eventId }),
       saveRoom: (room) => transport.write("events.rooms.save", room),
@@ -357,6 +529,8 @@ export function createRepository(transport: DataTransport): Repository {
         transport.write<string>("forms.duplicate", { id, eventId }),
       remove: (id, eventId) =>
         transport.write<void>("forms.remove", { id, eventId }),
+      setStatus: (input) =>
+        transport.write<SubmissionFormStatus>("forms.setStatus", input),
     },
     submissions: {
       list: ({ eventId, speakerId }) =>
@@ -419,6 +593,11 @@ export function createRepository(transport: DataTransport): Repository {
       removeDocument: (input) =>
         transport.write<void>("speakers.documents.remove", input),
     },
+    speakerNotes: {
+      list: ({ eventId, speakerId }) => transport.read<SpeakerNote[]>("speakerNotes.list", { eventId, speakerId }),
+      create: (input) => transport.write<string>("speakerNotes.create", input),
+      remove: (input) => transport.write<void>("speakerNotes.remove", input),
+    },
     evaluations: {
       list: ({ eventId }) =>
         transport.read<Evaluation[]>("evaluations.list", { eventId }),
@@ -460,6 +639,8 @@ export function createRepository(transport: DataTransport): Repository {
       detectConflicts: ({ eventId }) =>
         transport.read<AgendaConflict[]>("agenda.detectConflicts", { eventId }),
       save: (input) => transport.write<string>("agenda.save", input),
+      remove: ({ eventId, id }) =>
+        transport.write<void>("agenda.remove", { eventId, id }),
       publishSchedule: (eventId) =>
         transport.write<void>("agenda.publishSchedule", { eventId }),
     },
@@ -548,20 +729,26 @@ export function createRepository(transport: DataTransport): Repository {
       submit: (input) => transport.write<string>("portalForms.submit", input),
     },
     organizers: {
-      list: () => transport.read<Organizer[]>("organizers.list", {}),
+      list: (organizationId) =>
+        transport.read<Organizer[]>("organizers.list", { organizationId }),
       getMine: () => transport.read<Organizer | null>("organizers.getMine", {}),
       isCurrentUserOrganizer: () =>
         transport.read<boolean>("organizers.isCurrentUserOrganizer", {}),
-      canClaimOwner: () =>
-        transport.read<boolean>("organizers.canClaimOwner", {}),
       hasAdminAccess: () =>
         transport.read<boolean>("organizers.hasAdminAccess", {}),
-      claimOwner: () => transport.write<string>("organizers.claimOwner", {}),
       completeOnboarding: () =>
         transport.write<void>("organizers.completeOnboarding", {}),
       add: (input) => transport.write<string>("organizers.add", input),
-      remove: (userId) =>
-        transport.write<void>("organizers.remove", { userId }),
+      remove: (input) => transport.write<void>("organizers.remove", input),
+    },
+    organizations: {
+      createForCurrentUser: (input) =>
+        transport.write<string>("organizations.createForCurrentUser", input ?? {}),
+      listMine: () =>
+        transport.read<Organization[]>("organizations.listMine", {}),
+      getMine: () =>
+        transport.read<Organization | null>("organizations.getMine", {}),
+      rename: (input) => transport.write<void>("organizations.rename", input),
     },
     profiles: {
       getMine: () => transport.read<UserProfile | null>("profiles.getMine", {}),

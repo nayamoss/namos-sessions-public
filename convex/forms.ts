@@ -6,7 +6,7 @@ import {
   query,
   assertEventAccess,
   assertEventOrganizerAccess,
-  assertOrganizer,
+  assertAnyOrganizer,
 } from "./functions";
 
 export const list = query({
@@ -184,11 +184,41 @@ export const remove = mutation({
     await ctx.db.delete(args.id);
   },
 });
+// The only way a client may change `status`. Deliberately separate from `save`,
+// which still strips a client-supplied status (see the note above it, and #107):
+// a status snapshot carried along with an unrelated field edit can silently revert
+// a concurrent open/close, whereas this mutation is an explicit, single-purpose act
+// by an organizer who is looking at the current state.
+export const setStatus = mutation({
+  args: {
+    id: v.id("submission_forms"),
+    eventId: v.id("events"),
+    status: v.union(v.literal("draft"), v.literal("open"), v.literal("closed")),
+  },
+  handler: async (ctx, args) => {
+    await assertEventOrganizerAccess(ctx, args.eventId);
+    const form = await ctx.db.get(args.id);
+    if (!form || form.eventId !== args.eventId)
+      throw new Error("Form not found for this event.");
+    if (args.status === "open") {
+      // Opening is what makes the CFP publicly reachable, so the two conditions the
+      // public route also enforces are checked here — otherwise "Open" reports success
+      // and the public URL still says submissions are closed.
+      const event = await ctx.db.get(args.eventId);
+      if (!event || event.status !== "published")
+        throw new Error("Publish the event before opening its call for proposals.");
+      if (form.closeDate !== undefined && form.closeDate <= Date.now())
+        throw new Error("This form's close date has already passed. Change it before reopening.");
+    }
+    await ctx.db.patch(args.id, { status: args.status, updatedAt: Date.now() });
+    return args.status;
+  },
+});
 export const listFields = query({
   args: { eventId: v.optional(v.id("events")) },
   handler: async (ctx, args) => {
     if (args.eventId) await assertEventOrganizerAccess(ctx, args.eventId);
-    else await assertOrganizer(ctx);
+    else await assertAnyOrganizer(ctx);
     return ctx.db.query("field_definitions").collect();
   },
 });
@@ -207,7 +237,7 @@ export const saveField = mutation({
   args: { id: v.optional(v.id("field_definitions")), eventId: v.optional(v.id("events")), field: v.any() },
   handler: async (ctx, args) => {
     if (args.eventId) await assertEventOrganizerAccess(ctx, args.eventId);
-    else await assertOrganizer(ctx);
+    else await assertAnyOrganizer(ctx);
     const now = Date.now();
     if (args.id) {
       await ctx.db.patch(args.id, { ...args.field, updatedAt: now });

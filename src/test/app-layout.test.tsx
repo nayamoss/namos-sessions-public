@@ -144,8 +144,11 @@ describe("AppLayout", () => {
       createdAt: 0,
     };
     const repo = {
+      organizations: {
+        getMine: async () => ({ id: "org-1", name: "Test org", createdByUserId: "user-1", createdAt: 0 }),
+      },
       organizers: {
-        list: async () => [owner, pendingAdmin],
+        list: async (organizationId: string) => (organizationId === "org-1" ? [owner, pendingAdmin] : []),
         getMine: async () => owner,
       },
     } as unknown as Repository;

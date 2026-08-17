@@ -1,8 +1,14 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AvailabilityEditor } from "@/components/availability/AvailabilityEditor";
 
 describe("AvailabilityEditor", () => {
+  // "Your time" reads Intl.DateTimeFormat().resolvedOptions().timeZone — the machine's
+  // actual system timezone. Pin it to UTC (what CI runs as) so these assertions are
+  // deterministic on every machine instead of only passing wherever they were authored.
+  beforeEach(() => vi.stubEnv("TZ", "UTC"));
+  afterEach(() => vi.unstubAllEnvs());
+
   it("renders a month-aware hourly timetable and records exact unavailable hours", () => {
     const onChange = vi.fn();
     const { container } = render(
@@ -26,5 +32,25 @@ describe("AvailabilityEditor", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Your time" }));
     expect(screen.getByRole("button", { name: "Your time" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("renders conference hours in the browser's local time zone", () => {
+    render(
+      <AvailabilityEditor
+        startsAt={Date.UTC(2026, 8, 15)}
+        endsAt={Date.UTC(2026, 8, 15)}
+        timezone="America/New_York"
+        value={{ unavailable: [] }}
+        onChange={vi.fn()}
+        idPrefix="speaker-availability-local"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Your time" }));
+
+    // Conference hours run 7 AM–9 PM America/New_York. On a UTC test runner, 9 PM EDT
+    // is 1 AM the next UTC day, so the local-time column legitimately spans two
+    // calendar days ("Tue, Sep 15 → Wed, Sep 16") rather than staying on one.
+    expect(screen.getByRole("button", { name: "Tue, Sep 15 → Wed, Sep 16, 11 AM: available" })).toBeInTheDocument();
   });
 });

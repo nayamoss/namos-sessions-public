@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { Bot, Mail } from "lucide-react";
+import { Bot, FileText, Globe, Mail, Server, Table } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { IntegrationCard, type IntegrationCardStatus } from "@/components/settings/IntegrationCard";
 import { EmailIntegrationForm } from "@/components/shared/EmailIntegrationForm";
 import { AgentProviderSettingsForm } from "@/components/shared/AgentProviderSettingsForm";
+import { NotionIntegrationForm } from "@/components/shared/NotionIntegrationForm";
+import { AirtableIntegrationForm } from "@/components/shared/AirtableIntegrationForm";
+import { SanityIntegrationForm } from "@/components/shared/SanityIntegrationForm";
 import { SkeletonList } from "@/components/shared/SkeletonList";
 import {
   Dialog,
@@ -15,7 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { useRepo } from "@/data/repo";
 import { providerLabel } from "@/lib/email-integration-form";
-import type { Event } from "@/data/types";
+import type { ContentIntegration, EmailIntegration, EmailProvider, Event } from "@/data/types";
 
 /**
  * Settings > Integrations. A card grid, one card per connectable provider, each opening a
@@ -29,12 +32,17 @@ export default function Integrations() {
   const [event, setEvent] = useState<Event>();
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(true);
-  const [emailStatus, setEmailStatus] = useState<IntegrationCardStatus>("not_connected");
-  const [emailDetail, setEmailDetail] = useState<string>();
-  const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [emailIntegration, setEmailIntegration] = useState<EmailIntegration | null>(null);
+  const [emailProviderModal, setEmailProviderModal] = useState<EmailProvider | null>(null);
   const [agentStatus, setAgentStatus] = useState<IntegrationCardStatus>("not_connected");
   const [agentDetail, setAgentDetail] = useState<string>();
   const [agentModalOpen, setAgentModalOpen] = useState(false);
+  const [notionIntegration, setNotionIntegration] = useState<ContentIntegration | null>(null);
+  const [notionModalOpen, setNotionModalOpen] = useState(false);
+  const [airtableIntegration, setAirtableIntegration] = useState<ContentIntegration | null>(null);
+  const [airtableModalOpen, setAirtableModalOpen] = useState(false);
+  const [sanityIntegration, setSanityIntegration] = useState<ContentIntegration | null>(null);
+  const [sanityModalOpen, setSanityModalOpen] = useState(false);
 
   const loadAgentStatus = useCallback(async (eventId: Event["id"]) => {
     try { const setting = await repo.agentProviderSettings.status({ eventId }); setAgentStatus(setting.status === "ready" ? "connected" : "error"); setAgentDetail(setting.mode === "managed" ? "Namos managed" : "Organizer key"); }
@@ -46,17 +54,52 @@ export default function Integrations() {
       try {
         const integration = await repo.emailIntegrations.status({ eventId });
         if (!integration) {
-          setEmailStatus("not_connected");
-          setEmailDetail(undefined);
+          setEmailIntegration(null);
           return;
         }
-        setEmailStatus(integration.status === "error" ? "error" : "connected");
-        setEmailDetail(providerLabel[integration.provider]);
+        setEmailIntegration(integration);
       } catch {
         // The card falls back to "Not connected" rather than surfacing a page-level error —
         // the modal's own form re-fetches and reports load failures in context.
-        setEmailStatus("not_connected");
-        setEmailDetail(undefined);
+        setEmailIntegration(null);
+      }
+    },
+    [repo],
+  );
+
+  const loadNotionStatus = useCallback(
+    async (eventId: Event["id"]) => {
+      try {
+        const integration = await repo.contentIntegrations.status({ eventId, provider: "notion" });
+        setNotionIntegration(integration);
+      } catch {
+        // Same fallback rule as email: the card shows "Not connected" and the modal's own
+        // form reports load failures in context.
+        setNotionIntegration(null);
+      }
+    },
+    [repo],
+  );
+
+  const loadAirtableStatus = useCallback(
+    async (eventId: Event["id"]) => {
+      try {
+        const integration = await repo.contentIntegrations.status({ eventId, provider: "airtable" });
+        setAirtableIntegration(integration);
+      } catch {
+        setAirtableIntegration(null);
+      }
+    },
+    [repo],
+  );
+
+  const loadSanityStatus = useCallback(
+    async (eventId: Event["id"]) => {
+      try {
+        const integration = await repo.contentIntegrations.status({ eventId, provider: "sanity" });
+        setSanityIntegration(integration);
+      } catch {
+        setSanityIntegration(null);
       }
     },
     [repo],
@@ -67,20 +110,20 @@ export default function Integrations() {
     try {
       setEvent(activeEvent);
       setError(undefined);
-      if (activeEvent) await Promise.all([loadEmailStatus(activeEvent.id), loadAgentStatus(activeEvent.id)]);
+      if (activeEvent) await Promise.all([loadEmailStatus(activeEvent.id), loadAgentStatus(activeEvent.id), loadNotionStatus(activeEvent.id), loadAirtableStatus(activeEvent.id), loadSanityStatus(activeEvent.id)]);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not load integrations.");
     } finally {
       setLoading(false);
     }
-  }, [activeEvent, loadAgentStatus, loadEmailStatus]);
+  }, [activeEvent, loadAgentStatus, loadAirtableStatus, loadEmailStatus, loadNotionStatus, loadSanityStatus]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   const closeEmailModal = (open: boolean) => {
-    setEmailModalOpen(open);
+    if (!open) setEmailProviderModal(null);
     // Refresh the card's status the moment the modal closes, so a save/disconnect inside it
     // is reflected without the organizer having to leave and return to the page.
     if (!open && event) void loadEmailStatus(event.id);
@@ -100,38 +143,112 @@ export default function Integrations() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <IntegrationCard
               icon={Mail}
-              name="Email delivery"
-              description="Connect Resend or Amazon SES to send confirmations, decisions, and reminders."
-              status={emailStatus}
-              detail={emailDetail}
-              onOpen={() => setEmailModalOpen(true)}
+              name="Resend"
+              description="Connect Resend for transactional event email with an API key."
+              status={emailIntegration?.provider === "resend" ? (emailIntegration.status === "error" ? "error" : "connected") : "not_connected"}
+              detail={emailIntegration?.provider === "resend" ? providerLabel.resend : undefined}
+              onOpen={() => setEmailProviderModal("resend")}
+            />
+            <IntegrationCard
+              icon={Server}
+              name="Amazon SES"
+              description="Connect Amazon SES using AWS access keys or SMTP credentials."
+              status={emailIntegration?.provider === "ses" ? (emailIntegration.status === "error" ? "error" : "connected") : "not_connected"}
+              detail={emailIntegration?.provider === "ses" ? providerLabel.ses : undefined}
+              onOpen={() => setEmailProviderModal("ses")}
             />
             <IntegrationCard icon={Bot} name="Operations Agent AI" description="Choose Namos-managed AI or connect this event's own OpenAI key." status={agentStatus} detail={agentDetail} onOpen={() => setAgentModalOpen(true)} />
           </div>
         ) : (
           <div className={cardSurfaceClasses("default", "bg-muted/60 p-6")}>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-base text-muted-foreground">
               Create an event before connecting an integration.
             </p>
           </div>
         )}
+        {!loading && event && (
+          <>
+            <h2 className="text-base font-semibold">Content sources</h2>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <IntegrationCard
+                icon={FileText}
+                name="Notion"
+                description="Import speakers or submissions from a Notion database."
+                status={notionIntegration ? (notionIntegration.status === "error" ? "error" : "connected") : "not_connected"}
+                detail={notionIntegration ? `Imports into ${notionIntegration.target}` : undefined}
+                onOpen={() => setNotionModalOpen(true)}
+              />
+              <IntegrationCard
+                icon={Table}
+                name="Airtable"
+                description="Import speakers or submissions from an Airtable base."
+                status={airtableIntegration ? (airtableIntegration.status === "error" ? "error" : "connected") : "not_connected"}
+                detail={airtableIntegration ? `Imports into ${airtableIntegration.target}` : undefined}
+                onOpen={() => setAirtableModalOpen(true)}
+              />
+              <IntegrationCard
+                icon={Globe}
+                name="Sanity"
+                description="Publish confirmed sessions and speakers to a Sanity dataset."
+                status={sanityIntegration ? (sanityIntegration.status === "error" ? "error" : "connected") : "not_connected"}
+                detail={sanityIntegration?.config?.sanityDataset ? `Publishing to ${sanityIntegration.config.sanityDataset}` : undefined}
+                onOpen={() => setSanityModalOpen(true)}
+              />
+            </div>
+          </>
+        )}
       </div>
 
-      <Dialog open={emailModalOpen} onOpenChange={closeEmailModal}>
+      <Dialog open={emailProviderModal !== null} onOpenChange={closeEmailModal}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Email delivery</DialogTitle>
+            <DialogTitle>{emailProviderModal ? `Connect ${providerLabel[emailProviderModal]}` : "Email delivery"}</DialogTitle>
             <DialogDescription>
-              Connect the provider this event uses to send confirmations, decisions, reminders,
-              and calendar invites. Credentials are encrypted and never shown again on this
-              screen.
+              Connect this provider to send confirmations, decisions, reminders, and calendar invites.
+              One provider is active per event; changing it replaces the existing connection.
             </DialogDescription>
           </DialogHeader>
-          {event && <EmailIntegrationForm eventId={event.id} />}
+          {event && emailProviderModal && <EmailIntegrationForm eventId={event.id} provider={emailProviderModal} />}
         </DialogContent>
       </Dialog>
       <Dialog open={agentModalOpen} onOpenChange={(open) => { setAgentModalOpen(open); if (!open && event) void loadAgentStatus(event.id); }}>
         <DialogContent className="max-w-2xl"><DialogHeader><DialogTitle>Operations Agent AI</DialogTitle><DialogDescription>Choose who provides and pays for model usage on new Operations Agent runs for this event.</DialogDescription></DialogHeader>{event && <AgentProviderSettingsForm eventId={event.id} onSaved={() => void loadAgentStatus(event.id)} />}</DialogContent>
+      </Dialog>
+      <Dialog open={notionModalOpen} onOpenChange={(open) => { setNotionModalOpen(open); if (!open && event) void loadNotionStatus(event.id); }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Notion</DialogTitle>
+            <DialogDescription>
+              Import speakers or submissions from a Notion database. Re-running "Import now"
+              updates existing rows instead of duplicating them.
+            </DialogDescription>
+          </DialogHeader>
+          {event && <NotionIntegrationForm eventId={event.id} />}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={airtableModalOpen} onOpenChange={(open) => { setAirtableModalOpen(open); if (!open && event) void loadAirtableStatus(event.id); }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Airtable</DialogTitle>
+            <DialogDescription>
+              Import speakers or submissions from an Airtable base. Re-running "Import now"
+              updates existing rows instead of duplicating them.
+            </DialogDescription>
+          </DialogHeader>
+          {event && <AirtableIntegrationForm eventId={event.id} />}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={sanityModalOpen} onOpenChange={(open) => { setSanityModalOpen(open); if (!open && event) void loadSanityStatus(event.id); }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Sanity</DialogTitle>
+            <DialogDescription>
+              Publish this event&apos;s public program to Sanity. Re-running &quot;Publish now&quot;
+              updates the same documents instead of duplicating them.
+            </DialogDescription>
+          </DialogHeader>
+          {event && <SanityIntegrationForm eventId={event.id} />}
+        </DialogContent>
       </Dialog>
     </AppLayout>
   );

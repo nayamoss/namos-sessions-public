@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Inbox, Plus } from "lucide-react";
+import { Inbox } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
 import { DataGrid, type DataGridColumn } from "@/components/shared/DataGrid";
@@ -68,7 +68,7 @@ export default function ComponentShowcase() {
               <div className="flex flex-wrap gap-2">
                 {(["draft", "pending", "accept_queue", "accepted", "declined"] as SubmissionStatus[]).map((status) => <SubmissionStatusBadge key={status} status={status} />)}
               </div>
-              <EmptyState compact icon={Inbox} title={view === "active" ? "No active records" : "No archived records"} message="Useful empty states explain what belongs here and offer a next step." action={<Button variant="accent" size="sm"><Plus />Add record</Button>} className={cardSurfaceClasses("default", "bg-muted/60")} />
+              <EmptyState compact icon={Inbox} title={view === "active" ? "No active records" : "No archived records"} message="Useful empty states explain what belongs here and offer a next step." action={<Button variant="accent" size="sm">Add record</Button>} className={cardSurfaceClasses("default", "bg-muted/60")} />
             </div>
           </SectionCard>
         </div>

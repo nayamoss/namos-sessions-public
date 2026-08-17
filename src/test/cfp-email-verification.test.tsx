@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { useCfpEmailVerification } from "@/pages/public/CfpEmailVerification";
+import { emailEditable, useCfpEmailVerification } from "@/pages/public/CfpEmailVerification";
 
 // The Account step used to accept a free-text email with no proof of ownership, which is why
 // /portal (gated by RequireAuth) was unreachable for a genuinely anonymous submitter — see
@@ -134,5 +134,43 @@ describe("useCfpEmailVerification with an existing Clerk session", () => {
     expect(signOut).toHaveBeenCalled();
     expect(signUpCreate).toHaveBeenCalledTimes(2);
     expect(result.current.status).toBe("code-sent");
+  });
+
+  it("keeps the email field editable during a session conflict, and can sign out without resending", async () => {
+    // The trap: session-conflict left the email input disabled, and the only way out
+    // re-sent a code to the same address — so a submitter whose browser was signed in
+    // as someone else could never submit under their own email.
+    expect(emailEditable("session-conflict")).toBe(true);
+    expect(emailEditable("unverified")).toBe(true);
+    expect(emailEditable("error")).toBe(true);
+    // Still locked while a code is in flight or already proven.
+    expect(emailEditable("sending")).toBe(false);
+    expect(emailEditable("code-sent")).toBe(false);
+    expect(emailEditable("verifying")).toBe(false);
+    expect(emailEditable("verified")).toBe(false);
+
+    vi.doMock("@clerk/clerk-react", () => ({
+      useSignUp: () => ({ isLoaded: true, signUp: { create: signUpCreate, prepareEmailAddressVerification: signUpPrepare }, setActive: setActiveFromSignUp }),
+      useSignIn: () => ({ isLoaded: true, signIn: {}, setActive: setActiveFromSignIn }),
+      useAuth: () => ({ isSignedIn: true, isLoaded: true }),
+      useUser: () => ({ user: { primaryEmailAddress: { emailAddress: "organizer@example.com" } } }),
+      useClerk: () => ({ signOut }),
+    }));
+    vi.resetModules();
+    signUpCreate.mockRejectedValueOnce({ errors: [{ code: "session_exists", message: "Session already exists" }] });
+    signOut.mockResolvedValue(undefined);
+
+    const { useCfpEmailVerification: freshHook } = await import("@/pages/public/CfpEmailVerification");
+    const { result } = renderHook(() => freshHook("new-speaker@example.com"));
+
+    await act(async () => { await result.current.sendCode(); });
+    expect(result.current.status).toBe("session-conflict");
+
+    const callsBefore = signUpCreate.mock.calls.length;
+    await act(async () => { await result.current.signOutAndEdit(); });
+    expect(signOut).toHaveBeenCalled();
+    // Back to an editable, un-sent state — no code fired at the old address.
+    expect(result.current.status).toBe("unverified");
+    expect(signUpCreate).toHaveBeenCalledTimes(callsBefore);
   });
 });

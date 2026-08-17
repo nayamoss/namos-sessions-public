@@ -1,4 +1,5 @@
 export type PortalSubmission = { id: string; code: string; title: string; type: string; status: "pending" | "accepted" | "accept_queue" | "decline_queue" | "declined"; updatedAt: string };
+export function portalSubmissionStatusLabel(status: string) { return status === "maybe" ? "Under review" : status; }
 export type PortalTask = { id: string; title: string; scope: "submission" | "profile"; complete: boolean; due: string };
 export type PortalProfile = { firstName: string; lastName: string; email: string; bio: string; salutation: string; honorific: string; pronouns: string; gender: string; linkedinUrl: string; xUrl: string; facebookUrl: string; websiteUrl: string };
 

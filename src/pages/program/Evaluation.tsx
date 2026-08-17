@@ -1,17 +1,25 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useUser } from "@clerk/clerk-react";
-import { Check, ClipboardCheck, ListChecks, Plus, Users } from "lucide-react";
+import { ListChecks } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { BlindedBadge } from "@/components/shared/BlindedBadge";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
 import { DataGrid, type DataGridColumn } from "@/components/shared/DataGrid";
-import { StatCard } from "@/components/shared/StatCard";
-import { StatusTabs } from "@/components/shared/StatusTabs";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { cardSurfaceClasses } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -22,7 +30,6 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { isForbiddenError } from "@/lib/authorization";
 import {
-  averageScore,
   criteriaErrors,
   firstMissingCriterion,
   weightedTotal,
@@ -134,6 +141,10 @@ export default function Evaluation() {
   const [newPlanRounds, setNewPlanRounds] = useState<1 | 2>(1);
   const [newPlanScale, setNewPlanScale] = useState<5 | 10>(5);
   const [newPlanAnonymized, setNewPlanAnonymized] = useState(false);
+  const [showCreatePlan, setShowCreatePlan] = useState(false);
+  const [planWorkspaceTab, setPlanWorkspaceTab] = useState<
+    "progress" | "criteria" | "assignments"
+  >("progress");
   const [scoreDraft, setScoreDraft] = useState<number>();
   const [commentsDraft, setCommentsDraft] = useState("");
   // Bumped after a write that can change reviewer completion, so the progress panel refetches
@@ -290,11 +301,9 @@ export default function Evaluation() {
             anonymized: row.anonymized === true,
             // A blinded row and a row whose submission has no speaker must read identically, or the
             // absence itself becomes a signal.
-            speaker: row.anonymized
-              ? HIDDEN_SPEAKER
-              : row.speakerNames?.join(", ") || "Unassigned",
-            track: row.submissionAnswers.track || "Unassigned",
-            abstract: row.submissionAnswers.abstract || "No abstract provided.",
+            speaker: row.anonymized ? HIDDEN_SPEAKER : row.speakerNames?.join(", ") || "",
+            track: row.submissionAnswers.track || "",
+            abstract: row.submissionAnswers.abstract || "",
           }))
         : assignments
             .filter(
@@ -340,9 +349,9 @@ export default function Evaluation() {
                   ? HIDDEN_SPEAKER
                   : submission?.speakerIds
                       .map((id) => speakerNameById.get(id) || "Unknown speaker")
-                      .join(", ") || "Unassigned",
-                track: String(answers?.track || "Unassigned"),
-                abstract: String(answers?.abstract || "No abstract provided."),
+                      .join(", ") || "",
+                track: String(answers?.track || ""),
+                abstract: String(answers?.abstract || ""),
               };
             }),
     [
@@ -361,7 +370,6 @@ export default function Evaluation() {
     queueRows.find((row) => !isScored(row)) ??
     queueRows[0];
   const queueBlinded = queueRows.some((row) => row.anonymized);
-  const completed = queueRows.filter(isScored);
   const open = queueRows.filter((row) => !isScored(row));
 
   useEffect(() => {
@@ -393,6 +401,7 @@ export default function Evaluation() {
       });
       setNewPlanName("");
       setNewPlanAnonymized(false);
+      setShowCreatePlan(false);
       await load();
       setSelectedPlanId(id);
     } catch (cause) {
@@ -542,59 +551,6 @@ export default function Evaluation() {
     }
   };
 
-  const planRows = plans.map((plan) => {
-    const planAssignments = assignments.filter(
-      (assignment) => assignment.evaluationPlanId === plan.id,
-    );
-    const evaluated = planAssignments.filter((assignment) =>
-      isRecorded(reviewByAssignment.get(assignment.id)),
-    ).length;
-    return {
-      ...plan,
-      assigned: planAssignments.length,
-      evaluated,
-      inProgress: planAssignments.length - evaluated,
-    };
-  });
-  const planColumns: DataGridColumn<(typeof planRows)[number]>[] = [
-    {
-      key: "name",
-      header: "Evaluation plan",
-      cell: (row) => (
-        <span className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => selectPlan(row.id)}
-            className="font-medium text-left underline-offset-4 hover:underline"
-          >
-            {row.name}
-          </button>
-          {row.anonymized ? <BlindedBadge /> : null}
-        </span>
-      ),
-    },
-    { key: "rounds", header: "Rounds", cell: (row) => row.rounds },
-    {
-      key: "scale",
-      header: "Scale",
-      cell: (row) => `1–${row.scoringScaleMax}`,
-    },
-    {
-      key: "criteria",
-      header: "Criteria",
-      cell: (row) =>
-        row.criteria?.length
-          ? `${row.criteria.length} weighted`
-          : "Single score",
-    },
-    {
-      key: "progress",
-      header: "Progress",
-      cell: (row) =>
-        `${row.evaluated} evaluated · ${row.inProgress} in progress`,
-    },
-    { key: "assigned", header: "Assigned", cell: (row) => row.assigned },
-  ];
   const queueColumns: DataGridColumn<QueueRow>[] = [
     {
       key: "title",
@@ -603,13 +559,10 @@ export default function Evaluation() {
         <button
           type="button"
           onClick={() => setActiveAssignmentId(row.id)}
-          className="text-left"
+          className="py-1 text-left"
         >
-          <span className="block font-medium underline-offset-4 hover:underline">
+          <span className="block text-base font-medium underline-offset-4 hover:underline">
             {row.title}
-          </span>
-          <span className="block text-xs text-muted-foreground">
-            Round {row.round} · {row.speaker} · {row.track}
           </span>
         </button>
       ),
@@ -620,7 +573,7 @@ export default function Evaluation() {
       cell: (row) => {
         const total = rowTotal(row);
         return total === undefined
-          ? "Not scored"
+          ? "—"
           : `${row.criteria.length ? total.toFixed(2) : total}/${row.scoringScaleMax}`;
       },
     },
@@ -631,7 +584,7 @@ export default function Evaluation() {
         isScored(row) ? (
           <span className="text-[hsl(var(--success))]">Complete</span>
         ) : (
-          <span className="text-muted-foreground">Ready to review</span>
+          <span className="text-muted-foreground">Ready</span>
         ),
     },
   ];
@@ -667,430 +620,322 @@ export default function Evaluation() {
       ),
     },
   ];
-  const planAssigned = selectedPlan
-    ? assignments.filter(
-        (assignment) => assignment.evaluationPlanId === selectedPlan.id,
-      ).length
-    : 0;
-
   return (
-    <AppLayout title="Evaluation">
+    <AppLayout title="Judge submissions">
       <div className="space-y-4">
         {error && (
           <p role="alert" className="text-sm text-destructive">
             {error}
           </p>
         )}
-        {reviewerOnly && (
-          <p className="text-sm text-muted-foreground">
-            You're viewing your reviewer queue. Ask an organizer for full access
-            to manage plans and assignments.
-          </p>
-        )}
         <ContentToolbar
           ariaLabel="Evaluation controls"
           utilities={
-            <StatusTabs
-              ariaLabel="Evaluation views"
-              value={reviewerOnly ? "queue" : surface}
-              onValueChange={(value) => setSurface(value as "plans" | "queue")}
-              tabs={
-                reviewerOnly
-                  ? [
-                      {
-                        value: "queue",
-                        label: "My reviewer queue",
-                        count: open.length,
-                      },
-                    ]
-                  : [
-                      {
-                        value: "plans",
-                        label: "Evaluation plans",
-                        count: plans.length,
-                      },
-                      {
-                        value: "queue",
-                        label: "My reviewer queue",
-                        count: open.length,
-                      },
-                    ]
-              }
-            />
-          }
-          primaryAction={
-            reviewerOnly ? undefined : (
-              <Button
-                variant="accent"
-                size="sm"
-                onClick={() =>
-                  document.getElementById("new-evaluation-plan")?.focus()
-                }
-              >
-                <Plus className="mr-1 h-4 w-4" />
-                New Plan
-              </Button>
-            )
+            !reviewerOnly ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    Manage evaluations
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => setSurface("plans")}>
+                    Evaluation plans
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => setSurface("queue")}>
+                    My reviewer queue
+                  </DropdownMenuItem>
+                  {surface === "plans" && selectedPlan && (
+                    <>
+                      {plans.length > 1 && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuLabel>Evaluation plan</DropdownMenuLabel>
+                          {plans.map((plan) => (
+                            <DropdownMenuItem
+                              key={plan.id}
+                              onSelect={() => selectPlan(plan.id)}
+                            >
+                              {plan.name}
+                            </DropdownMenuItem>
+                          ))}
+                        </>
+                      )}
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onSelect={() => setPlanWorkspaceTab("progress")}
+                      >
+                        Review progress
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={() => setPlanWorkspaceTab("criteria")}
+                      >
+                        Scoring criteria
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={() => setPlanWorkspaceTab("assignments")}
+                      >
+                        Assign reviewers
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                    </>
+                  )}
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      setShowCreatePlan(true);
+                      requestAnimationFrame(() =>
+                        document.getElementById("new-evaluation-plan")?.focus(),
+                      );
+                    }}
+                  >
+                    Create evaluation plan
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : undefined
           }
         />
         {!reviewerOnly && surface === "plans" ? (
           <>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <StatCard
-                label="Evaluation plans"
-                value={plans.length}
-                icon={ListChecks}
-              />
-              <StatCard
-                label="Assigned reviews"
-                value={assignments.length}
-                icon={Users}
-              />
-              <StatCard
-                label="Evaluated submissions"
-                value={
-                  reviews.filter(
-                    (review) => review.assignmentId && isRecorded(review),
-                  ).length
-                }
-                icon={ClipboardCheck}
-              />
-              <StatCard
-                label="Review progress"
-                value={
-                  assignments.length
-                    ? `${Math.round((reviews.filter((review) => review.assignmentId && isRecorded(review)).length / assignments.length) * 100)}%`
-                    : "—"
-                }
-                icon={Check}
-              />
-            </div>
-            <DataGrid
-              rows={planRows}
-              columns={planColumns}
-              empty="No evaluation plans yet."
-              loading={loading}
-            />
-            {/* Reviewer progress + reminders (issue #59). Self-contained: it owns its own query and
-          send, and only needs to know which plan is selected and when to refetch. */}
-            {eventId && selectedPlan && (
-              <ReviewerProgressPanel
-                eventId={eventId as EventId}
-                plan={selectedPlan}
-                refreshKey={progressRefreshKey}
-              />
-            )}
-            <section className={cardSurfaceClasses("default", "p-5")}>
-              <h2 className="font-semibold">Create evaluation plan</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                AI assistance is deliberately a stub; reviewers score
-                submissions themselves.
-              </p>
-              <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_9rem_9rem_auto]">
-                <Input
-                  id="new-evaluation-plan"
-                  value={newPlanName}
-                  onChange={(event) => setNewPlanName(event.target.value)}
-                  placeholder="Program committee review"
-                  aria-label="Evaluation plan name"
-                />
-                <Select
-                  value={String(newPlanRounds)}
-                  onValueChange={(value) =>
-                    setNewPlanRounds(Number(value) as 1 | 2)
-                  }
-                >
-                  <SelectTrigger aria-label="Evaluation rounds">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">1 round</SelectItem>
-                    <SelectItem value="2">2 rounds</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select
-                  value={String(newPlanScale)}
-                  onValueChange={(value) =>
-                    setNewPlanScale(Number(value) as 5 | 10)
-                  }
-                >
-                  <SelectTrigger aria-label="Scoring scale">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="5">1–5 scale</SelectItem>
-                    <SelectItem value="10">1–10 scale</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Button
-                  variant="outline"
-                  onClick={() => void createPlan()}
-                  disabled={saving || !newPlanName.trim()}
-                >
-                  Create plan
-                </Button>
-              </div>
-              {/* Blind review (#57) — additive block, independent of the fields above. */}
-              <div className="mt-4">
-                <div className="flex items-center gap-2">
+            {showCreatePlan && (
+              <section className={cardSurfaceClasses("default", "p-4")}>
+                <div className="flex items-start justify-between gap-3">
+                  <h2 className="font-semibold">Create evaluation plan</h2>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowCreatePlan(false)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+                <div className="mt-3 grid gap-2 md:grid-cols-[minmax(0,1fr)_9rem_9rem_auto]">
+                  <Input
+                    id="new-evaluation-plan"
+                    value={newPlanName}
+                    onChange={(event) => setNewPlanName(event.target.value)}
+                    placeholder="Program committee review"
+                    aria-label="Evaluation plan name"
+                  />
+                  <Select
+                    value={String(newPlanRounds)}
+                    onValueChange={(value) =>
+                      setNewPlanRounds(Number(value) as 1 | 2)
+                    }
+                  >
+                    <SelectTrigger aria-label="Evaluation rounds">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">1 round</SelectItem>
+                      <SelectItem value="2">2 rounds</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={String(newPlanScale)}
+                    onValueChange={(value) =>
+                      setNewPlanScale(Number(value) as 5 | 10)
+                    }
+                  >
+                    <SelectTrigger aria-label="Scoring scale">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">1–5 scale</SelectItem>
+                      <SelectItem value="10">1–10 scale</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="accent"
+                    onClick={() => void createPlan()}
+                    disabled={saving || !newPlanName.trim()}
+                  >
+                    Create plan
+                  </Button>
+                </div>
+                <label className="mt-3 flex items-start gap-2 text-sm">
                   <Checkbox
-                    id="new-plan-anonymized"
                     checked={newPlanAnonymized}
                     onCheckedChange={(value) =>
                       setNewPlanAnonymized(value === true)
                     }
                   />
-                  <Label
-                    htmlFor="new-plan-anonymized"
-                    className="text-sm font-medium"
-                  >
-                    Anonymize this plan
-                  </Label>
-                </div>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Reviewers will not see speaker names, headshots or contact
-                  details for any round of this plan. Organizer views are
-                  unaffected.
-                </p>
-              </div>
-            </section>
-            <section className={cardSurfaceClasses("default", "p-5")}>
-              <div className="flex flex-wrap items-end justify-between gap-3">
-                <div>
-                  <h2 className="font-semibold">Scoring criteria</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Criteria belong to an evaluation plan and apply to every one
-                    of its rounds. A plan with no criteria keeps the single
-                    overall score.
-                  </p>
-                </div>
-                <Select value={selectedPlanId ?? ""} onValueChange={selectPlan}>
-                  <SelectTrigger
-                    className="w-52"
-                    aria-label="Plan to configure criteria for"
-                  >
-                    <SelectValue placeholder="Select plan" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {plans.map((plan) => (
-                      <SelectItem key={plan.id} value={plan.id}>
-                        {plan.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {selectedPlan ? (
-                <div className="mt-4 space-y-4">
-                  <CriteriaEditor
-                    criteria={criteriaDraft}
-                    scoringScaleMax={selectedPlan.scoringScaleMax}
-                    onChange={(next) => {
-                      setCriteriaDraft(next);
-                      setCriteriaSaved(false);
-                    }}
-                    disabled={saving}
-                  />
-                  <div className="flex items-center justify-end gap-3">
-                    {criteriaSaved && (
-                      <p className="text-sm text-muted-foreground">
-                        Criteria saved.
-                      </p>
-                    )}
+                  <span>
+                    <span className="font-medium">Blind review</span>
+                  </span>
+                </label>
+              </section>
+            )}
+            {!loading && plans.length === 0 && (
+              <section className={cardSurfaceClasses("default", "p-2")}>
+                <EmptyState
+                  compact
+                  title="No evaluation plans yet"
+                  message="Create a plan to begin assigning submissions to reviewers."
+                  action={
                     <Button
-                      variant="outline"
-                      onClick={() => void saveCriteria()}
-                      disabled={saving || criteriaDraftErrors.size > 0}
+                      variant="accent"
+                      onClick={() => setShowCreatePlan(true)}
                     >
-                      Save criteria
+                      Create evaluation plan
                     </Button>
-                  </div>
-                </div>
-              ) : (
-                <p className="mt-4 text-sm text-muted-foreground">
-                  Create an evaluation plan first, then define what reviewers
-                  score.
-                </p>
-              )}
-            </section>
-            <section className={cardSurfaceClasses("default", "p-5")}>
-              <div className="flex flex-wrap items-end justify-between gap-3">
-                <div>
-                  <h2 className="font-semibold">Assign submissions</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Select rows, a plan, a round, and the reviewers' email
-                    addresses. Each reviewer sees this in their own queue once
-                    signed in with that email. Assignments are idempotent per
-                    plan, round, submission, and reviewer.
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-end gap-2">
-                  <Select
-                    value={selectedPlanId ?? ""}
-                    onValueChange={selectPlan}
-                  >
-                    <SelectTrigger
-                      className="w-52"
-                      aria-label="Evaluation plan"
-                    >
-                      <SelectValue placeholder="Select plan" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {plans.map((plan) => (
-                        <SelectItem key={plan.id} value={plan.id}>
-                          {plan.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select
-                    value={String(assignmentRound)}
-                    onValueChange={(value) => setAssignmentRound(Number(value))}
-                    disabled={!selectedPlan}
-                  >
-                    <SelectTrigger
-                      className="w-32"
-                      aria-label="Evaluation assignment round"
-                    >
-                      <SelectValue placeholder="Round" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {selectedPlan
-                        ? Array.from(
-                            { length: selectedPlan.rounds },
-                            (_, index) => index + 1,
-                          ).map((round) => (
-                            <SelectItem key={round} value={String(round)}>
-                              Round {round}
-                            </SelectItem>
-                          ))
-                        : null}
-                    </SelectContent>
-                  </Select>
-                  <div className="space-y-1">
-                    <Label htmlFor="reviewer-emails" className="sr-only">
-                      Reviewer emails
-                    </Label>
-                    <Input
-                      id="reviewer-emails"
-                      value={reviewerEmailsInput}
-                      onChange={(event) =>
-                        setReviewerEmailsInput(event.target.value)
-                      }
-                      className="w-64"
-                      placeholder="reviewer@example.com, another@example.com"
-                    />
-                  </div>
-                  <Button
-                    variant="secondary"
-                    onClick={() => void assignSelected()}
-                    disabled={
-                      saving ||
-                      !selectedPlan ||
-                      !selectedSubmissionIds.length ||
-                      !reviewerEmails.length
-                    }
-                  >
-                    Assign {selectedSubmissionIds.length || ""}
-                  </Button>
-                </div>
-              </div>
-              <div className="mt-4">
-                <DataGrid
-                  rows={submissions}
-                  columns={assignmentColumns}
-                  empty="No submissions are available to assign."
-                  loading={loading}
-                  selectedIds={selectedSubmissionIds}
-                  onSelectionChange={setSelectedSubmissionIds}
-                  getRowLabel={(submission) => submission.title || "submission"}
+                  }
                 />
-              </div>
-              {selectedPlan && (
-                <p className="mt-3 text-xs text-muted-foreground">
-                  {selectedPlan.name}: {planAssigned} assignment
-                  {planAssigned === 1 ? "" : "s"} · assigning Round{" "}
-                  {assignmentRound} of {selectedPlan.rounds}
-                </p>
-              )}
-            </section>
-            <AssignByFilterCard
-              tags={tags}
-              tracks={tracks}
-              submissions={submissions}
-              plans={plans}
-              selectedPlanId={selectedPlanId}
-              onSelectPlan={selectPlan}
-              round={assignmentRound}
-              onRoundChange={setAssignmentRound}
-              disabled={loading || saving}
-              onAssign={assignByFilter}
-            />
+              </section>
+            )}
+            {selectedPlan && (
+              <>
+                {planWorkspaceTab === "progress" && eventId && (
+                  <ReviewerProgressPanel
+                    eventId={eventId as EventId}
+                    plan={selectedPlan}
+                    refreshKey={progressRefreshKey}
+                  />
+                )}
+
+                {planWorkspaceTab === "criteria" && (
+                  <section className={cardSurfaceClasses("default", "p-6")}>
+                    <CriteriaEditor
+                      criteria={criteriaDraft}
+                      scoringScaleMax={selectedPlan.scoringScaleMax}
+                      onChange={(next) => {
+                        setCriteriaDraft(next);
+                        setCriteriaSaved(false);
+                      }}
+                      disabled={saving}
+                    />
+                    <div className="mt-3 flex items-center justify-end gap-3">
+                      {criteriaSaved && (
+                        <p className="text-sm text-muted-foreground">
+                          Criteria saved.
+                        </p>
+                      )}
+                      <Button
+                        variant="accent"
+                        size="sm"
+                        onClick={() => void saveCriteria()}
+                        disabled={saving || criteriaDraftErrors.size > 0}
+                      >
+                        Save criteria
+                      </Button>
+                    </div>
+                  </section>
+                )}
+
+                {planWorkspaceTab === "assignments" && (
+                  <div className="space-y-3">
+                  <section className={cardSurfaceClasses("default", "p-6")}>
+                    <div className="flex flex-wrap items-end justify-between gap-3">
+                      <h2 className="font-semibold">Assign submissions</h2>
+                      <div className="flex flex-wrap items-end gap-2">
+                        <Select
+                          value={String(assignmentRound)}
+                          onValueChange={(value) =>
+                            setAssignmentRound(Number(value))
+                          }
+                          disabled={!selectedPlan}
+                        >
+                          <SelectTrigger
+                            className="w-32"
+                            aria-label="Evaluation assignment round"
+                          >
+                            <SelectValue placeholder="Round" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {selectedPlan
+                              ? Array.from(
+                                  { length: selectedPlan.rounds },
+                                  (_, index) => index + 1,
+                                ).map((round) => (
+                                  <SelectItem key={round} value={String(round)}>
+                                    Round {round}
+                                  </SelectItem>
+                                ))
+                              : null}
+                          </SelectContent>
+                        </Select>
+                        <div className="space-y-1">
+                          <Label htmlFor="reviewer-emails" className="sr-only">
+                            Reviewer emails
+                          </Label>
+                          <Input
+                            id="reviewer-emails"
+                            value={reviewerEmailsInput}
+                            onChange={(event) =>
+                              setReviewerEmailsInput(event.target.value)
+                            }
+                            className="w-64"
+                            placeholder="reviewer@example.com, another@example.com"
+                          />
+                        </div>
+                        <Button
+                          variant="secondary"
+                          onClick={() => void assignSelected()}
+                          disabled={
+                            saving ||
+                            !selectedPlan ||
+                            !selectedSubmissionIds.length ||
+                            !reviewerEmails.length
+                          }
+                        >
+                          Assign {selectedSubmissionIds.length || ""}
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="mt-4">
+                      <DataGrid
+                        rows={submissions}
+                        columns={assignmentColumns}
+                        empty="No submissions are available to assign."
+                        loading={loading}
+                        selectedIds={selectedSubmissionIds}
+                        onSelectionChange={setSelectedSubmissionIds}
+                        getRowLabel={(submission) =>
+                          submission.title || "submission"
+                        }
+                      />
+                    </div>
+                  </section>
+                  <AssignByFilterCard
+                    tags={tags}
+                    tracks={tracks}
+                    submissions={submissions}
+                    plans={plans}
+                    selectedPlanId={selectedPlanId}
+                    onSelectPlan={selectPlan}
+                    round={assignmentRound}
+                    onRoundChange={setAssignmentRound}
+                    disabled={loading || saving}
+                    onAssign={assignByFilter}
+                  />
+                  </div>
+                )}
+              </>
+            )}
           </>
         ) : (
           <>
-            <section className={cardSurfaceClasses("default", "p-5")}>
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="text-sm font-medium">Reviewer queue</p>
+            <section className={cardSurfaceClasses("default", "p-6")}>
+              <div className="mb-3 flex items-center gap-2">
+                <h2 className="text-lg font-semibold">My reviews</h2>
                 {queueBlinded ? <BlindedBadge /> : null}
               </div>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {myEmail ? (
-                  <>
-                    Showing assignments for{" "}
-                    <span className="font-medium text-foreground">
-                      {myEmail}
-                    </span>{" "}
-                    — an organizer assigns reviewers by this email.
-                  </>
-                ) : (
-                  "Sign in to see your review assignments."
-                )}
-              </p>
-              {queueBlinded && (
-                <p className="mt-1 text-sm text-muted-foreground">
-                  This plan is blinded. Speaker identity is withheld from
-                  reviewers by the server.
-                </p>
-              )}
-            </section>
-            <div className="grid gap-4 sm:grid-cols-3">
-              <StatCard label="In this queue" value={open.length} />
-              <StatCard label="Completed" value={completed.length} />
-              <StatCard
-                label="Your average"
-                value={averageScore(completed.map(rowTotal))?.toFixed(1) ?? "—"}
-              />
-            </div>
-            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,0.8fr)]">
               <DataGrid
                 rows={queueRows}
                 columns={queueColumns}
-                empty="No assignments for this reviewer."
+                empty="No reviews assigned."
                 loading={loading}
               />
-              {active && (
-                <section className={cardSurfaceClasses("default", "p-5")}>
+            </section>
+            {active && (
+              <section className={cardSurfaceClasses("default", "p-6")}>
                   <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                        Round {active.round} · {active.planName}
-                      </p>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-lg font-semibold">{active.title}</h2>
                       {active.anonymized ? <BlindedBadge /> : null}
                     </div>
-                    <h2 className="mt-1 text-base font-semibold">
-                      {active.title}
-                    </h2>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {active.anonymized
-                        ? `${HIDDEN_SPEAKER} — blinded review`
-                        : active.speaker}{" "}
-                      · {active.track}
-                    </p>
                   </div>
-                  <p className="mt-5 text-sm leading-6 text-muted-foreground">
-                    {active.abstract}
-                  </p>
+                  {active.abstract && <p className="mt-5 text-sm leading-6">{active.abstract}</p>}
                   {usesScorecard ? (
                     <ScorecardForm
                       criteria={active.criteria}
@@ -1121,8 +966,8 @@ export default function Evaluation() {
                             onClick={() => setScoreDraft(value)}
                             className={
                               scoreDraft === value
-                                ? "h-9 w-9 rounded-full bg-primary text-primary-foreground text-sm font-medium"
-                                : "h-9 w-9 rounded-full bg-muted text-sm font-medium hover:bg-muted/70"
+                                ? "h-10 w-10 rounded-full bg-primary text-primary-foreground text-sm font-medium"
+                                : "h-10 w-10 rounded-full bg-muted text-sm font-medium hover:bg-muted/70"
                             }
                             aria-pressed={scoreDraft === value}
                           >
@@ -1136,10 +981,7 @@ export default function Evaluation() {
                     className="mt-5 block text-sm font-medium"
                     htmlFor="review-comments"
                   >
-                    Comments{" "}
-                    <span className="font-normal text-muted-foreground">
-                      (optional)
-                    </span>
+                    Comments
                   </label>
                   <Textarea
                     id="review-comments"
@@ -1166,13 +1008,11 @@ export default function Evaluation() {
                           : "Submit review"}
                     </Button>
                   </div>
-                </section>
-              )}
-            </div>
+              </section>
+            )}
           </>
         )}
       </div>
     </AppLayout>
   );
 }
-import { cardSurfaceClasses } from "@/components/ui/card";

@@ -11,7 +11,7 @@
 // Credentials are only ever stored AES-256-GCM encrypted (EMAIL_INTEGRATION_ENCRYPTION_KEY, a
 // base64 32-byte key set in the Convex deployment) and never leave this module in plaintext.
 
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { Resend } from "resend";
 import { SESv2Client, SendEmailCommand } from "@aws-sdk/client-sesv2";
 import nodemailer from "nodemailer";
@@ -19,12 +19,13 @@ import type { UserIdentity } from "convex/server";
 import { api, internal } from "./_generated/api";
 import type { ActionCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
+import { decrypt, encrypt, type CredentialEnvelope } from "./credentialEncryption";
 
 export const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export type AuthMethod = "resend_oauth" | "resend_api_key" | "ses_api" | "ses_smtp";
 export type Credentials = { apiKey?: string; accessKeyId?: string; secretAccessKey?: string; username?: string; password?: string; accessToken?: string; refreshToken?: string; clientId?: string };
-export type Envelope = { version: 1; iv: string; ciphertext: string; tag: string };
+export type Envelope = CredentialEnvelope;
 export type Integration = { provider: "resend" | "ses"; authMethod: AuthMethod; sender: string; region?: string; credentials: Credentials };
 // `html` is optional so every existing plain-text caller (reviewer reminders, confirmation
 // email) keeps working unchanged. Callers that render a branded template pass both; providers
@@ -67,22 +68,16 @@ function integrationKey() {
   if (!configured) throw new Error("EMAIL_INTEGRATION_ENCRYPTION_KEY is not configured.");
   const key = Buffer.from(configured, "base64");
   if (key.length !== 32) throw new Error("EMAIL_INTEGRATION_ENCRYPTION_KEY must be a base64-encoded 32-byte key.");
-  return key;
+  return configured;
 }
 
 export function encryptCredentials(value: Credentials): Envelope {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", integrationKey(), iv);
-  const ciphertext = Buffer.concat([cipher.update(JSON.stringify(value), "utf8"), cipher.final()]);
-  return { version: 1, iv: iv.toString("base64"), ciphertext: ciphertext.toString("base64"), tag: cipher.getAuthTag().toString("base64") };
+  return encrypt(JSON.stringify(value), integrationKey());
 }
 
 export function decryptCredentials(envelope: Envelope): Credentials {
   if (!envelope || envelope.version !== 1) throw new Error("Email integration credentials are unavailable.");
-  const decipher = createDecipheriv("aes-256-gcm", integrationKey(), Buffer.from(envelope.iv, "base64"));
-  decipher.setAuthTag(Buffer.from(envelope.tag, "base64"));
-  const plaintext = Buffer.concat([decipher.update(Buffer.from(envelope.ciphertext, "base64")), decipher.final()]).toString("utf8");
-  return JSON.parse(plaintext) as Credentials;
+  return JSON.parse(decrypt(envelope, integrationKey())) as Credentials;
 }
 
 // A recognizable, non-reversible reference to the stored secret, safe to show in the UI.

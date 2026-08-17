@@ -1,7 +1,7 @@
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 
-export type RoutingStatus = "pending" | "accept_queue" | "accepted";
+export type RoutingStatus = "pending" | "accept_queue" | "accepted" | "maybe";
 
 export type SubmissionRoutingRule = {
   id: string;

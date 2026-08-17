@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query, assertEventAccess, assertEventOrganizerAccess } from "./functions";
+import { internalMutation, internalQuery } from "./_generated/server";
 import { recordAgendaItemAudit } from "./agendaAudit";
 import { assertOrganizerOrOwnsSpeaker } from "./speakers";
 
@@ -18,6 +19,10 @@ const agendaItemFields = {
 };
 
 type ConflictReason = "room_overlap" | "speaker_overlap" | "speaker_unavailable" | "track_overlap";
+
+function isPublishedAgendaItem<T extends { isPublished: boolean }>(item: T) {
+  return item.isPublished;
+}
 
 function rangesOverlap(
   first: { startTime: number; endTime: number },
@@ -99,6 +104,19 @@ export const list = query({
   },
 });
 
+// Internal publishing integrations reuse this single agenda trust boundary instead of
+// reimplementing `isPublished` filtering in an external-service action.
+export const listPublishedInternal = internalQuery({
+  args: { eventId: v.id("events") },
+  handler: async (ctx, args) => {
+    const items = await ctx.db
+      .query("agenda_items")
+      .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+      .collect();
+    return items.filter(isPublishedAgendaItem);
+  },
+});
+
 // The speaker portal uses a deliberately narrow projection so speakers can only read their
 // own published sessions without requiring organizer access to the entire event schedule.
 export const listForSpeaker = query({
@@ -113,7 +131,7 @@ export const listForSpeaker = query({
     const roomNames = new Map(rooms.map((room) => [room._id, room.name]));
     const trackNames = new Map(tracks.map((track) => [track._id, track.name]));
     return items
-      .filter((item) => item.isPublished && item.speakerIds.includes(args.speakerId))
+      .filter((item) => isPublishedAgendaItem(item) && item.speakerIds.includes(args.speakerId))
       .map((item) => ({
         ...item,
         roomName: roomNames.get(item.roomId) ?? "Room to be announced",
@@ -283,6 +301,17 @@ export const publishSchedule = mutation({
       .query("agenda_items")
       .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
       .collect();
+    // Room and speaker double-bookings are hard errors: publishing them would
+    // send speakers to two places at once. Track overlaps stay informational.
+    const blocking = conflictRows(items).filter(
+      (conflict) =>
+        conflict.reason === "room_overlap" ||
+        conflict.reason === "speaker_overlap",
+    );
+    if (blocking.length > 0)
+      throw new Error(
+        `Resolve ${blocking.length} scheduling ${blocking.length === 1 ? "conflict" : "conflicts"} before publishing. Two sessions share a room or a speaker at the same time.`,
+      );
     const now = Date.now();
     await Promise.all(
       items
@@ -297,5 +326,13 @@ export const publishSchedule = mutation({
           });
         }),
     );
+    await ctx.db.patch(args.eventId, { programPublishedAt: now, updatedAt: now });
+  },
+});
+
+export const setSanityDocId = internalMutation({
+  args: { id: v.id("agenda_items"), sanityDocId: v.string() },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, { sanityDocId: args.sanityDocId });
   },
 });

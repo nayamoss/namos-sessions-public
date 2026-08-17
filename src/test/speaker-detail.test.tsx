@@ -36,6 +36,7 @@ function renderDetail(overrides: { saveConfirmation?: Repository["speakers"]["se
   const createTask = overrides.createTask ?? vi.fn().mockResolvedValue("task-created" as TaskId);
   const repo = {
     speakers: { setConfirmationStatus: saveConfirmation },
+    speakerNotes: { list: vi.fn().mockResolvedValue([]), create: vi.fn().mockResolvedValue("note-created"), remove: vi.fn().mockResolvedValue(undefined) },
     tasks: { create: createTask, setStatus: vi.fn().mockResolvedValue(undefined) },
     comms: overrides.comms ?? {},
   } as unknown as Repository;
@@ -61,6 +62,23 @@ async function chooseConfirmation(label: "Confirmed" | "Declined") {
 }
 
 describe("SpeakerDetail", () => {
+  it("saves a note with the keyboard shortcut and exposes it in the activity feed", async () => {
+    const create = vi.fn().mockResolvedValue("note-created");
+    render(
+      <MemoryRouter>
+        <RepoContext.Provider value={{ speakers: { setConfirmationStatus: vi.fn() }, speakerNotes: { list: vi.fn().mockResolvedValue([]), create, remove: vi.fn() }, tasks: { create: vi.fn(), setStatus: vi.fn() }, comms: {} } as unknown as Repository}>
+          <SpeakerDetail row={row} event={event} onClose={vi.fn()} onConfirmationSaved={vi.fn()} onTaskCreated={vi.fn()} onTaskStatusChanged={vi.fn()} />
+        </RepoContext.Provider>
+      </MemoryRouter>,
+    );
+    const note = await screen.findByRole("textbox", { name: "New note" });
+    fireEvent.change(note, { target: { value: "Confirmed travel details." } });
+    fireEvent.keyDown(note, { key: "Enter", metaKey: true });
+    await waitFor(() => expect(create).toHaveBeenCalledWith({ eventId, speakerId, body: "Confirmed travel details." }));
+    expect((await screen.findAllByText("Confirmed travel details.")).length).toBe(2);
+    expect(await screen.findByText("Added note")).toBeInTheDocument();
+  });
+
   it("persists explicit confirmation and keeps success feedback available", async () => {
     const harness = renderDetail();
     await chooseConfirmation("Confirmed");

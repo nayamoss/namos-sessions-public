@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, Code2, Copy, MoreHorizontal, Plus } from "lucide-react";
+import { ChevronDown, ChevronUp, Code2, Copy, MoreHorizontal } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
-import { StatusTabs } from "@/components/shared/StatusTabs";
+import { FilterMenu } from "@/components/shared/StatusTabs";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -125,7 +126,7 @@ export default function EmbedsListPage() {
             />
           }
           utilities={
-            <StatusTabs
+            <FilterMenu
               value={status}
               onValueChange={(value) => setStatus(value as StatusFilter)}
               ariaLabel="Embed status"
@@ -146,7 +147,6 @@ export default function EmbedsListPage() {
           }
           primaryAction={
             <Button variant="accent" size="sm" onClick={() => navigate(route("/new"))}>
-              <Plus className="mr-1 h-4 w-4" />
               Add embed
             </Button>
           }
@@ -165,27 +165,12 @@ export default function EmbedsListPage() {
             {[0, 1, 2].map((row) => <div key={row} className={cardSurfaceClasses("default", "h-24 animate-pulse bg-muted")} />)}
           </div>
         ) : embeds.length === 0 || filtered.length === 0 ? (
-          <section className="py-12 text-center">
-            <h2 className="font-medium">
-              {embeds.length === 0 ? "No embeds yet" : "No embeds match these filters."}
-            </h2>
-            <p className="mx-auto mt-1 max-w-xl text-sm text-muted-foreground">
-              {embeds.length === 0
-                ? "Create an embed to publish your agenda, sessions, or speakers on another website."
-                : "Try a different search or status."}
-            </p>
-            <Button
-              variant={embeds.length === 0 ? "accent" : "ghost"}
-              size="sm"
-              className="mt-3"
-              onClick={() => {
-                if (embeds.length === 0) navigate(route("/new"));
-                else { setQuery(""); setStatus("all"); }
-              }}
-            >
-              {embeds.length === 0 ? "Add embed" : "Clear filters"}
-            </Button>
-          </section>
+          <EmptyState
+            icon={Code2}
+            title={embeds.length === 0 ? "No embeds yet" : "No embeds match these filters"}
+            message={embeds.length === 0 ? "Create an embed when you are ready to publish event data elsewhere." : "Clear the search or choose another status."}
+            action={<Button variant={embeds.length === 0 ? "accent" : "outline"} size="sm" onClick={() => { if (embeds.length === 0) navigate(route("/new")); else { setQuery(""); setStatus("all"); } }}>{embeds.length === 0 ? "Add embed" : "Clear filters"}</Button>}
+          />
         ) : (
           <section className={cardSurfaceClasses("default", "bg-muted/40 p-4")} aria-labelledby="styled-html-heading">
             <div className="mb-3 flex items-center justify-between gap-2">

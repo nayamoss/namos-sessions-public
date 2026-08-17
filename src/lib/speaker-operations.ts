@@ -22,6 +22,9 @@ export type SpeakerOperationsSummary = {
   needsAttention: number;
   overdue: number;
   confirmed: number;
+  /** Speakers missing a bio, a headshot, or both. Surfaced on its own so the
+   *  dashboard can flag it directly instead of folding it into needsAttention. */
+  profileIncomplete: number;
 };
 
 const validViews = new Set<SpeakerOperationsView>(["all", "needs-attention", "overdue", "awaiting", "profile-incomplete"]);
@@ -112,6 +115,7 @@ export function summarizeSpeakerOperations(rows: SpeakerOperationsRow[]): Speake
     needsAttention: rows.filter(speakerNeedsAttention).length,
     overdue: rows.filter((row) => row.overdueTaskCount > 0).length,
     confirmed: rows.filter((row) => row.confirmationStatus === "confirmed").length,
+    profileIncomplete: rows.filter((row) => row.profileState !== "complete").length,
   };
 }
 

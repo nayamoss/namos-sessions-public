@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query, requireIdentity, assertEventAccess, assertEventOrganizerAccess, isEventOrganizer } from "./functions";
+import { internalMutation, internalQuery } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { UserIdentity } from "convex/server";
@@ -9,6 +10,17 @@ export const list = query({
   handler: async (ctx, args) => {
     await assertEventOrganizerAccess(ctx, args.eventId);
     return ctx.db.query("speakers").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect();
+  },
+});
+
+export const listConfirmedInternal = internalQuery({
+  args: { eventId: v.id("events") },
+  handler: async (ctx, args) => {
+    const speakers = await ctx.db
+      .query("speakers")
+      .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+      .collect();
+    return speakers.filter((speaker) => speaker.confirmationStatus === "confirmed");
   },
 });
 
@@ -123,6 +135,36 @@ export const create = mutation({
   },
 });
 
+export const organizerUpdate = mutation({
+  args: {
+    eventId: v.id("events"),
+    speakerId: v.id("speakers"),
+    firstName: v.string(),
+    lastName: v.string(),
+    email: v.string(),
+    confirmationStatus: v.optional(v.union(v.literal("awaiting"), v.literal("confirmed"), v.literal("declined"))),
+  },
+  handler: async (ctx, args) => {
+    await assertEventOrganizerAccess(ctx, args.eventId);
+    const speaker = await ctx.db.get(args.speakerId);
+    if (!speaker || speaker.eventId !== args.eventId) throw new Error("Speaker not found for this event.");
+    const firstName = requiredSpeakerText(args.firstName, "First name");
+    const lastName = requiredSpeakerText(args.lastName, "Last name");
+    const email = normalizedSpeakerEmail(args.email);
+    if (email !== speaker.email) {
+      const duplicate = await ctx.db.query("speakers").withIndex("by_event_email", (q) => q.eq("eventId", args.eventId).eq("email", email)).unique();
+      if (duplicate) throw new Error("A speaker with this email already exists for this event.");
+    }
+    await ctx.db.patch(args.speakerId, {
+      firstName,
+      lastName,
+      email,
+      confirmationStatus: args.confirmationStatus ?? speaker.confirmationStatus,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
 export const setConfirmationStatus = mutation({
   args: {
     eventId: v.id("events"),
@@ -134,6 +176,26 @@ export const setConfirmationStatus = mutation({
     const speaker = await ctx.db.get(args.speakerId);
     if (!speaker || speaker.eventId !== args.eventId) throw new Error("Speaker not found for this event.");
     await ctx.db.patch(args.speakerId, { confirmationStatus: args.status, updatedAt: Date.now() });
+  },
+});
+
+export const checkIn = mutation({
+  args: { eventId: v.id("events"), speakerId: v.id("speakers") },
+  handler: async (ctx, args) => {
+    const identity = await assertEventOrganizerAccess(ctx, args.eventId);
+    const speaker = await ctx.db.get(args.speakerId);
+    if (!speaker || speaker.eventId !== args.eventId) throw new Error("Speaker not found for this event.");
+    await ctx.db.patch(args.speakerId, { checkedInAt: Date.now(), checkedInByUserId: identity.subject });
+  },
+});
+
+export const undoCheckIn = mutation({
+  args: { eventId: v.id("events"), speakerId: v.id("speakers") },
+  handler: async (ctx, args) => {
+    await assertEventOrganizerAccess(ctx, args.eventId);
+    const speaker = await ctx.db.get(args.speakerId);
+    if (!speaker || speaker.eventId !== args.eventId) throw new Error("Speaker not found for this event.");
+    await ctx.db.patch(args.speakerId, { checkedInAt: undefined, checkedInByUserId: undefined });
   },
 });
 
@@ -254,5 +316,58 @@ export const headshotUrl = query({
   handler: async (ctx, args) => {
     const speaker = await scopedOwnedSpeaker(ctx, args.eventId, args.speakerId);
     return speaker.headshotStorageKey ? ctx.storage.getUrl(speaker.headshotStorageKey as Id<"_storage">) : null;
+  },
+});
+
+// Content-integration import path (Notion, and later Airtable/Sanity): create-or-update keyed
+// on `eventId` + `sourceRef` so re-running an import never duplicates a row. Internal-only —
+// callers (the contentIntegrationsActions import actions) are already organizer-checked;
+// this mutation trusts the caller the same way other `internal.*` mutations do.
+export const upsertBySourceRef = internalMutation({
+  args: {
+    eventId: v.id("events"),
+    sourceRef: v.string(),
+    firstName: v.string(),
+    lastName: v.string(),
+    email: v.string(),
+    bio: v.optional(v.string()),
+    linkedinUrl: v.optional(v.string()),
+    websiteUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("speakers")
+      .withIndex("by_event_sourceRef", (q) => q.eq("eventId", args.eventId).eq("sourceRef", args.sourceRef))
+      .unique();
+    const now = Date.now();
+    const fields = {
+      firstName: args.firstName,
+      lastName: args.lastName,
+      email: args.email,
+      ...(args.bio !== undefined ? { bio: args.bio } : {}),
+      ...(args.linkedinUrl !== undefined ? { linkedinUrl: args.linkedinUrl } : {}),
+      ...(args.websiteUrl !== undefined ? { websiteUrl: args.websiteUrl } : {}),
+    };
+    if (existing) {
+      await ctx.db.patch(existing._id, { ...fields, updatedAt: now });
+      return { id: existing._id, created: false };
+    }
+    const id = await ctx.db.insert("speakers", {
+      eventId: args.eventId,
+      sourceRef: args.sourceRef,
+      status: "active",
+      confirmationStatus: "awaiting",
+      ...fields,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { id, created: true };
+  },
+});
+
+export const setSanityDocId = internalMutation({
+  args: { id: v.id("speakers"), sanityDocId: v.string() },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, { sanityDocId: args.sanityDocId });
   },
 });

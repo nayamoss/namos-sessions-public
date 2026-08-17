@@ -8,6 +8,24 @@ import { createRepository, type DataTransport } from "@/data/transport";
 import type { EventId } from "@/data/types";
 import { TEST_CLERK_PUBLISHABLE_KEY } from "./clerk-test-key";
 
+vi.mock("@/components/editor/RichTextEditor", () => ({
+  RichTextEditor: ({
+    value,
+    onChange,
+    ariaLabelledBy,
+  }: {
+    value: string;
+    onChange: (value: string) => void;
+    ariaLabelledBy?: string;
+  }) => (
+    <textarea
+      aria-labelledby={ariaLabelledBy}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+    />
+  ),
+}));
+
 const eventId = "event-a" as EventId;
 
 describe("Communications template management", () => {
@@ -39,6 +57,8 @@ describe("Communications template management", () => {
     expect(await screen.findByLabelText("Template name")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Template name"), { target: { value: "Speaker reminder" } });
     fireEvent.change(screen.getByLabelText("Subject"), { target: { value: "Your tasks are due" } });
+    // The real body field is a tiptap/ProseMirror rich-text editor — mocked above to a plain
+    // textarea, since ProseMirror doesn't react to jsdom's limited contentEditable support.
     fireEvent.change(screen.getByLabelText("Body"), { target: { value: "Please finish your portal tasks." } });
     fireEvent.click(screen.getByRole("button", { name: "Save template" }));
 

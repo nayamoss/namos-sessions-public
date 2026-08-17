@@ -1,4 +1,4 @@
-import { LoaderCircle, Plus } from "lucide-react";
+import { LoaderCircle } from "lucide-react";
 import { useMemo, useState } from "react";
 import { FORM_TEMPLATES, type FormTemplate } from "@/components/forms/formTemplates";
 import { Button } from "@/components/ui/button";
@@ -81,7 +81,6 @@ export function TemplateGallery({ appliesTo, templates: suppliedTemplates, onSel
         onClick={onBlank}
         className={cardSurfaceClasses("default", "flex min-h-44 flex-col bg-muted/40 p-5 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none disabled:cursor-wait disabled:opacity-60")}
       >
-        <Plus className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
         <p className="mt-4 font-semibold">Start from blank</p>
         <p className="mt-1 text-sm leading-5 text-muted-foreground">Build a form with no pre-filled fields.</p>
       </button>

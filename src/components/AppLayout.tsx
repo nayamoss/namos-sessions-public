@@ -3,10 +3,13 @@ import { Link, useLocation } from "react-router-dom";
 import {
   CalendarClock,
   CalendarDays,
+  ChevronDown,
   LayoutDashboard,
+  ClipboardCheck,
   ClipboardList,
   FileText,
   ListTodo,
+  Megaphone,
   Mail,
   PanelLeft,
   Search,
@@ -18,12 +21,15 @@ import {
   Handshake,
   Bot,
   Code2,
+  BarChart3,
+  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NotificationBell } from "@/components/NotificationBell";
 import { AccountMenu } from "@/components/AccountMenu";
 import { SidebarProvider, useSidebarState } from "@/components/SidebarContext";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { PageContentSurface } from "@/components/shared/PageContentSurface";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { CommandPalette } from "@/components/CommandPalette";
 import { GlobalKeyboardShortcuts } from "@/components/GlobalKeyboardShortcuts";
@@ -49,34 +55,37 @@ const navSections: DashboardNavSection[] = [
     label: "Dashboard",
     items: [
       { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, end: true },
+      { to: "/analytics", label: "Analytics", icon: BarChart3 },
+    ],
+  },
+  // Ordered as the CFP lifecycle runs: open the call → collect submissions →
+  // judge them → build the program. The old alphabet-soup order ("Forms",
+  // "Abstracts", "Evaluation") hid the three core jobs behind house jargon.
+  {
+    label: "CFP",
+    items: [
+      { to: "/program/forms", label: "Calls for papers", icon: Megaphone },
+      { to: "/program/abstracts", label: "Submissions", icon: ClipboardList },
+      { to: "/program/evaluation", label: "Judging", icon: ClipboardCheck },
     ],
   },
   {
     label: "Program",
     items: [
-      { to: "/program/forms", label: "Forms", icon: FileText },
-      { to: "/program/abstracts", label: "Abstracts", icon: ClipboardList },
       { to: "/program/speakers", label: "Speakers", icon: Users },
+      { to: "/program/agenda", label: "Schedule", icon: CalendarDays },
       { to: "/program/sponsors", label: "Sponsors", icon: Handshake },
-      { to: "/program/evaluation", label: "Evaluation", icon: ListTodo },
-      { to: "/program/agenda", label: "Agenda", icon: CalendarDays },
-      { to: "/program/readiness", label: "Readiness", icon: ShieldCheck },
-      { to: "/program/agent", label: "Operations Agent", icon: Bot },
       { to: "/program/communications", label: "Communications", icon: Mail },
       { to: "/program/availability", label: "Availability", icon: CalendarClock },
+      { to: "/program/readiness", label: "Readiness", icon: ShieldCheck },
+      { to: "/program/agent", label: "Operations Agent", icon: Bot },
     ],
   },
   {
-    label: "Portals",
+    label: "Speaker portal",
     items: [
-      { to: "/portals/forms", label: "Forms", icon: FileText },
-      { to: "/portals/tasks", label: "Tasks", icon: ListTodo },
-    ],
-  },
-  {
-    label: "CMS",
-    items: [
-      { to: "/cms/embeds", label: "Embeds", icon: Code2 },
+      { to: "/portals/forms", label: "Portal forms", icon: FileText },
+      { to: "/portals/tasks", label: "Speaker tasks", icon: ListTodo },
     ],
   },
   {
@@ -87,7 +96,9 @@ const navSections: DashboardNavSection[] = [
       { to: "/settings/library", label: "Library", icon: Tags },
       { to: "/settings/task-templates", label: "Task templates", icon: ClipboardList },
       { to: "/settings/integrations", label: "Integrations", icon: Mail },
+      { to: "/cms/embeds", label: "Embeds", icon: Code2 },
       { to: "/settings/api", label: "API", icon: KeyRound },
+      { to: "/settings/activity", label: "Activity", icon: Activity },
     ],
   },
 ];
@@ -110,49 +121,103 @@ function Navigation({
   const location = useLocation();
   const sidebar = useSidebarState();
   const collapsed = forceExpanded ? false : sidebar.collapsed;
+  const [sectionState, setSectionState] = useState<Record<string, boolean>>(() => {
+    if (typeof window === "undefined") return {};
+
+    try {
+      const saved = window.localStorage.getItem("namos-sidebar-section-state");
+      const parsed = saved ? JSON.parse(saved) : {};
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const toggleSection = (label: string) => {
+    setSectionState((current) => {
+      const next = { ...current, [label]: current[label] === false };
+
+      try {
+        window.localStorage.setItem("namos-sidebar-section-state", JSON.stringify(next));
+      } catch {
+        // Navigation still works if local storage is unavailable.
+      }
+
+      return next;
+    });
+  };
 
   return (
     <nav className={cn("space-y-6 py-4", collapsed ? "px-2" : "px-3")}>
-      {sections.map((section) => (
-        <section key={section.label}>
-          {!collapsed && (
-            <h2 className="px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              {section.label}
-            </h2>
-          )}
-          <div className={cn("space-y-1", !collapsed && "mt-1")}>
-            {section.items.map((item) => {
-              const active = item.end
-                ? location.pathname === item.to
-                : location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
-              return (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  title={collapsed ? item.label : undefined}
-                  aria-label={item.label}
-                  onClick={onNavigate}
-                  className={cn(
-                    "touch-target group relative flex items-center rounded-md text-sm font-medium transition-colors",
-                    collapsed ? "justify-center p-2" : "gap-3 px-3 py-2",
-                    active
-                      ? "bg-muted text-foreground"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                  )}
-                >
-                  <item.icon className="h-4 w-4 shrink-0" />
-                  {!collapsed && <span className="truncate">{item.label}</span>}
-                  {collapsed && (
-                    <span className="pointer-events-none absolute left-full z-50 ml-2 whitespace-nowrap rounded-md bg-popover px-2 py-1 text-xs text-popover-foreground opacity-0 transition-opacity group-hover:opacity-100">
-                      {item.label}
-                    </span>
-                  )}
-                </Link>
-              );
-            })}
-          </div>
-        </section>
-      ))}
+      {sections.map((section) => {
+        const isCollapsible = section.items.length > 1;
+        const hasActiveItem = section.items.some((item) =>
+          item.end
+            ? location.pathname === item.to
+            : location.pathname === item.to || location.pathname.startsWith(`${item.to}/`),
+        );
+        const expanded = !isCollapsible || hasActiveItem || sectionState[section.label] !== false;
+        const sectionId = `navigation-section-${section.label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+
+        return (
+          <section key={section.label}>
+            {!collapsed && (
+              <h2>
+                {isCollapsible ? (
+                  <button
+                    type="button"
+                    aria-controls={sectionId}
+                    aria-expanded={expanded}
+                    onClick={() => toggleSection(section.label)}
+                    className="flex w-full items-center justify-between rounded-md px-3 py-1.5 text-xs font-bold uppercase tracking-[0.12em] text-foreground/65 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <span>{section.label}</span>
+                    <ChevronDown
+                      className={cn("h-3 w-3 transition-transform", !expanded && "-rotate-90")}
+                      aria-hidden="true"
+                    />
+                  </button>
+                ) : (
+                  <span className="block px-3 py-1.5 text-xs font-bold uppercase tracking-[0.12em] text-foreground/65">
+                    {section.label}
+                  </span>
+                )}
+              </h2>
+            )}
+            <div id={sectionId} hidden={!collapsed && !expanded} className={cn("space-y-1", !collapsed && "mt-1")}>
+              {section.items.map((item) => {
+                const active = item.end
+                  ? location.pathname === item.to
+                  : location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    title={collapsed ? item.label : undefined}
+                    aria-label={item.label}
+                    onClick={onNavigate}
+                    className={cn(
+                      "touch-target group relative flex items-center rounded-md text-base font-medium transition-colors",
+                      collapsed ? "justify-center p-2" : "gap-3 px-3 py-2",
+                      active
+                        ? "bg-muted text-foreground"
+                        : "text-foreground/75 hover:bg-muted hover:text-foreground",
+                    )}
+                  >
+                    <item.icon className="h-4 w-4 shrink-0" />
+                    {!collapsed && <span className="truncate">{item.label}</span>}
+                    {collapsed && (
+                      <span className="pointer-events-none absolute left-full z-50 ml-2 whitespace-nowrap rounded-md bg-popover px-2 py-1 text-xs text-popover-foreground opacity-0 transition-opacity group-hover:opacity-100">
+                        {item.label}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          </section>
+        );
+      })}
     </nav>
   );
 }
@@ -306,13 +371,7 @@ function DashboardLayoutInner({
           )}
         </header>
         <div className="flex min-h-0 min-w-0 flex-1 px-3 pb-3 md:px-4 md:pb-4">
-          {/* Deliberately not a card surface. Pages paint their own cards, so a
-              fill here stacked a second surface behind them — white-on-white,
-              which erased every card edge in light mode (#171). */}
-          <section
-            aria-label="Page content"
-            className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden"
-          >
+          <PageContentSurface>
             <div className="min-w-0 flex-1 p-4 md:p-5 lg:overflow-y-auto">
               {children}
             </div>
@@ -321,7 +380,7 @@ function DashboardLayoutInner({
                 {detail}
               </aside>
             )}
-          </section>
+          </PageContentSurface>
         </div>
       </main>
     </div>

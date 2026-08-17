@@ -53,7 +53,6 @@ export function ReviewerProgressPanel({ eventId, plan, refreshKey }: { eventId: 
   useEffect(() => { void load(); }, [load, refreshKey]);
   useEffect(() => { setConfirming(undefined); setRowResults({}); setBulkResult(undefined); }, [plan.id]);
 
-  const remindable = rows.filter(row => row.emailResolved && row.completionRate < 100);
   const belowThreshold = rows.filter(row => row.completionRate < threshold);
   const belowThresholdWithEmail = belowThreshold.filter(row => row.emailResolved);
   const allComplete = rows.length > 0 && rows.every(row => row.completionRate === 100);
@@ -108,19 +107,16 @@ export function ReviewerProgressPanel({ eventId, plan, refreshKey }: { eventId: 
   const progressRows = rows.map((row) => ({ ...row, id: row.reviewerUserId }));
   const progressColumns: DataGridColumn<(typeof progressRows)[number]>[] = [
     { key: "reviewer", header: "Reviewer", cell: row => <span className="block max-w-64"><span className="block truncate font-medium" title={row.reviewerUserId}>{row.reviewerUserId}</span>{!row.emailResolved && <span className="block text-xs text-muted-foreground">No email on file</span>}</span> },
-    { key: "assigned", header: "Assigned", cell: row => <span className="tabular-nums">{row.assigned}</span> },
-    { key: "completed", header: "Completed", cell: row => <span className="tabular-nums">{row.completed}</span> },
-    { key: "complete", header: "Complete", cell: row => <><span className="tabular-nums">{row.completionRate}%</span><span className="mt-1 block h-1.5 w-24 rounded-full bg-muted" aria-hidden><span className={`${meterClass(row.completionRate)} block`} style={{ width: `${row.completionRate}%` }} /></span></> },
+    { key: "assigned", header: "CFPs assigned", cell: row => <span className="tabular-nums">{row.assigned}</span> },
+    { key: "completed", header: "CFPs reviewed", cell: row => <span className="tabular-nums">{row.completed}</span> },
+    { key: "complete", header: "Assigned CFPs reviewed", cell: row => <><span className="tabular-nums">{row.completed} of {row.assigned} ({row.completionRate}%)</span><span className="mt-1 block h-1.5 w-32 rounded-full bg-muted" aria-hidden><span className={`${meterClass(row.completionRate)} block`} style={{ width: `${row.completionRate}%` }} /></span></> },
     { key: "actions", header: "", cell: row => <span className="flex justify-end">{reminderCell(row)}</span> },
   ];
 
-  return <section className={cardSurfaceClasses("default", "p-5")}>
+  return <section className={cardSurfaceClasses("default", "p-6")}>
     <div className="flex flex-wrap items-end justify-between gap-3">
-      <div>
-        <h2 className="font-semibold">Reviewer progress</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Completion is derived from assignments and submitted scores on {plan.name}. Reminders are sent only when you press the button.</p>
-      </div>
-      {rows.length > 0 && <div className="flex flex-wrap items-end gap-2">
+      <h2 className="font-semibold">Assigned CFP review progress</h2>
+      {rows.length > 0 && !allComplete && <div className="flex flex-wrap items-end gap-2">
         <label htmlFor="reminder-threshold" className="text-sm text-muted-foreground">Below</label>
         <Input id="reminder-threshold" type="number" min={1} max={100} step={5} value={thresholdDraft}
           onChange={event => setThresholdDraft(event.target.value)} onBlur={event => commitThreshold(event.target.value)}
@@ -140,11 +136,7 @@ export function ReviewerProgressPanel({ eventId, plan, refreshKey }: { eventId: 
     </div>
 
     {error && <p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}
-    {rows.length > 0 && belowThresholdWithEmail.length === 0 && <p className="mt-2 text-xs text-muted-foreground">
-      {allComplete ? "Every reviewer on this plan is complete." : remindable.length === 0 ? "No reviewer on this plan has an email address on file." : `No reviewer on this plan is below ${threshold}% with an email address on file.`}
-    </p>}
-
-    <div className="mt-4"><DataGrid rows={progressRows} columns={progressColumns} empty="No reviewers assigned to this plan yet. Assign submissions to reviewers below to start tracking completion." loading={loading} skeletonRows={2} /></div>
+    <div className="mt-5"><DataGrid rows={progressRows} columns={progressColumns} empty="No CFPs are assigned to reviewers for this plan yet." loading={loading} skeletonRows={2} /></div>
 
     {bulkResult && <div className="mt-4 space-y-1 text-sm" role="status" aria-live="polite">
       <p>Sent {bulkResult.sent} of {bulkResult.requested} reminder{bulkResult.requested === 1 ? "" : "s"}.</p>

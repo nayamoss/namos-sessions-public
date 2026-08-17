@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,12 @@ type EditableCollectionItem = {
 };
 type EditableRoom = Omit<Room, "id"> & { id?: string };
 type EditableTrack = Omit<Track, "id"> & { id?: string };
+const eventStatusLabels: Record<Event["status"], string> = {
+  draft: "Draft — public pages hidden",
+  published: "Published — public pages live",
+  archived: "Archived",
+};
+
 export default function EventDetails() {
   const repo = useRepo();
   const { event: activeEvent } = useCurrentEvent();
@@ -48,6 +54,7 @@ export default function EventDetails() {
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const load = useCallback(async () => {
     setLoading(true);
     setError(undefined);
@@ -95,6 +102,31 @@ export default function EventDetails() {
     },
     [repo],
   );
+  // Publishing is what makes an event's public surfaces reachable — including its call
+  // for proposals, which cannot be opened at all until the event is published. There was
+  // previously no control for it anywhere in the app, so every event stayed on the
+  // "draft" the creation wizard hardcodes. `status` already round-trips through
+  // events.save, so this only had to be surfaced, not plumbed.
+  const changeStatus = async (status: Event["status"]) => {
+    if (!event.id) {
+      setError("Save this event before publishing it.");
+      return;
+    }
+    setPublishing(true);
+    setError(undefined);
+    const next = { ...event, status };
+    try {
+      await repo.events.save(next);
+      setEvent(next);
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "Could not change this event's status.",
+      );
+    } finally {
+      setPublishing(false);
+    }
+  };
+
   const save = async () => {
     setSaving(true);
     try {
@@ -172,6 +204,31 @@ export default function EventDetails() {
       <div className="space-y-4">
         <ContentToolbar
           ariaLabel="Event settings actions"
+          utilities={
+            <>
+              <span
+                className="text-xs text-muted-foreground"
+                aria-label={`Event status: ${eventStatusLabels[event.status]}`}
+              >
+                {eventStatusLabels[event.status]}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={loading || saving || publishing || !event.id}
+                onClick={() =>
+                  void changeStatus(event.status === "published" ? "draft" : "published")
+                }
+              >
+                {publishing
+                  ? "Saving…"
+                  : event.status === "published"
+                    ? "Unpublish"
+                    : "Publish event"}
+              </Button>
+            </>
+          }
           primaryAction={
             <Button
               variant="accent"
@@ -325,7 +382,6 @@ function Collection<Item extends EditableCollectionItem>({
             ])
           }
         >
-          <Plus className="mr-1.5 h-4 w-4" />
           Add
         </Button>
       </div>

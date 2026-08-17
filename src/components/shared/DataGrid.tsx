@@ -27,7 +27,7 @@ export type DataGridColumn<Row> = {
 type DataGridProps<Row extends { id: string }> = {
   rows: Row[];
   columns: DataGridColumn<Row>[];
-  empty: string;
+  empty: React.ReactNode;
   loading?: boolean;
   skeletonRows?: number;
   paginated?: boolean;
@@ -278,7 +278,7 @@ function DataGridContent<Row extends { id: string }>({
                 <td
                   colSpan={columns.length + (selectable ? 1 : 0)}
                   data-empty="true"
-                  className="px-4 py-12 text-center text-sm text-muted-foreground"
+                  className={typeof empty === "string" ? "px-4 py-12 text-center text-sm text-muted-foreground" : "p-0"}
                 >
                   {empty}
                 </td>

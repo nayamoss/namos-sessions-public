@@ -4,7 +4,6 @@ import {
   ChevronDown,
   ChevronUp,
   Download,
-  MoreHorizontal,
   Plus,
   Search,
 } from "lucide-react";
@@ -13,7 +12,11 @@ import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
 import { DataGrid, type DataGridColumn } from "@/components/shared/DataGrid";
 import { DetailPane } from "@/components/shared/DetailPane";
-import { StatusTabs } from "@/components/shared/StatusTabs";
+import { DecisionButtons } from "@/components/shared/DecisionButtons";
+import { ExpandableText } from "@/components/shared/ExpandableText";
+import { StarRating } from "@/components/shared/StarRating";
+import { FilterMenu } from "@/components/shared/StatusTabs";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -121,6 +124,7 @@ const statusLabels: Record<SubmissionStatus, string> = {
   pending: "Pending",
   accept_queue: "Accept Queue",
   accepted: "Accepted",
+  maybe: "Maybe",
   decline_queue: "Decline Queue",
   declined: "Declined",
   withdrawn: "Withdrawn",
@@ -553,6 +557,7 @@ export default function Abstracts() {
   const [decisionResults, setDecisionResults] = useState<CommSendRecipientResult[]>([]);
   const [taggingId, setTaggingId] = useState<string>();
   const [decisionFeedback, setDecisionFeedback] = useState<string>();
+  const [updatingDecisionId, setUpdatingDecisionId] = useState<string>();
   const [addOpen, setAddOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState<string>();
@@ -649,6 +654,8 @@ export default function Abstracts() {
   const updateStatus = async (id: string, nextStatus: SubmissionStatus) => {
     const current = rows.find((row) => row.id === id);
     if (!current || current.status === nextStatus) return;
+    setUpdatingDecisionId(id);
+    setLoadError(undefined);
     setRows((previous) =>
       previous.map((row) =>
         row.id === id
@@ -673,7 +680,7 @@ export default function Abstracts() {
           ? error.message
           : "Could not update the abstract status.",
       );
-    }
+    } finally { setUpdatingDecisionId(undefined); }
   };
   const updateTags = async (id: string, tagIds: TagId[]) => {
     if (!event || taggingId) return;
@@ -741,7 +748,7 @@ export default function Abstracts() {
   const createAbstract = async () => {
     if (!event) return;
     if (!draft.formId) {
-      setAddError("Create or select an abstract submission form first.");
+      setAddError("Create a call for papers first — submissions attach to a CFP form.");
       return;
     }
     if (!draft.title.trim()) {
@@ -775,6 +782,7 @@ export default function Abstracts() {
       "all",
       "accepted",
       "accept_queue",
+      "maybe",
       "pending",
       "decline_queue",
       "declined",
@@ -783,21 +791,21 @@ export default function Abstracts() {
     ] as const
   ).map((value) => ({
     value,
-    label: value === "all" ? "All Abstracts" : statusLabels[value],
+    label: value === "all" ? "All submissions" : statusLabels[value],
     count:
       value === "all"
         ? rows.length
         : rows.filter((row) => row.status === value).length,
   }));
   const allColumns: DataGridColumn<AbstractRow>[] = [
-    { key: "status", width: "11rem", header: "Status", cell: row => editableStatuses.includes(row.status) ? <Select value={row.status} onValueChange={value => void updateStatus(row.id, value as SubmissionStatus)}><SelectTrigger className="h-8 w-36"><SelectValue /></SelectTrigger><SelectContent>{editableStatuses.map(option => <SelectItem key={option} value={option}>{statusLabels[option]}</SelectItem>)}</SelectContent></Select> : <span className="inline-flex h-8 w-36 items-center px-3 text-sm text-muted-foreground">{statusLabels[row.status]}</span> },
+    { key: "status", width: "18rem", header: "Status", cell: row => <div className="flex items-center gap-2"><DecisionButtons status={row.status} pending={updatingDecisionId === row.id} onDecide={next => void updateStatus(row.id, next)} />{editableStatuses.includes(row.status) ? <Select value={row.status} onValueChange={value => void updateStatus(row.id, value as SubmissionStatus)}><SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger><SelectContent>{editableStatuses.map(option => <SelectItem key={option} value={option}>{statusLabels[option]}</SelectItem>)}</SelectContent></Select> : <span className="text-sm text-muted-foreground">{statusLabels[row.status]}</span>}</div> },
     { key: "source", width: "10rem", header: "Source", cell: row => <span className="whitespace-nowrap text-muted-foreground">{row.source}</span> },
     { key: "title", width: "20rem", header: "Title", cell: row => <span className="font-medium">{row.title}</span> },
     { key: "description", width: "18rem", header: "Description", cell: row => <span className="line-clamp-2 min-w-64 text-muted-foreground">{row.description}</span> },
     { key: "speaker", width: "10rem", header: "Speaker", cell: row => row.speaker },
     { key: "track", width: "8rem", header: "Track", cell: row => <span className="text-muted-foreground">{row.track}</span> },
     { key: "tags", width: "12rem", header: "Tags", cell: row => <TagsCell row={row} library={tagLibrary} saving={Boolean(taggingId)} onChange={tagIds => void updateTags(row.id, tagIds)} /> },
-    { key: "rating", width: "6rem", header: "Rating", cell: row => row.rating?.toFixed(1) ?? "—" },
+    { key: "rating", width: "8rem", header: "Rating", cell: row => <StarRating value={row.rating} max={5} label="Aggregate rating" size="sm" /> },
     { key: "notified", width: "7rem", header: "Notified", cell: row => row.notified ? "Yes" : "No" },
     { key: "decision", width: "9rem", header: "Decision email", cell: row => row.status === "accepted" || row.status === "declined" ? <Button type="button" variant="outline" size="sm" disabled={preparingId === row.id} onClick={click => { click.stopPropagation(); void prepareDecision(row); }}>{preparingId === row.id ? "Preparing…" : "Send decision"}</Button> : <span className="text-muted-foreground">Decide first</span> },
   ];
@@ -807,10 +815,10 @@ export default function Abstracts() {
     .map((key) => byColumnKey.get(key))
     .filter((column): column is DataGridColumn<AbstractRow> => Boolean(column));
 
-  const addDetail = <DetailPane title="Add abstract" onClose={() => setAddOpen(false)}><p className="-mt-3 text-sm text-muted-foreground">Create an organizer-owned row for this event’s review queue. No speaker is added automatically.</p><div className="space-y-5"><div className="space-y-2"><Label htmlFor="abstract-source">Source form</Label><Select value={draft.formId} onValueChange={formId => setDraft(current => ({ ...current, formId }))}><SelectTrigger id="abstract-source"><SelectValue placeholder="Choose a submission form" /></SelectTrigger><SelectContent>{forms.map(form => <SelectItem key={form.id} value={form.id}>{form.name}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label htmlFor="abstract-title">Title</Label><Input id="abstract-title" value={draft.title} onChange={change => setDraft(current => ({ ...current, title: change.target.value }))} placeholder="Session title" /></div><div className="space-y-2"><Label htmlFor="abstract-status">Status</Label><Select value={draft.status} onValueChange={status => setDraft(current => ({ ...current, status: status as SubmissionStatus }))}><SelectTrigger id="abstract-status"><SelectValue /></SelectTrigger><SelectContent>{(["draft", "pending", "accept_queue", "accepted", "decline_queue", "declined", "withdrawn"] as SubmissionStatus[]).map(option => <SelectItem key={option} value={option}>{statusLabels[option]}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label htmlFor="abstract-description">Description</Label><Textarea id="abstract-description" value={draft.description} onChange={change => setDraft(current => ({ ...current, description: change.target.value }))} placeholder="What is this session about?" /></div>{addError && <p role="alert" className="text-sm text-destructive">{addError}</p>}<div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setAddOpen(false)} disabled={adding}>Cancel</Button><Button type="button" variant="outline" onClick={() => void createAbstract()} disabled={adding}>{adding ? "Adding…" : "Add abstract"}</Button></div></div></DetailPane>;
+  const addDetail = <DetailPane title="Add submission" onClose={() => setAddOpen(false)}><p className="-mt-3 text-base text-muted-foreground">Create an organizer-owned row for this event’s review queue. No speaker is added automatically.</p><div className="space-y-5"><div className="space-y-2"><Label htmlFor="abstract-source">Source form</Label><Select value={draft.formId} onValueChange={formId => setDraft(current => ({ ...current, formId }))}><SelectTrigger id="abstract-source"><SelectValue placeholder="Choose a submission form" /></SelectTrigger><SelectContent>{forms.map(form => <SelectItem key={form.id} value={form.id}>{form.name}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label htmlFor="abstract-title">Title</Label><Input id="abstract-title" value={draft.title} onChange={change => setDraft(current => ({ ...current, title: change.target.value }))} placeholder="Session title" /></div><div className="space-y-2"><Label htmlFor="abstract-status">Status</Label><Select value={draft.status} onValueChange={status => setDraft(current => ({ ...current, status: status as SubmissionStatus }))}><SelectTrigger id="abstract-status"><SelectValue /></SelectTrigger><SelectContent>{(["draft", "pending", "accept_queue", "accepted", "maybe", "decline_queue", "declined", "withdrawn"] as SubmissionStatus[]).map(option => <SelectItem key={option} value={option}>{statusLabels[option]}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label htmlFor="abstract-description">Description</Label><Textarea id="abstract-description" value={draft.description} onChange={change => setDraft(current => ({ ...current, description: change.target.value }))} placeholder="What is this session about?" /></div>{addError && <p role="alert" className="text-sm text-destructive">{addError}</p>}<div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setAddOpen(false)} disabled={adding}>Cancel</Button><Button type="button" variant="outline" onClick={() => void createAbstract()} disabled={adding}>{adding ? "Adding…" : "Add submission"}</Button></div></div></DetailPane>;
   const closeSelected = () => { const next = new URLSearchParams(searchParams); next.delete("selected"); setSearchParams(next); setDecisionPreview(undefined); setDecisionResults([]); };
   const selectedDetail = selectedRow ? <DetailPane title={selectedRow.title} onClose={closeSelected}>
-    <dl className="space-y-4 text-sm"><div><dt className="text-muted-foreground">Status</dt><dd className="mt-1 font-medium">{statusLabels[selectedRow.status]}</dd></div><div><dt className="text-muted-foreground">Speaker</dt><dd className="mt-1">{selectedRow.speaker}</dd></div><div><dt className="text-muted-foreground">Abstract</dt><dd className="mt-1 whitespace-pre-wrap">{selectedRow.description}</dd></div><div><dt className="text-muted-foreground">Track</dt><dd className="mt-1">{selectedRow.track}</dd></div><div><dt className="text-muted-foreground">Tags</dt><dd className="mt-1">{selectedRow.tags.map(tag => tag.name).join(", ") || "—"}</dd></div></dl>
+    <div className="mb-5"><DecisionButtons status={selectedRow.status} pending={updatingDecisionId === selectedRow.id} size="md" onDecide={next => void updateStatus(selectedRow.id, next)} /></div><dl className="space-y-5"><div><dt className="text-sm text-muted-foreground">Status</dt><dd className="mt-1 text-base font-medium">{statusLabels[selectedRow.status]}</dd></div><div><dt className="text-sm text-muted-foreground">Speaker</dt><dd className="mt-1 text-base">{selectedRow.speaker}</dd></div><div><dt className="text-sm text-muted-foreground">Abstract</dt><dd className="mt-1"><ExpandableText>{selectedRow.description}</ExpandableText></dd></div><div><dt className="text-sm text-muted-foreground">Track</dt><dd className="mt-1 text-base">{selectedRow.track}</dd></div><div><dt className="text-sm text-muted-foreground">Tags</dt><dd className="mt-1 text-base">{selectedRow.tags.map(tag => tag.name).join(", ") || "—"}</dd></div></dl>
     {decisionPreview && <section className="mt-6 space-y-4 rounded-lg bg-background p-4" aria-labelledby="decision-preview-heading">
       <div><h3 id="decision-preview-heading" className="text-sm font-semibold">Review decision email</h3><p className="mt-1 text-xs text-muted-foreground">{decisionPreview.templateName ? `Using “${decisionPreview.templateName}”.` : "Using the built-in branded template."}</p></div>
       <div className="space-y-1 text-sm"><p className="font-medium">{decisionPreview.subject}</p><p className="whitespace-pre-wrap text-muted-foreground">{decisionPreview.body}</p></div>
@@ -820,7 +828,7 @@ export default function Abstracts() {
     </section>}
   </DetailPane> : undefined;
   return (
-    <AppLayout title="Abstracts" detail={addOpen ? addDetail : selectedDetail}>
+    <AppLayout title="Submissions" detail={addOpen ? addDetail : selectedDetail}>
       <div className="space-y-3">
         {loadError && (
           <p role="alert" className="text-sm text-destructive">
@@ -833,7 +841,7 @@ export default function Abstracts() {
           </p>
         )}
         <ContentToolbar
-          ariaLabel="Abstract controls"
+          ariaLabel="Submission controls"
           search={
             <div className="relative min-w-0">
               <Label className="sr-only" htmlFor="abstract-search">
@@ -845,13 +853,13 @@ export default function Abstracts() {
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 className="h-8 pl-9"
-                placeholder="Search abstracts"
+                placeholder="Search submissions"
               />
             </div>
           }
           utilities={
             <>
-              <StatusTabs
+              <FilterMenu
                 ariaLabel="Submission statuses"
                 value={status}
                 onValueChange={(value) =>
@@ -864,7 +872,7 @@ export default function Abstracts() {
                 size="icon"
                 onClick={() => downloadCsv(visibleRows)}
                 disabled={loading}
-                aria-label="Export abstracts as CSV"
+                aria-label="Export submissions as CSV"
               >
                 <Download className="h-4 w-4" />
               </Button>
@@ -872,28 +880,36 @@ export default function Abstracts() {
                 preferences={columnPreferences}
                 onChange={updateColumnPreferences}
               />
-              <Button variant="outline" size="sm">
-                Sort
-              </Button>
-              <Button variant="outline" size="sm">
-                Filter
-              </Button>
-              <Button variant="outline" size="icon" aria-label="More options">
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
             </>
           }
           primaryAction={
             <Button variant="accent" size="sm" onClick={openAddAbstract}>
-              <Plus className="mr-1 h-4 w-4" />
-              Add Abstract
+              Add submission
             </Button>
           }
         />
         <DataGrid
           rows={visibleRows}
           columns={columns}
-          empty="No abstracts match this view."
+          empty={
+            <EmptyState
+              compact
+              icon={Search}
+              title={rows.length ? "No abstracts match this view" : "No abstracts yet"}
+              message={rows.length ? "Clear the filters to see every abstract." : "Add an abstract or publish a call for papers."}
+              action={
+                rows.length ? (
+                  <Button variant="outline" size="sm" onClick={() => { setQuery(""); setStatus("all"); }}>
+                    Clear filters
+                  </Button>
+                ) : (
+                  <Button variant="accent" size="sm" onClick={openAddAbstract}>
+                    <Plus /> Add abstract
+                  </Button>
+                )
+              }
+            />
+          }
           loading={loading}
           paginated
         />

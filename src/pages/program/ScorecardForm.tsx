@@ -1,6 +1,7 @@
 import { Textarea } from "@/components/ui/textarea";
 import { weightedTotal } from "@/lib/evaluation-score";
 import type { EvaluationCriterion, EvaluationCriterionScore } from "@/data/types";
+import { StarRating } from "@/components/shared/StarRating";
 
 /**
  * The reviewer-facing scorecard (issue #56): one input per criterion, plus a live weighted
@@ -35,17 +36,7 @@ export function ScorecardForm({ criteria, values, scoringScaleMax, onChange, leg
       const max = criterion.max ?? scoringScaleMax;
       return <fieldset key={criterion.id}>
         <legend className="text-sm font-medium">{criterion.label} <span className="font-normal text-muted-foreground">(0–{max}{criterion.weight !== undefined && criterion.weight !== 1 ? ` · weight ${criterion.weight}` : ""})</span>{criterion.required && <span className="ml-2 text-sm font-normal text-muted-foreground">Required</span>}</legend>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {Array.from({ length: max + 1 }, (_, index) => index).map(value => <button
-            key={value}
-            type="button"
-            disabled={disabled}
-            aria-pressed={recorded?.value === value}
-            aria-label={`${criterion.label}: ${value}`}
-            onClick={() => set(criterion.id, { criterionId: criterion.id, value })}
-            className={recorded?.value === value ? "h-9 w-9 rounded-full bg-primary text-sm font-medium text-primary-foreground" : "h-9 w-9 rounded-full bg-muted text-sm font-medium hover:bg-muted/70"}
-          >{value}</button>)}
-        </div>
+        <div className="mt-2"><StarRating value={recorded?.value} max={max} min={0} onChange={value => set(criterion.id, { criterionId: criterion.id, value })} disabled={disabled} label={criterion.label} size={max === 10 ? "sm" : "md"} /></div>
       </fieldset>;
     })}
     <p className="text-right text-sm font-medium">Total {total === undefined ? "—" : total.toFixed(2)} / {scoringScaleMax}</p>

@@ -6,16 +6,38 @@ import type { EventId } from "@/data/types";
 const eventId = "event-a" as EventId;
 
 describe("Operations Agent provider settings", () => {
-  it("exposes managed and BYOK through explicit repository operations", async () => {
-    const read = vi.fn().mockResolvedValue({ eventId, mode: "managed", provider: "openai", status: "ready", managedAvailable: true, updatedAt: 0 });
+  it("exposes managed, BYOK, disconnect, and legacy billing-owner assignment through explicit repository operations", async () => {
+    const read = vi.fn().mockResolvedValue({ eventId, mode: "managed", provider: "openai", status: "ready", managedAvailable: true, billingOwnerAssigned: true, updatedAt: 0 });
     const write = vi.fn().mockResolvedValue({ status: "ready" });
     const repo = createRepository({ read, write });
     await repo.agentProviderSettings.status({ eventId });
     await repo.agentProviderSettings.saveManaged({ eventId });
     await repo.agentProviderSettings.saveByok({ eventId, apiKey: "sk-test-organizer-key-value" });
+    await repo.agentProviderSettings.disconnectByok({ eventId });
+    await repo.agentProviderSettings.assignBillingOwner({ eventId });
     expect(read).toHaveBeenCalledWith("agentProviderSettings.status", { eventId });
     expect(write).toHaveBeenCalledWith("agentProviderSettings.saveManaged", { eventId });
     expect(write).toHaveBeenCalledWith("agentProviderSettings.saveByok", { eventId, apiKey: "sk-test-organizer-key-value" });
+    expect(write).toHaveBeenCalledWith("agentProviderSettings.disconnectByok", { eventId });
+    expect(write).toHaveBeenCalledWith("agentProviderSettings.assignBillingOwner", { eventId });
+  });
+
+  it("uses a dedicated encryption key and atomically reserves then settles managed allowances", () => {
+    const secrets = readFileSync("convex/agentProviderSecrets.ts", "utf8");
+    const billing = readFileSync("convex/agentBilling.ts", "utf8");
+    const resolver = readFileSync("convex/agentBillingResolver.ts", "utf8");
+    const runtime = readFileSync("convex/agentRuntime.ts", "utf8");
+    expect(secrets).toContain("AI_INTEGRATION_ENCRYPTION_KEY");
+    expect(secrets).not.toContain("EMAIL_INTEGRATION_ENCRYPTION_KEY");
+    expect(billing).toContain("reservedRuns");
+    expect(billing).toContain("reservedTokens");
+    expect(billing).toContain("export const settle");
+    expect(billing).toContain("export const release");
+    expect(resolver).toContain("getUserBillingSubscription");
+    expect(resolver).toContain("CLERK_AGENT_PLAN_ALLOWANCES");
+    expect(runtime).toContain("internal.agentBilling.reserve");
+    expect(runtime).toContain("internal.agentBilling.settle");
+    expect(runtime).toContain("internal.agentBilling.release");
   });
 
   it("keeps credentials out of the organizer projection and records managed usage as billable", () => {

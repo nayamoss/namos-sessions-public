@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { ClipboardList, Plus, Trash2 } from "lucide-react";
+import { ClipboardList, MoreHorizontal, Trash2 } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
-import { SkeletonList } from "@/components/shared/SkeletonList";
+import { DataGrid, type DataGridColumn } from "@/components/shared/DataGrid";
+import { EmptyState } from "@/components/shared/EmptyState";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,6 +18,12 @@ import {
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -156,6 +163,64 @@ export default function TaskTemplates() {
       setPendingDelete(null);
     }
   };
+  const columns: DataGridColumn<TaskTemplate>[] = [
+    {
+      key: "template",
+      header: "Template",
+      kind: "row-header",
+      cell: (template) => (
+        <div className="min-w-0">
+          <p className="truncate font-semibold text-foreground">{template.name}</p>
+          {template.description && <p className="mt-0.5 truncate text-xs font-normal text-muted-foreground">{template.description}</p>}
+        </div>
+      ),
+    },
+    {
+      key: "tasks",
+      header: "Tasks",
+      width: "8rem",
+      cell: (template) => <span className="text-muted-foreground">{template.items.length} {template.items.length === 1 ? "task" : "tasks"}</span>,
+    },
+    {
+      key: "default",
+      header: "Default",
+      width: "9rem",
+      cell: (template) => event?.defaultOnboardingTemplateId === template.id
+        ? <span className="inline-flex rounded-full bg-muted px-2.5 py-1 text-xs font-medium">Default</span>
+        : <span className="text-muted-foreground">—</span>,
+    },
+    {
+      key: "actions",
+      header: "",
+      headerLabel: "Actions",
+      width: "9rem",
+      align: "right",
+      cell: (template) => (
+        <div className="flex items-center justify-end gap-1.5">
+          <Button size="sm" variant="outline" onClick={() => open(template)}>Edit</Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="icon" variant="ghost" aria-label={`More actions for ${template.name}`}><MoreHorizontal /></Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {event?.defaultOnboardingTemplateId !== template.id && (
+                <DropdownMenuItem onSelect={() => void repo.taskTemplates.setDefault({ eventId: event!.id, templateId: template.id }).then(load)}>
+                  Set as default
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                disabled={event?.defaultOnboardingTemplateId === template.id}
+                onSelect={() => setPendingDelete(template)}
+              >
+                <Trash2 className="mr-2 h-4 w-4" /> Delete template
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      ),
+    },
+  ];
 
   return (
     <AppLayout title="Task Templates">
@@ -164,7 +229,7 @@ export default function TaskTemplates() {
           ariaLabel="Task template actions"
           primaryAction={
             <Button variant="accent" size="sm" onClick={() => open("new")}>
-              <Plus /> New template
+              New template
             </Button>
           }
         />
@@ -174,89 +239,17 @@ export default function TaskTemplates() {
           </p>
         )}
         {loading ? (
-          <SkeletonList rows={3} label="Loading task templates…" />
+          <DataGrid rows={[]} columns={columns} empty="" loading skeletonRows={3} rowActivation="none" ariaLabel="Task templates" minWidth={680} />
         ) : (
           <>
-            <section className="space-y-3">
-              {templates.length ? (
-                templates.map((template) => (
-                  <article
-                    key={template.id}
-                    className={cardSurfaceClasses("default", "flex flex-wrap items-center justify-between gap-4 bg-muted p-4")}
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h2 className="font-medium">{template.name}</h2>
-                        {event?.defaultOnboardingTemplateId === template.id && (
-                          <span className="rounded-full bg-card px-2 py-0.5 text-xs">
-                            Default
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {template.items.length} task
-                        {template.items.length === 1 ? "" : "s"}
-                        {template.description
-                          ? ` · ${template.description}`
-                          : ""}
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => open(template)}
-                      >
-                        Edit
-                      </Button>
-                      {event?.defaultOnboardingTemplateId !== template.id && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            void repo.taskTemplates
-                              .setDefault({
-                                eventId: event!.id,
-                                templateId: template.id,
-                              })
-                              .then(load)
-                          }
-                        >
-                          Set as default
-                        </Button>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={
-                          event?.defaultOnboardingTemplateId === template.id
-                        }
-                        title={
-                          event?.defaultOnboardingTemplateId === template.id
-                            ? "Unset this default before deleting"
-                            : undefined
-                        }
-                        onClick={() => setPendingDelete(template)}
-                      >
-                        <Trash2 />
-                      </Button>
-                    </div>
-                  </article>
-                ))
-              ) : (
-                <div className={cardSurfaceClasses("default", "px-6 py-12 text-center")}>
-                  <ClipboardList className="mx-auto h-6 w-6 text-muted-foreground" />
-                  <p className="mt-3 font-medium">No templates yet</p>
-                  <Button
-                    className="mt-3"
-                    size="sm"
-                    onClick={() => open("new")}
-                  >
-                    Create your first template
-                  </Button>
-                </div>
-              )}
-            </section>
+            <DataGrid
+              rows={templates}
+              columns={columns}
+              empty={<EmptyState compact icon={ClipboardList} title="No task templates yet" message="Create a reusable checklist for onboarding work." action={<Button size="sm" onClick={() => open("new")}>Create template</Button>} />}
+              rowActivation="none"
+              ariaLabel="Task templates"
+              minWidth={680}
+            />
 
             {editing && (
               <section className={cardSurfaceClasses("default", "space-y-4 p-5")}>
@@ -264,9 +257,6 @@ export default function TaskTemplates() {
                   <h2 className="font-semibold">
                     {editing === "new" ? "New template" : "Edit template"}
                   </h2>
-                  <p className="text-sm text-muted-foreground">
-                    Reusable checklists applied automatically or on demand.
-                  </p>
                 </div>
                 <div className="grid gap-3 md:grid-cols-2">
                   <div>
@@ -424,7 +414,7 @@ export default function TaskTemplates() {
                     setItems((current) => [...current, blankItem()])
                   }
                 >
-                  <Plus /> Add item
+                  Add item
                 </Button>
                 <div className="flex justify-end gap-2">
                   <Button variant="outline" onClick={() => setEditing(null)}>

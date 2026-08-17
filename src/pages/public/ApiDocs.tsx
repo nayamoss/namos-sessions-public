@@ -57,14 +57,16 @@ const fields = [
 const errors = [
   ["400", "Bad request", "Reserved for malformed query parameters; currently unreachable."],
   ["401", "Unauthorized", "The API key is missing, malformed, unknown, or revoked."],
-  ["403", "Forbidden", "Reserved for account-level permissions; currently unreachable."],
+  ["403", "Forbidden", "The token does not include the required scope."],
+  ["409", "Conflict", "An idempotency key was reused with a different request body."],
+  ["429", "Rate limited", "Tokens are limited to 60 requests per minute."],
   ["500", "Internal error", "An unexpected server error occurred."],
 ] as const;
 
 const navItems = [
   ["Overview", "#overview"],
   ["Authentication", "#authentication"],
-  ["List events", "#list-events"],
+  ["Routes & scopes", "#routes"],
   ["Event object", "#event-object"],
   ["Errors", "#errors"],
 ] as const;
@@ -128,15 +130,23 @@ export function ApiDocsContent({ isSignedIn = false }: { isSignedIn?: boolean })
           <section id="overview" className="scroll-mt-20 pb-12">
             <p className="font-mono text-xs font-medium text-success">Public API · v1</p>
             <h1 className="mt-4 max-w-3xl font-display text-5xl tracking-[-0.03em] text-balance sm:text-6xl">Events API</h1>
-            <p className="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground text-pretty">Read your complete conference program from any website, integration, or internal tool.</p>
+            <p className="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground text-pretty">Build scoped integrations against your events, submissions, speakers, agenda, and tasks.</p>
             <dl className={cardSurfaceClasses("default", "mt-8 grid gap-3 bg-muted/60 p-5 text-sm sm:grid-cols-[7rem_minmax(0,1fr)] sm:p-6")}>
               <dt className="font-medium">Base URL</dt>
               <dd className="min-w-0 overflow-x-auto font-mono text-xs leading-6 text-muted-foreground">{siteUrl}/api/v1</dd>
               <dt className="font-medium">Format</dt>
               <dd className="text-muted-foreground">JSON encoded with UTF-8</dd>
-              <dt className="font-medium">Scope</dt>
-              <dd className="text-muted-foreground">All events and publication states</dd>
+              <dt className="font-medium">Rate limit</dt>
+              <dd className="text-muted-foreground">60 requests per minute per token</dd>
             </dl>
+          </section>
+
+          <section id="routes" className="scroll-mt-20 py-12">
+            <SectionHeading description="Send eventId as a query parameter for resource routes. Write requests require an Idempotency-Key header.">Routes &amp; scopes</SectionHeading>
+            <div className="mt-6 space-y-2 font-mono text-sm">
+              {["GET /events — events:read", "GET /submissions?eventId=… — submissions:read", "GET /speakers?eventId=… — speakers:read", "GET /agenda?eventId=… — agenda:read", "GET /tasks?eventId=… — tasks:read", "POST /submissions/:id/status — submissions:write"].map((route) => <div key={route} className={cardSurfaceClasses("default", "bg-muted/50 px-4 py-3")}>{route}</div>)}
+            </div>
+            <p className="mt-5 text-sm leading-6 text-muted-foreground">SDK, CLI, and MCP packages are planned for later phases: <code>npm install @namos-sessions/sdk</code>, <code>npx @namos-sessions/cli</code>, and <code>npx @namos-sessions/mcp</code>.</p>
           </section>
 
           <section id="authentication" className="scroll-mt-20 py-12">
@@ -146,7 +156,7 @@ export function ApiDocsContent({ isSignedIn = false }: { isSignedIn?: boolean })
           </section>
 
           <section id="list-events" className="scroll-mt-20 py-12">
-            <SectionHeading description="Returns every event in this Namos Sessions instance, including draft, active, and archived events.">List all events</SectionHeading>
+            <SectionHeading description="Returns the event this API key was issued for, whether it is draft, active, or archived.">List events</SectionHeading>
             <div className="mt-7 flex min-w-0 items-center gap-4 rounded-lg bg-foreground px-4 py-4 text-background sm:px-5">
               <span className="shrink-0 rounded-md bg-success px-3 py-2 text-xs font-semibold text-success-foreground">GET request</span>
               <code className="min-w-0 overflow-x-auto font-mono text-sm">/api/v1/events</code>
@@ -166,7 +176,7 @@ export function ApiDocsContent({ isSignedIn = false }: { isSignedIn?: boolean })
 
           <section id="event-object" className="scroll-mt-20 py-12">
             <SectionHeading description="All timestamps are ISO 8601 strings. Optional values are returned as null instead of being omitted.">The event object</SectionHeading>
-            <p className="mt-4 text-sm leading-6 text-muted-foreground">This is a single-tenant API, so the response intentionally contains no <code className="font-mono text-foreground">orgId</code>.</p>
+            <p className="mt-4 text-sm leading-6 text-muted-foreground">An API key is scoped to the single event it was issued for, so the response contains only that event and intentionally omits <code className="font-mono text-foreground">orgId</code>.</p>
             <div className="mt-7 space-y-2">
               <div className="hidden grid-cols-[11rem_9rem_minmax(0,1fr)] px-4 py-2 text-xs font-medium text-muted-foreground sm:grid">
                 <span>Field</span><span>Type</span><span>Description</span>
@@ -195,7 +205,7 @@ export function ApiDocsContent({ isSignedIn = false }: { isSignedIn?: boolean })
             </div>
           </section>
 
-          <footer className={cardSurfaceClasses("default", "mt-4 px-5 py-5 text-sm text-muted-foreground")}>No rate limit today — fair use applies.</footer>
+          <footer className={cardSurfaceClasses("default", "mt-4 px-5 py-5 text-sm text-muted-foreground")}>Rate limit: 60 requests per minute per token. Use scoped tokens and rotate/revoke them from Settings → API.</footer>
         </article>
 
         <aside aria-label="Request and response examples" className="sticky top-8 hidden min-w-0 xl:block">
