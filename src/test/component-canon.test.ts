@@ -21,6 +21,14 @@ describe("shared component canon", () => {
       // Hidden platform controls are intentional accessibility/file fallbacks.
       "pages/onboarding/steps/ImportDataStep.tsx",
       "pages/onboarding/OnboardingWizard.tsx",
+      // Same hidden-native-swatch pattern as components/ui/color-input.tsx above: an
+      // opacity-0 <input type="color"> layered under a styled label so the OS picker is
+      // reachable. Allowlisted to unblock `main`, which this failure had left red since
+      // cdc5055 — blocking every deploy for every session. Follow-up: migrate this to the
+      // canonical ColorInput. It was not done here because ColorInput persists on every
+      // change while this field deliberately drafts the hex and saves on blur, and silently
+      // changing another feature's save semantics to satisfy a lint guard is the wrong trade.
+      "pages/program/SubmissionFormBuilder.tsx",
     ]);
     const violations = sourceFiles(sourceRoot).flatMap((file) => {
       const projectPath = relative(sourceRoot, file).replaceAll("\\", "/");
@@ -92,7 +100,6 @@ describe("shared component canon", () => {
       // Same popover surface as the bell above: notification rows are
       // hand-rolled buttons so the whole row is the hit target.
       "components/NotificationPanel.tsx",
-      "components/OrgMenu.tsx",
       "components/ThemeMenuItems.tsx",
       "components/availability/AvailabilityEditor.tsx",
       "components/editor/RichTextEditor.tsx",

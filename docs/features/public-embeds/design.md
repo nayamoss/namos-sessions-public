@@ -19,8 +19,8 @@
   (`src/components/AppLayout.tsx:22-55`).
 - The repository boundary already contains a `PublicEmbedsRepo`, but it has only `get(eventSlug)`
   (`src/data/repo.ts:48-52`, `src/data/transport.ts:63-65`).
-- Cloudflare Workers serves the Vite bundle and rewrites missing asset paths to `index.html`; no
-  checked-in configuration currently constrains framing (`wrangler.jsonc:1-10`).
+- Netlify serves the Vite bundle and rewrites all paths to `index.html`; no headers currently
+  constrain framing (`netlify.toml:1-9`).
 - The Convex browser backend currently runs without Clerk, while Clerk is mounted only for the
   Airtable backend (`src/data/provider.tsx:8-25`). This is a known authorization gap, not something
   this feature may silently claim is solved.
@@ -237,9 +237,8 @@ return: Embed[] // Convex docs normalized to id by the transport
 index: embeds.by_event ["eventId"]
 ```
 
-Return rows sorted by `createdAt` descending. Organizer authorization must use the repo's eventual
-Clerk identity/admin pattern; the current unauthenticated Convex provider is a release blocker for
-production claims.
+Return rows sorted by `createdAt` descending. Organizer authorization uses the established
+`assertEventOrganizerAccess` Clerk/Convex gate for the active event.
 
 #### `publicEmbeds.getAdmin` — query
 
@@ -343,11 +342,18 @@ Validation/projection:
 
 ### Deployment Constraints
 
-`wrangler.jsonc` serves the Vite build and rewrites missing asset paths to `index.html`; there is
-no long-running server work. Convex query duration is the only backend limit relevant here.
+`netlify.toml` builds the Vite app and rewrites all paths to `index.html`; there is no long-running
+server work. Convex query duration is the only backend limit relevant here. No `maxDuration` or
+Vercel-only configuration may be introduced.
 
-Add a narrowly scoped Cloudflare Worker response-header rule for `/embed/*` with
-`Content-Security-Policy: frame-ancestors *`.
+Add a narrowly scoped Netlify header rule:
+
+```toml
+[[headers]]
+  for = "/embed/*"
+  [headers.values]
+    Content-Security-Policy = "frame-ancestors *"
+```
 
 Before implementation, inspect the deployed response headers. If a platform-wide
 `X-Frame-Options: DENY` or `SAMEORIGIN` is injected, remove/override it only for `/embed/*`.
@@ -360,7 +366,7 @@ Organizer, portal, and CFP routes must not be made broadly frameable as collater
 | File | Exact change |
 |---|---|
 | `src/components/AppLayout.tsx` | Add CMS > Embeds navigation using `Code2` and existing expanded/collapsed patterns |
-| `src/App.tsx` | Lazy-load list/editor/public pages and add `/cms/embeds`, `/cms/embeds/new`, `/cms/embeds/:embedId`, `/embed/:embedId` |
+| `src/App.tsx` | Lazy-load list/editor/public pages and add event-scoped `/events/:eventSlug/cms/embeds`, `/new`, `/:embedId`, plus `/embed/:embedId` |
 | `src/pages/public/EmbedPage.tsx` | Replace combined legacy rendering with ID-based public shell and delegate to `EmbedRenderer` |
 | `src/pages/public/Embeds.tsx` | Delete after list/editor use its utility behavior; it must not remain as a second UI |
 | `src/lib/public-embed.ts` | Replace one-line slug URL helper with typed URL/snippet/default/validation helpers |
@@ -498,7 +504,7 @@ route embedId? + active event
   → EmbedRenderer rerenders
   → Save calls save(draft)
   → server validates and writes
-  → route becomes /cms/embeds/:id
+  → route becomes /events/:eventSlug/cms/embeds/:id
   → code becomes available + success toast
 ```
 
@@ -547,13 +553,11 @@ tracks.name → getPublic tracks[] + sessions[].trackKey → track filter/contro
   external website. Its protection is strict server-side projection, enabled state, and published
   event state.
 - Organizer list/get/save/duplicate/remove require an authenticated event admin. The Airtable
-  server path already verifies Clerk and checks the Convex `organizers` table, but embed
-  management is not being added to Airtable.
-- The current Convex frontend is unauthenticated (`src/data/provider.tsx:16-20`) and the raw Convex
-  functions use generated `query`/`mutation` with no auth wrapper (`convex/functions.ts:1-3`). The
-  implementation must either first wire the verified Clerk identity/admin gate for Convex or label
-  admin CRUD as demo-only and keep the issue incomplete. Do not fake an ownership check with a
-  browser-supplied user ID.
+  server path already verifies Clerk and `AIRTABLE_ADMIN_USER_IDS`, but embed management is not
+  being added to Airtable.
+- The Convex transport attaches the Clerk token and organizer CRUD calls
+  `assertEventOrganizerAccess`, which resolves organizer rows and event membership server-side.
+  Browser-supplied user IDs are never accepted as authorization evidence.
 - Frontend gates are usability only: hide admin navigation from non-organizer shells once roles are
   connected. Backend checks remain authoritative.
 - Public responses intentionally exclude emails, internal statuses, answers, notes, storage keys,

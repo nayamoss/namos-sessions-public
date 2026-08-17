@@ -2,7 +2,7 @@
 
 ## Why
 
-This repo (Namos Sessions) is going to be submitted/published as an open-source project. Before
+This repo (Takumi Talks) is going to be submitted/published as an open-source project. Before
 the GitHub repo flips from private to public, it needs a deliberate readiness pass. This is not
 a feature — it's a release gate. Nothing here should touch runtime behavior.
 

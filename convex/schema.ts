@@ -77,6 +77,24 @@ export default defineSchema({
     referralSource: v.optional(v.string()),
     updatedAt: v.number(),
   }).index("by_userId", ["userId"]),
+  changelogEntries: defineTable({
+    title: v.string(),
+    body: v.string(),
+    status: v.union(v.literal("draft"), v.literal("published")),
+    publishedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  }).index("by_status_publishedAt", ["status", "publishedAt"]),
+  feedback: defineTable({
+    userId: v.string(),
+    rating: v.union(
+      v.literal("excellent"),
+      v.literal("good"),
+      v.literal("okay"),
+      v.literal("poor"),
+    ),
+    note: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_createdAt", ["createdAt"]),
   // One row per push token. userId is Clerk's identity.subject and is updated when a device
   // is signed into a different account, while the token index makes registration idempotent.
   device_tokens: defineTable({
@@ -143,7 +161,7 @@ export default defineSchema({
     location: v.optional(v.string()), timezone: v.string(), startDate: v.number(), endDate: v.number(),
     description: v.optional(v.string()), contactEmail: v.optional(v.string()), logoFileId: v.optional(v.string()),
     programPublishedAt: v.optional(v.number()),
-    theme: v.optional(v.string()), logoStorageKey: v.optional(v.string()), backgroundStorageKey: v.optional(v.string()),
+    theme: v.optional(v.string()), logoStorageKey: v.optional(v.string()), accentColor: v.optional(v.string()), backgroundStorageKey: v.optional(v.string()),
     exhibitorsEnabled: v.boolean(), sponsorsEnabled: v.boolean(), defaultOnboardingTemplateId: v.optional(v.id("task_templates")),
     // The Clerk user whose subscription pays for Namos-managed AI. Optional for existing
     // events; an organization owner assigns it once before managed AI can be enabled.
@@ -601,7 +619,7 @@ export default defineSchema({
   content_integrations: defineTable({
     eventId: v.id("events"),
     provider: v.union(v.literal("notion"), v.literal("airtable"), v.literal("sanity")),
-    authMethod: v.union(v.literal("notion_internal_token"), v.literal("airtable_pat"), v.literal("sanity_token")),
+    authMethod: v.union(v.literal("notion_internal_token"), v.literal("notion_oauth"), v.literal("airtable_pat"), v.literal("airtable_oauth"), v.literal("sanity_token")),
     direction: v.union(v.literal("pull"), v.literal("push")),
     target: v.union(v.literal("speakers"), v.literal("submissions"), v.literal("public_program")),
     config: v.object({
@@ -613,6 +631,9 @@ export default defineSchema({
     }),
     credentialHint: v.string(),
     credentialEnvelope: v.object({ version: v.literal(1), iv: v.string(), ciphertext: v.string(), tag: v.string() }),
+    // OAuth credentials are stored as one encrypted JSON bundle in credentialEnvelope. This
+    // duplicated, non-secret value lets refresh logic avoid decrypting legacy token rows.
+    oauthExpiresAt: v.optional(v.number()),
     status: v.union(v.literal("connected"), v.literal("error")),
     lastError: v.optional(v.string()),
     lastSyncedAt: v.optional(v.number()),
@@ -621,6 +642,19 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_event", ["eventId"]).index("by_event_provider", ["eventId", "provider"]),
+  // OAuth state and exchanged credentials are deliberately short-lived and never browser-readable.
+  content_oauth_states: defineTable({
+    stateHash: v.string(), provider: v.union(v.literal("notion"), v.literal("airtable")),
+    eventId: v.id("events"), userId: v.string(), target: v.union(v.literal("speakers"), v.literal("submissions")),
+    verifierEnvelope: v.optional(v.object({ version: v.literal(1), iv: v.string(), ciphertext: v.string(), tag: v.string() })),
+    expiresAt: v.number(), createdAt: v.number(),
+  }).index("by_stateHash", ["stateHash"]),
+  content_oauth_pending: defineTable({
+    pendingId: v.string(), provider: v.union(v.literal("notion"), v.literal("airtable")),
+    eventId: v.id("events"), userId: v.string(), target: v.union(v.literal("speakers"), v.literal("submissions")),
+    credentialEnvelope: v.object({ version: v.literal(1), iv: v.string(), ciphertext: v.string(), tag: v.string() }),
+    oauthExpiresAt: v.optional(v.number()), expiresAt: v.number(), createdAt: v.number(),
+  }).index("by_pendingId", ["pendingId"]),
   // A browser receives only this opaque capability after a public CFP submission. The
   // server-side email handler exchanges it for the linked records, so database ids never
   // have to travel through the public form or its confirmation request.

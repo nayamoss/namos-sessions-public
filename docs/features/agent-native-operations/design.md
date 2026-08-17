@@ -8,7 +8,7 @@
 - Current event authorization is Clerk identity plus organizer/event membership (`convex/functions.ts:12-64`). Actions use propagated identity through an existing action-side pattern (`convex/emailDelivery.ts:37-51`).
 - Current readiness already composes agenda, conflicts, speakers, submissions, tasks, and communications (`src/pages/program/Readiness.tsx:66-149`). The agent must reuse the same domain rules rather than invent competing readiness truth.
 - `onboarding_tasks.source` currently permits only `manual | auto` (`convex/schema.ts:219-234`; `src/data/types.ts:123`). This feature adds `agent` and updates visible labels.
-- No AI/agent SDK is installed (`package.json`). Current compatible versions researched on 2026-08-13 are `@convex-dev/agent@0.6.4`, `@convex-dev/workflow@0.4.5`, `ai@7.0.64`, and `@ai-sdk/openai@4.0.41`.
+- No AI/agent SDK was installed when this design was written. npm peer resolution on 2026-08-13 confirmed the compatible set is `@convex-dev/agent@0.6.4`, `@convex-dev/workflow@0.4.5`, `ai@6.0.64`, and `@ai-sdk/openai@3.0.96`; Agent 0.6.4 requires AI SDK 6 and rejects the originally researched AI SDK 7 pairing.
 - Cloudflare Workers hosts the Vite build. The agent runtime belongs in Convex, where durable workflows and reactive state avoid edge-request timeout coupling. Convex documents its Workflow component as durable, retryable, and resumable: [Convex Workflows](https://docs.convex.dev/agents/workflows).
 - OpenAI function tools use JSON schemas and explicit tool-call/result continuation ([official function-calling guide](https://developers.openai.com/api/docs/guides/function-calling)). The Responses API is the current reasoning/tool workflow API, and the selected AI SDK OpenAI provider uses it by default.
 
@@ -158,7 +158,7 @@ Create `convex/convex.config.ts` installing `@convex-dev/agent` and `@convex-dev
 - `WorkflowManager` from `@convex-dev/workflow`.
 - `openai.responses(process.env.OPENAI_AGENT_MODEL ?? "gpt-5.6-terra")` from `@ai-sdk/openai`.
 - `stepCountIs(12)` from `ai`; run-level checks also enforce stored `maxSteps`.
-- `OPENAI_API_KEY` consumed only by the server provider.
+- Each event chooses `managed` or `bring_your_own` in Settings → Integrations. Managed runs consume `OPENAI_API_KEY` only in the server runtime. Before dispatch, the event creator’s immutable Clerk user ID is checked for an active plan and required feature, then one run and a bounded token budget are atomically reserved for the UTC month. Actual reported tokens settle the reservation; failed or cancelled runs release it. BYOK is live-verified, encrypted with AES-256-GCM using the dedicated `AI_INTEGRATION_ENCRYPTION_KEY`, never returned to the browser, and is not charged by Namos. The run snapshots this choice so a settings change cannot switch payer mid-run. The default model is `gpt-5.6-terra` with medium reasoning effort; `OPENAI_AGENT_MODEL` may override it in a protected environment.
 
 Create run-bound tools in `convex/agentTools.ts`. Each closure receives stored `{ runId, eventId, requestedByUserId }`; model-visible args never contain those fields.
 
@@ -311,8 +311,9 @@ Component thread messages are execution context; app tables are the stable user/
 
 ## Dependencies
 
-- Install exact researched baselines: `@convex-dev/agent@0.6.4`, `@convex-dev/workflow@0.4.5`, `ai@7.0.64`, `@ai-sdk/openai@4.0.41`.
-- Requires Convex deployment environment `OPENAI_API_KEY`; optional `OPENAI_AGENT_MODEL`.
+- Install exact compatible baselines: `@convex-dev/agent@0.6.4`, `@convex-dev/workflow@0.4.5`, `ai@6.0.64`, and `@ai-sdk/openai@3.0.96`.
+- Managed mode requires Convex deployment `OPENAI_API_KEY`, `CLERK_SECRET_KEY`, `CLERK_AGENT_REQUIRED_FEATURE`, and `CLERK_AGENT_PLAN_ALLOWANCES`; BYOK requires its own `AI_INTEGRATION_ENCRYPTION_KEY` and never falls back to email-integration encryption. `CLERK_AGENT_PLAN_ALLOWANCES` is server-only JSON keyed by Clerk Billing plan slug with `runs`, `tokens`, and `perRunTokens` monthly terms; no limit is hard-coded in app code. `OPENAI_AGENT_MODEL` is optional.
+- Live acceptance uses `npm run eval:agent:live` with the versioned 25-case `evals/operations-agent.v1.json` dataset. The command requires `AGENT_EVAL_AUTH_TOKEN` and `AGENT_EVAL_EVENT_ID`, executes only real durable runs, records model, reasoning effort, steps, latency, token usage, estimated cost, source/tool correctness, and prohibited-action rate, and fails below 90% correctness or above 0% prohibited-action rate.
 - Requires existing events, submissions, speakers, agenda, evaluation, task, and comms functions.
 - Enables later proposal executors for communication drafts, reviewer assignment, agenda edits, and status changes without redesigning runs/events/approval.
 

@@ -1,5 +1,11 @@
 # Public Events API — Requirements
 
+> **Partly superseded (2026-08-16).** This feature was designed when the app was
+> single-tenant. It is now multi-tenant — see `docs/features/multi-tenant-organizations/`.
+> Concretely: an API key is now scoped to the single event it was issued for, where this
+> document describes it as instance-wide. Statements below about there being no
+> `organizations` table no longer hold. Everything else still applies.
+
 **Type:** Feature
 **Status:** Done
 **Priority:** Medium

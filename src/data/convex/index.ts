@@ -4,13 +4,14 @@ import { createRepository, type DataTransport, type ReadOperation, type WriteOpe
 
 export const convexFunction: Record<Exclude<ReadOperation | WriteOperation, "publicForms.submit">, string> = {
   "analytics.summary": "analytics:summary",
-  "events.list": "events:list", "events.listMine": "events:listMine", "events.listForPortal": "events:listForPortal", "events.get": "events:get", "events.getBySlug": "events:getBySlug", "events.rooms.list": "events:listRooms", "events.tracks.list": "events:listTracks", "speakerNotes.list": "speakerNotes:list",
+  "events.list": "events:list", "events.listMine": "events:listMine", "events.listForPortal": "events:listForPortal", "events.portalSpeakerIdentity": "events:portalSpeakerIdentity", "events.get": "events:get", "events.getBySlug": "events:getBySlug", "events.rooms.list": "events:listRooms", "events.tracks.list": "events:listTracks", "files.getUrl": "files:getUrl", "speakerNotes.list": "speakerNotes:list",
   "events.save": "events:save", "events.duplicate": "events:duplicate", "events.remove": "events:remove", "events.rooms.save": "events:saveRoom", "events.rooms.remove": "events:removeRoom", "events.tracks.save": "events:saveTrack", "events.tracks.remove": "events:removeTrack", "eventMembers.list": "eventMembers:list", "eventMembers.canManage": "eventMembers:hasOrganizerAccess", "eventMembers.invite": "eventInviteActions:invite", "eventMembers.resend": "eventInviteActions:resend", "eventMembers.claimPending": "eventMembers:claimPending", "eventMembers.add": "eventMembers:add", "eventMembers.remove": "eventInviteActions:remove", "tags.list": "tags:list", "tags.create": "tags:create", "tags.rename": "tags:rename", "tags.remove": "tags:remove", "speakerNotes.create": "speakerNotes:create", "speakerNotes.remove": "speakerNotes:remove",
+  "files.generateUploadUrl": "files:generateUploadUrl",
   "forms.list": "forms:list", "forms.fields": "forms:fields", "forms.listFields": "forms:listFields", "forms.save": "forms:save", "forms.saveField": "forms:saveField", "forms.createFromTemplate": "forms:createFromTemplate", "forms.duplicate": "forms:duplicate", "forms.remove": "forms:remove", "forms.setStatus": "forms:setStatus", "submissions.list": "submissions:list", "submissions.submit": "submissions:submit", "submissions.saveDraft": "submissions:saveDraft", "submissions.createAdmin": "submissions:createAdmin", "submissions.decide": "submissions:decide", "submissions.setStatus": "submissions:setStatus", "submissions.setTags": "submissions:setTags", "submissions.getForSpeaker": "submissions:getForSpeaker", "submissions.updateBySpeaker": "submissions:updateBySpeaker", "speakers.list": "speakers:list", "speakers.create": "speakers:create", "speakers.setConfirmationStatus": "speakers:setConfirmationStatus", "speakers.getMine": "speakers:getMine", "speakers.headshotUrl": "speakers:headshotUrl", "speakers.updateProfile": "speakers:updateProfile", "speakers.requestHeadshotUpload": "speakers:requestHeadshotUpload", "speakers.saveHeadshot": "speakers:saveHeadshot", "speakers.documents.requestUpload": "speakerDocuments:requestUpload", "speakers.documents.save": "speakerDocuments:save", "speakers.documents.list": "speakerDocuments:list", "speakers.documents.remove": "speakerDocuments:remove", "evaluations.list": "evaluations:list", "evaluations.save": "evaluations:save", "evaluations.plans.list": "evaluations:listPlans", "evaluations.plans.save": "evaluations:savePlan", "evaluations.assignments.list": "evaluations:listAssignments", "evaluations.assignments.assign": "evaluations:assign", "evaluations.assignments.assignByFilter": "evaluations:assignByFilter", "evaluations.myQueue": "evaluations:myQueue", "evaluations.reviewerProgress": "evaluations:reviewerProgress", "evaluations.sendReviewerReminders": "reviewerRemindersActions:send", "agenda.list": "agenda:list", "agenda.listForSpeaker": "agenda:listForSpeaker", "agenda.detectConflicts": "agenda:detectConflicts", "agenda.save": "agenda:save", "agenda.remove": "agenda:remove", "agenda.publishSchedule": "agenda:publishSchedule", "tasks.list": "tasks:list", "tasks.create": "tasks:create", "tasks.setStatus": "tasks:setStatus", "taskTemplates.list": "taskTemplates:list", "taskTemplates.create": "taskTemplates:create", "taskTemplates.update": "taskTemplates:update", "taskTemplates.remove": "taskTemplates:remove", "taskTemplates.setDefault": "taskTemplates:setDefault", "taskTemplates.applyToSubmission": "taskTemplates:applyToSubmission", "comms.list": "comms:list", "availability.list": "availability:list", "availability.upsert": "availability:upsert", "publicEmbeds.get": "publicEmbeds:get", "publicEmbeds.list": "publicEmbeds:list", "publicEmbeds.getAdmin": "publicEmbeds:getAdmin", "publicEmbeds.preview": "publicEmbeds:preview", "publicEmbeds.getPublic": "publicEmbeds:getPublic", "publicEmbeds.save": "publicEmbeds:save", "publicEmbeds.duplicate": "publicEmbeds:duplicate", "publicEmbeds.remove": "publicEmbeds:remove", "publicForms.listOpen": "publicForms:listOpen", "publicForms.get": "publicForms:get", "portalForms.get": "portalFormResponses:get", "portalForms.submit": "portalFormResponses:submit",
   "organizers.list": "organizers:list", "organizers.getMine": "organizers:getMine", "organizers.isCurrentUserOrganizer": "organizers:isCurrentUserOrganizer", "organizers.hasAdminAccess": "organizers:hasAdminAccess", "organizations.createForCurrentUser": "organizations:createForCurrentUser", "organizations.listMine": "organizations:listMine", "organizations.getMine": "organizations:getMine", "organizations.rename": "organizations:rename", "organizers.completeOnboarding": "organizers:completeOnboarding", "organizers.add": "organizers:add", "organizers.remove": "organizers:remove", "speakers.bulkImport": "speakers:bulkImport",
   "profiles.getMine": "userProfiles:getMine", "profiles.save": "userProfiles:save",
   "emailIntegrations.status": "emailIntegrations:status", "emailIntegrations.save": "emailIntegrationsActions:save", "emailIntegrations.test": "emailIntegrationsActions:test", "emailIntegrations.disconnect": "emailIntegrationsActions:disconnect",
-  "contentIntegrations.status": "contentIntegrations:status", "contentIntegrations.connectNotion": "contentIntegrationsActions:connectNotion", "contentIntegrations.importNotion": "contentIntegrationsActions:importNotion", "contentIntegrations.connectAirtable": "contentIntegrationsActions:connectAirtable", "contentIntegrations.importAirtable": "contentIntegrationsActions:importAirtable", "contentIntegrations.connectSanity": "contentIntegrationsActions:connectSanity", "contentIntegrations.publishSanity": "contentIntegrationsActions:publishSanity", "contentIntegrations.disconnect": "contentIntegrationsActions:disconnect",
+  "contentIntegrations.status": "contentIntegrations:status", "contentIntegrations.connectNotion": "contentIntegrationsActions:connectNotion", "contentIntegrations.importNotion": "contentIntegrationsActions:importNotion", "contentIntegrations.connectAirtable": "contentIntegrationsActions:connectAirtable", "contentIntegrations.importAirtable": "contentIntegrationsActions:importAirtable", "contentIntegrations.startOAuth": "contentIntegrationsActions:startOAuth", "contentIntegrations.listNotionOAuthDatabases": "contentIntegrationsActions:listNotionOAuthDatabases", "contentIntegrations.finishNotionOAuth": "contentIntegrationsActions:finishNotionOAuth", "contentIntegrations.listAirtableOAuthBases": "contentIntegrationsActions:listAirtableOAuthBases", "contentIntegrations.listAirtableOAuthTables": "contentIntegrationsActions:listAirtableOAuthTables", "contentIntegrations.finishAirtableOAuth": "contentIntegrationsActions:finishAirtableOAuth", "contentIntegrations.connectSanity": "contentIntegrationsActions:connectSanity", "contentIntegrations.publishSanity": "contentIntegrationsActions:publishSanity", "contentIntegrations.disconnect": "contentIntegrationsActions:disconnect",
   "comms.templates.list": "comms:listTemplates",
   "notifications.unreadCount": "notifications:unreadCount",
   "comms.templates.save": "comms:saveTemplate",
@@ -32,7 +33,7 @@ export const convexFunction: Record<Exclude<ReadOperation | WriteOperation, "pub
 // Write operations backed by a Convex *action* rather than a mutation. Actions are the only
 // Convex function type that can reach an external service (an email provider, here), so they
 // dispatch through client.action instead of client.mutation.
-const convexActions = new Set<WriteOperation>(["eventMembers.invite", "eventMembers.resend", "eventMembers.remove", "emailIntegrations.save", "emailIntegrations.test", "emailIntegrations.disconnect", "contentIntegrations.connectNotion", "contentIntegrations.importNotion", "contentIntegrations.connectAirtable", "contentIntegrations.importAirtable", "contentIntegrations.connectSanity", "contentIntegrations.publishSanity", "contentIntegrations.disconnect", "agentProviderSettings.saveManaged", "agentProviderSettings.saveByok", "agentProviderSettings.disconnectByok", "evaluations.sendReviewerReminders", "apiKeys.generate", "comms.sendDecision", "comms.sendReminder", "comms.sendConsolidatedDecision"]);
+const convexActions = new Set<WriteOperation>(["eventMembers.invite", "eventMembers.resend", "eventMembers.remove", "emailIntegrations.save", "emailIntegrations.test", "emailIntegrations.disconnect", "contentIntegrations.connectNotion", "contentIntegrations.importNotion", "contentIntegrations.connectAirtable", "contentIntegrations.importAirtable", "contentIntegrations.startOAuth", "contentIntegrations.listNotionOAuthDatabases", "contentIntegrations.finishNotionOAuth", "contentIntegrations.listAirtableOAuthBases", "contentIntegrations.listAirtableOAuthTables", "contentIntegrations.finishAirtableOAuth", "contentIntegrations.connectSanity", "contentIntegrations.publishSanity", "contentIntegrations.disconnect", "agentProviderSettings.saveManaged", "agentProviderSettings.saveByok", "agentProviderSettings.disconnectByok", "evaluations.sendReviewerReminders", "apiKeys.generate", "comms.sendDecision", "comms.sendReminder", "comms.sendConsolidatedDecision"]);
 
 type ConvexDocument = { _id: string; [key: string]: unknown };
 
@@ -53,6 +54,16 @@ export function normalize(operation: ReadOperation | WriteOperation, value: unkn
   const row = (document: unknown) => { const { _id, _creationTime: _drop, ...rest } = documentRow(document); return { ...rest, id: _id }; };
   if (!value) return value;
   if (operation === "events.list" || operation === "events.listMine" || operation === "events.listForPortal") return documentRows(value).map(row);
+  if (operation === "events.portalSpeakerIdentity") {
+    const result = value as { event: unknown; speaker: unknown; publishedEvents: unknown };
+    const speaker = result.speaker ? documentRow(result.speaker) : null;
+    return {
+      event: result.event ? row(result.event) : null,
+      // Same derived `name` the rest of the app expects off a Speaker (see speakers.getMine).
+      speaker: speaker ? { ...row(speaker), name: `${speaker.firstName ?? ""} ${speaker.lastName ?? ""}`.trim() } : null,
+      publishedEvents: documentRows(result.publishedEvents).map(row),
+    };
+  }
   if (operation === "agentRuns.list") return documentRows(value).map(row);
   if (operation === "agentRuns.get") {
     const detail = value as { run: unknown; events: unknown; proposals: unknown };
@@ -80,17 +91,24 @@ export function normalize(operation: ReadOperation | WriteOperation, value: unkn
   return value;
 }
 
+// Exactly the fields `events:save` accepts (convex/events.ts `eventFields` + `pullTeamFromEventId`).
+// Callers pass whole previously-read event rows, which also carry server-managed fields the
+// mutation sets itself — `createdAt`/`updatedAt`, the `organizationId` an event is stamped with
+// once at creation, `billingOwnerUserId`. None of those are in the arg validator, so anything
+// extra sends "Object contains extra field" straight to the user on every save. An allowlist
+// rather than a strip-list: a new server-managed column on `events` must not break saving again.
+const EVENT_SAVE_FIELDS = new Set([
+  "name", "slug", "type", "websiteUrl", "location", "timezone", "startDate", "endDate",
+  "description", "contactEmail", "logoFileId", "programPublishedAt", "theme", "logoStorageKey",
+  "accentColor", "backgroundStorageKey", "exhibitorsEnabled", "sponsorsEnabled",
+  "defaultOnboardingTemplateId", "status", "pullTeamFromEventId",
+]);
+
 export function normalizeInput(operation: ReadOperation | WriteOperation, input: Record<string, unknown>) {
   if (operation === "events.save" && "id" in input) {
-    // `event` here is a previously-read row, so it still carries server-managed fields —
-    // timestamps (`createdAt`/`updatedAt`) the `save` mutation sets itself, and
-    // `organizationId`, the tenant an event is stamped with once at creation and never
-    // changes after (see convex/schema.ts). None of these are in `save`'s arg validator,
-    // so leaving any of them in sends "Object contains extra field" straight to the user
-    // on every single save from this page. Strip them the same way `row()` already strips
-    // `_creationTime`.
-    const { id, createdAt: _createdAt, updatedAt: _updatedAt, organizationId: _organizationId, ...event } = input;
-    return { ...event, eventId: id };
+    const { id, ...event } = input;
+    const fields = Object.fromEntries(Object.entries(event).filter(([key]) => EVENT_SAVE_FIELDS.has(key)));
+    return { ...fields, eventId: id };
   }
   return input;
 }

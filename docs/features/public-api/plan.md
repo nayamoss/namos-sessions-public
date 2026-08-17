@@ -4,7 +4,7 @@
 
 ## Outcome
 
-Ship a stable, documented REST API for every supported Namos Sessions capability, shaped like
+Ship a stable, documented REST API for every supported Takumi Talks capability, shaped like
 OpenSession's versioned API: discover events, retrieve public schedules, and administer the
 program from another product. The contract is **`/api/v1`**, described by a committed OpenAPI
 3.1 document and backed by the same domain services as the app — never by exposing Convex

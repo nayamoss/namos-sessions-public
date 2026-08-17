@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { Link, useParams } from "react-router-dom";
-import { GripVertical, Trash2 } from "lucide-react";
+import { GripVertical, ImageUp, Loader2, Trash2 } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { cardSurfaceClasses } from "@/components/ui/card";
@@ -47,6 +47,7 @@ import {
   parseOptionsDraft,
   sanitizeOptionsForSave,
 } from "@/lib/form-builder-options";
+import { contrastForeground, hexToHslTriplet } from "@/lib/color";
 
 type FieldType =
   | "text"
@@ -118,6 +119,7 @@ const statusLabels: Record<SubmissionFormStatus, string> = {
 const steps: WizardStep[] = [
   { id: "setup", label: "Submission setup" },
   { id: "welcome", label: "Welcome screen" },
+  { id: "appearance", label: "Appearance" },
   { id: "abstract", label: "Abstract information" },
   { id: "participants", label: "Participant information" },
   { id: "routing", label: "Routing" },
@@ -548,6 +550,75 @@ function toLocalDatetimeInputValue(timestamp: number): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+
+function AppearanceStep({ event, onUpdate }: { event: Event; onUpdate: (patch: Partial<Event>) => Promise<void> }) {
+  const repo = useRepo();
+  const [logoUrl, setLogoUrl] = useState<string>();
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string>();
+  const [colorDraft, setColorDraft] = useState(event.accentColor ?? "#0066FF");
+  const validColor = HEX_COLOR.test(colorDraft) ? colorDraft : event.accentColor;
+  const hsl = validColor ? hexToHslTriplet(validColor) : null;
+  const previewStyle = hsl && validColor ? { "--primary": hsl, "--primary-foreground": contrastForeground(validColor) } as CSSProperties : undefined;
+
+  useEffect(() => {
+    let active = true;
+    if (!event.logoStorageKey) { setLogoUrl(undefined); return; }
+    void repo.files.getUrl(event.logoStorageKey).then((url) => { if (active) setLogoUrl(url ?? undefined); }).catch(() => { if (active) setLogoUrl(undefined); });
+    return () => { active = false; };
+  }, [event.logoStorageKey, repo]);
+
+  const uploadLogo = async (file: File | undefined) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { setUploadError("Couldn't upload image — try again"); return; }
+    setUploading(true); setUploadError(undefined);
+    try {
+      const { uploadUrl } = await repo.files.generateUploadUrl();
+      const response = await fetch(uploadUrl, { method: "POST", headers: { "content-type": file.type }, body: file });
+      if (!response.ok) throw new Error("Upload rejected");
+      const { storageId } = await response.json() as { storageId?: string };
+      if (!storageId) throw new Error("Missing storage id");
+      await onUpdate({ logoStorageKey: storageId });
+      setLogoUrl(URL.createObjectURL(file));
+    } catch { setUploadError("Couldn't upload image — try again"); }
+    finally { setUploading(false); }
+  };
+  const persistColor = () => {
+    if (HEX_COLOR.test(colorDraft) && colorDraft.toLowerCase() !== event.accentColor?.toLowerCase()) void onUpdate({ accentColor: colorDraft });
+  };
+
+  return <div className="space-y-6">
+    <div><h2 className="text-base font-semibold">Appearance</h2><p className="mt-1 text-sm text-muted-foreground">Add your event's logo and accent color to the submission page speakers will see.</p></div>
+    <FormField label="Event logo">
+      <div className="space-y-2">
+        <Input id="cfp-logo-upload" type="file" accept="image/*" className="sr-only" disabled={uploading} onChange={(input) => { void uploadLogo(input.target.files?.[0]); input.currentTarget.value = ""; }} />
+        <label htmlFor="cfp-logo-upload" className="relative flex min-h-24 cursor-pointer items-center justify-center rounded-md border border-dashed border-input bg-background p-4 text-sm text-muted-foreground hover:bg-muted/50">
+          {logoUrl ? <img src={logoUrl} alt={`${event.name} logo`} className="max-h-10 max-w-48 object-contain" /> : <span className="flex items-center gap-2"><ImageUp className="h-4 w-4" />Drop a logo here or click to upload</span>}
+          {uploading && <span className="absolute inset-0 flex items-center justify-center rounded-md bg-background/80"><Loader2 className="h-5 w-5 animate-spin" aria-label="Uploading logo" /></span>}
+        </label>
+        {event.logoStorageKey && <Button type="button" variant="link" size="sm" className="h-auto px-0" disabled={uploading} onClick={() => void onUpdate({ logoStorageKey: undefined }).then(() => setLogoUrl(undefined))}>Remove logo</Button>}
+        {uploadError && <p role="alert" className="text-sm text-destructive">{uploadError}</p>}
+      </div>
+    </FormField>
+    <FormField label="Accent color" hint="Used for the progress bar and primary action.">
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="relative h-10 w-10 cursor-pointer overflow-hidden rounded-md border border-input" style={{ backgroundColor: validColor ?? "#0066FF" }}><input aria-label="Choose accent color" type="color" className="absolute inset-0 cursor-pointer opacity-0" value={validColor ?? "#0066FF"} onChange={(input) => { setColorDraft(input.target.value); void onUpdate({ accentColor: input.target.value }); }} /></label>
+        <Input aria-label="Accent color hex value" className="w-32 font-mono uppercase" value={colorDraft} onChange={(input) => setColorDraft(input.target.value)} onBlur={persistColor} />
+        {event.accentColor && <Button type="button" variant="link" size="sm" className="h-auto px-0" onClick={() => { setColorDraft("#0066FF"); void onUpdate({ accentColor: undefined }); }}>Reset to default</Button>}
+      </div>
+    </FormField>
+    <section className={cardSurfaceClasses("default", "space-y-5 p-5")} style={previewStyle} aria-label="Submission page appearance preview">
+      <p className="text-sm font-medium">Live preview</p>
+      <div className="space-y-5 rounded-md bg-background p-4">
+        <div className="flex items-center justify-between"><div>{logoUrl ? <img src={logoUrl} alt="" className="max-h-10 max-w-40 object-contain" /> : <span className="inline-flex items-center gap-2 text-sm font-semibold">{event.name}<span className="h-1.5 w-1.5 rounded-full bg-primary" /></span>}</div><span className="text-xs text-muted-foreground">1 / 5</span></div>
+        <div className="h-1 overflow-hidden rounded-full bg-muted"><div className="h-full w-2/5 bg-primary" /></div>
+        <Button type="button" variant="accent" disabled className="h-10 rounded-[12px] px-5">Continue</Button>
+      </div>
+    </section>
+  </div>;
+}
+
 export default function SubmissionFormBuilder() {
   const { id = "new" } = useParams();
   const repo = useRepo();
@@ -641,6 +712,18 @@ export default function SubmissionFormBuilder() {
       }),
     [abstractFields],
   );
+  const updateAppearance = useCallback(async (patch: Partial<Event>) => {
+    if (!event) return;
+    const nextEvent = { ...event, ...patch };
+    setEvent(nextEvent);
+    try {
+      await repo.events.save(nextEvent);
+    } catch (cause) {
+      setEvent(event);
+      setLoadError(cause instanceof Error ? cause.message : "Could not save appearance settings.");
+      throw cause;
+    }
+  }, [event, repo]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1192,6 +1275,8 @@ export default function SubmissionFormBuilder() {
           )}
         </div>
       );
+    if (current.id === "appearance" && event)
+      return <AppearanceStep event={event} onUpdate={updateAppearance} />;
     if (current.id === "abstract")
       return (
         <div className="space-y-6">
@@ -1566,6 +1651,8 @@ export default function SubmissionFormBuilder() {
     successMessage,
     toggleCrossFieldId,
     welcomeMessage,
+    event,
+    updateAppearance,
   ]);
 
   return (

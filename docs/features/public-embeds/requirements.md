@@ -2,10 +2,10 @@
 
 **Type:** Feature
 
-**Status:** In Review
+**Status:** Done
 
 **Priority:** Medium
-**Last Updated:** 2026-08-12
+**Last Updated:** 2026-08-13
 
 ## Problem Statement
 
@@ -58,8 +58,8 @@ can find sessions and speakers without leaving the event website.
 
 ## Functional Requirements
 
-- FR-001: Add a discoverable `CMS` navigation section with an `Embeds` item linking to
-  `/cms/embeds`.
+- FR-001: Add a discoverable `CMS` navigation section with an `Embeds` item linking to the active
+  event's `/events/:eventSlug/cms/embeds` route.
 - FR-002: List only the active event's saved embeds, grouped by format, with name, view type,
   enabled status, duplicate, edit, and delete actions.
 - FR-003: Search saved embeds by name, view label, format label, or opaque embed ID without

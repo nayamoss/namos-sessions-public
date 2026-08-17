@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => {
   const contentIntegrations = {
     status: vi.fn(),
     connectAirtable: vi.fn(),
+    startOAuth: vi.fn(),
     importAirtable: vi.fn(),
     disconnect: vi.fn(),
   };
@@ -32,66 +33,31 @@ describe("Airtable integration form", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.contentIntegrations.status.mockResolvedValueOnce(null).mockResolvedValue(connectedIntegration);
-    mocks.contentIntegrations.connectAirtable.mockResolvedValue({ status: "connected" });
+    mocks.contentIntegrations.startOAuth.mockResolvedValue({ url: "https://airtable.com/oauth2/v1/authorize?client_id=test" });
     mocks.contentIntegrations.importAirtable.mockResolvedValue({ created: 2, updated: 1, skipped: 1, hasMore: true });
     mocks.contentIntegrations.disconnect.mockResolvedValue({ status: "disconnected" });
   });
 
-  it("connects, imports with a visible summary, and disconnects behind confirmation", async () => {
+  it("starts the Airtable OAuth flow without exposing token or base-ID inputs", async () => {
     render(<AirtableIntegrationForm eventId={eventId} />);
 
-    const connectButton = await screen.findByRole("button", { name: "Connect" });
-    expect(connectButton).toBeDisabled();
-
-    fireEvent.change(screen.getByLabelText("Personal Access Token"), { target: { value: " pat_test_1234 " } });
-    fireEvent.change(screen.getByLabelText("Base ID"), { target: { value: " appBase " } });
-    fireEvent.change(screen.getByLabelText("Table Name"), { target: { value: " Speakers " } });
-    expect(connectButton).toBeEnabled();
+    const connectButton = await screen.findByRole("button", { name: "Connect with Airtable" });
+    expect(screen.queryByLabelText("Personal Access Token")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Base ID")).not.toBeInTheDocument();
     fireEvent.click(connectButton);
 
     await waitFor(() => {
-      expect(mocks.contentIntegrations.connectAirtable).toHaveBeenCalledWith({
-        eventId,
-        personalAccessToken: "pat_test_1234",
-        baseId: "appBase",
-        tableName: "Speakers",
-        target: "speakers",
-      });
+      expect(mocks.contentIntegrations.startOAuth).toHaveBeenCalledWith({ eventId, provider: "airtable", target: "speakers" });
     });
-
-    const importButton = await screen.findByRole("button", { name: "Import now" });
-    fireEvent.click(importButton);
-    expect(await screen.findByText(/2 created, 1 updated/)).toHaveTextContent("1 skipped");
-    expect(screen.getByText("More rows remain — click Import now again.")).toBeInTheDocument();
-    expect(mocks.contentIntegrations.importAirtable).toHaveBeenCalledWith({ eventId });
-
-    fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
-    const confirmation = await screen.findByRole("alertdialog");
-    expect(within(confirmation).getByText("Disconnect Airtable?")).toBeInTheDocument();
-    fireEvent.click(within(confirmation).getByRole("button", { name: "Disconnect" }));
-
-    await waitFor(() => {
-      expect(mocks.contentIntegrations.disconnect).toHaveBeenCalledWith({ eventId, provider: "airtable" });
-    });
-    expect(await screen.findByRole("button", { name: "Connect" })).toBeDisabled();
   });
 
-  it("keeps the form available and shows a specific connection error inline", async () => {
+  it("keeps the OAuth button available and shows a connection error inline", async () => {
     mocks.contentIntegrations.status.mockReset().mockResolvedValue(null);
-    mocks.contentIntegrations.connectAirtable.mockRejectedValue(
-      new Error("That personal access token isn't valid, or doesn't have access to this base."),
-    );
+    mocks.contentIntegrations.startOAuth.mockRejectedValue(new Error("Airtable OAuth is not configured."));
     render(<AirtableIntegrationForm eventId={eventId} />);
 
-    await screen.findByRole("button", { name: "Connect" });
-    fireEvent.change(screen.getByLabelText("Personal Access Token"), { target: { value: "pat_invalid" } });
-    fireEvent.change(screen.getByLabelText("Base ID"), { target: { value: "appBase" } });
-    fireEvent.change(screen.getByLabelText("Table Name"), { target: { value: "Speakers" } });
-    fireEvent.click(screen.getByRole("button", { name: "Connect" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Connect with Airtable" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "That personal access token isn't valid, or doesn't have access to this base.",
-    );
-    expect(screen.getByLabelText("Personal Access Token")).toHaveValue("pat_invalid");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Airtable OAuth is not configured.");
   });
 });

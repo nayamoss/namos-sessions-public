@@ -20,10 +20,17 @@ called-out expectation, not incidental.
 **Shared dashboard shell:** the portal uses the same floating sidebar, title row, unified content
 surface, spacing, collapse behavior, and account placement as admin. Its speaker navigation is
 Home | Submissions | Profile | Availability | Schedule | Tasks. The account menu includes Profile,
-**Back to Admin Mode**, theme, and Logout.
+theme, and Logout.
 
-> **"Back to Admin Mode" implies admin→speaker impersonation.** Worth supporting — it's how
-> the demo gets driven, and it lets a judge see the portal without a second account.
+> **Decided against admin→speaker impersonation (any form of it).** An earlier draft of this
+> feature let a signed-in account that didn't match a speaker record pick any speaker from a
+> dropdown and view/edit the portal as them. That was removed from the production app: it is an
+> arbitrary-identity-assumption risk with no verification behind it, not something to rebuild.
+> The only supported way into the portal is a verified-email match between the Clerk session and
+> a `speakers` row (`speakers.getMine`). An account that doesn't match sees a "No speaker profile
+> found" notice and nothing else. If a judge/organizer walkthrough of the portal is ever needed
+> again, it must be a separate, explicitly-labelled `/demo` surface — never a code path reachable
+> from the real app.
 
 ### Home
 - **My Submissions (N)** card, `View All` link. Rows: `SESS-4 – sd`, session type
@@ -81,7 +88,7 @@ speaker_documents: defineTable({
 4. Home: three cards
 5. Profile: General + My Links, 5000-char counter on bio
 6. Headshot + document upload
-7. Admin → speaker impersonation ("Back to Admin Mode" round-trip)
+7. ~~Admin → speaker impersonation ("Back to Admin Mode" round-trip)~~ — cut, see decision above
 8. Speaker-initiated proposal creation from the submissions toolbar and open-CFP chooser
 
 ## Verification
@@ -90,10 +97,11 @@ speaker_documents: defineTable({
 - [ ] Bio edit persists and shows on the public speaker gallery (if embeds are built)
 - [ ] Status pills reflect real submission status incl. the queue states
 - [ ] A speaker sees **only** their own submissions
-- [ ] Impersonation round-trips without losing the admin session
+- [x] An account with no matching speaker record sees a "No speaker profile found" notice and no picker
 - [x] A speaker can start a new proposal from `/portal/submissions` without an organizer-only form query
 
 ## Cut line
 
-Keep Home + Profile. Droppable: impersonation, document upload, the separate Submissions tab
-(Home's card can carry it).
+Keep Home + Profile. Droppable: document upload, the separate Submissions tab (Home's card can
+carry it). Impersonation/demo-picker is cut permanently, not deferred — see the decision note
+above.

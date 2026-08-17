@@ -7,13 +7,16 @@
 // returned to the browser.
 
 import { v } from "convex/values";
-import { action } from "./_generated/server";
+import { action, internalAction, type ActionCtx } from "./_generated/server";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { assertEventOrganizerAction } from "./emailDelivery";
 import { decrypt, encrypt, type CredentialEnvelope } from "./credentialEncryption";
 import {
   mapNotionPageToSpeaker,
   mapNotionPageToSubmission,
+  listNotionDatabases,
   queryNotionDatabase,
   verifyNotionDatabase,
   verifyNotionToken,
@@ -23,6 +26,8 @@ import {
   mapAirtableRecordToSubmission,
   queryAirtableTable,
   verifyAirtableConnection,
+  listAirtableBases,
+  listAirtableTables,
 } from "./airtableSync";
 import {
   buildSanitySessionDocument,
@@ -49,6 +54,127 @@ function decryptToken(envelope: CredentialEnvelope): string {
   if (!envelope || envelope.version !== 1) throw new Error("Content integration credentials are unavailable.");
   return decrypt(envelope, integrationKey());
 }
+
+type OAuthCredentials = { accessToken: string; refreshToken?: string; expiresAt?: number };
+const stateHash = (state: string) => createHash("sha256").update(state).digest("hex");
+const publicAppOrigin = () => {
+  const origin = process.env.PUBLIC_APP_ORIGIN;
+  if (!origin) throw new Error("PUBLIC_APP_ORIGIN is not configured.");
+  return origin.replace(/\/$/, "");
+};
+const oauthRedirectUri = (provider: "notion" | "airtable") => `${process.env.CONVEX_SITE_URL?.replace(/\/$/, "") ?? publicAppOrigin()}/oauth/${provider}/callback`;
+const encryptOAuth = (credentials: OAuthCredentials) => encrypt(JSON.stringify(credentials), integrationKey());
+const decryptOAuth = (envelope: CredentialEnvelope): OAuthCredentials => {
+  const parsed = JSON.parse(decryptToken(envelope)) as OAuthCredentials;
+  if (!parsed.accessToken) throw new Error("OAuth credentials are unavailable.");
+  return parsed;
+};
+const oauthHint = (provider: "notion" | "airtable") => `${provider === "notion" ? "Notion" : "Airtable"} OAuth`;
+
+function notionConfig() {
+  const clientId = process.env.NOTION_OAUTH_CLIENT_ID;
+  const clientSecret = process.env.NOTION_OAUTH_CLIENT_SECRET;
+  if (!clientId || !clientSecret) throw new Error("Notion OAuth is not configured.");
+  return { clientId, clientSecret };
+}
+function airtableConfig() {
+  const clientId = process.env.AIRTABLE_OAUTH_CLIENT_ID;
+  const clientSecret = process.env.AIRTABLE_OAUTH_CLIENT_SECRET;
+  if (!clientId || !clientSecret) throw new Error("Airtable OAuth is not configured.");
+  return { clientId, clientSecret };
+}
+
+async function exchangeCode(provider: "notion" | "airtable", code: string, verifier?: string): Promise<OAuthCredentials> {
+  const redirectUri = oauthRedirectUri(provider);
+  if (provider === "notion") {
+    const { clientId, clientSecret } = notionConfig();
+    const response = await fetch("https://api.notion.com/v1/oauth/token", { method: "POST", headers: { authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`, "content-type": "application/json" }, body: JSON.stringify({ grant_type: "authorization_code", code, redirect_uri: redirectUri }) });
+    if (!response.ok) throw new Error("Notion OAuth authorization could not be completed.");
+    const body = await response.json() as { access_token?: string; refresh_token?: string; expires_in?: number };
+    if (!body.access_token) throw new Error("Notion OAuth did not return an access token.");
+    return { accessToken: body.access_token, ...(body.refresh_token ? { refreshToken: body.refresh_token } : {}), ...(body.expires_in ? { expiresAt: Date.now() + body.expires_in * 1000 } : {}) };
+  }
+  const { clientId, clientSecret } = airtableConfig();
+  const body = new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: redirectUri, ...(verifier ? { code_verifier: verifier } : {}) });
+  const response = await fetch("https://airtable.com/oauth2/v1/token", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", authorization: `Basic ${airtableBasicAuth(clientId, clientSecret)}` }, body });
+  if (!response.ok) throw new Error(`Airtable OAuth authorization could not be completed: ${await response.text()}`);
+  const result = await response.json() as { access_token?: string; refresh_token?: string; expires_in?: number };
+  if (!result.access_token) throw new Error("Airtable OAuth did not return an access token.");
+  return { accessToken: result.access_token, ...(result.refresh_token ? { refreshToken: result.refresh_token } : {}), ...(result.expires_in ? { expiresAt: Date.now() + result.expires_in * 1000 } : {}) };
+}
+
+// Airtable requires HTTP Basic auth (client_id + client_secret) for confidential clients on
+// /oauth2/v1/token — client_id/client_secret in the body is rejected. See
+// https://airtable.com/developers/web/api/oauth-reference. Found live 2026-08-17: the request
+// was sending them as body params ("could not be completed"), then base64url-encoded once
+// switched to a header — Airtable's own error confirmed it wants standard padded base64
+// ("text after \"Basic \" is not valid base64: length must be a multiple of 4"), not base64url.
+function airtableBasicAuth(clientId: string, clientSecret: string): string {
+  return Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+}
+
+async function refreshAirtable(credentials: OAuthCredentials): Promise<OAuthCredentials> {
+  if (!credentials.refreshToken || !credentials.expiresAt || credentials.expiresAt > Date.now() + 60_000) return credentials;
+  const { clientId, clientSecret } = airtableConfig();
+  const body = new URLSearchParams({ grant_type: "refresh_token", refresh_token: credentials.refreshToken });
+  const response = await fetch("https://airtable.com/oauth2/v1/token", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", authorization: `Basic ${airtableBasicAuth(clientId, clientSecret)}` }, body });
+  if (!response.ok) throw new Error("Airtable OAuth token expired. Reconnect Airtable to continue importing.");
+  const result = await response.json() as { access_token?: string; refresh_token?: string; expires_in?: number };
+  if (!result.access_token) throw new Error("Airtable OAuth token refresh failed.");
+  return { accessToken: result.access_token, refreshToken: result.refresh_token ?? credentials.refreshToken, ...(result.expires_in ? { expiresAt: Date.now() + result.expires_in * 1000 } : {}) };
+}
+
+export const startOAuth = action({ args: { eventId: v.id("events"), provider: v.union(v.literal("notion"), v.literal("airtable")), target: v.union(v.literal("speakers"), v.literal("submissions")) }, handler: async (ctx, args) => {
+  const identity = await assertEventOrganizerAction(ctx, args.eventId);
+  const state = randomBytes(32).toString("base64url");
+  const verifier = args.provider === "airtable" ? randomBytes(48).toString("base64url") : undefined;
+  await ctx.runMutation(internal.contentIntegrations.createOAuthStateInternal, { stateHash: stateHash(state), provider: args.provider, eventId: args.eventId, userId: identity.subject, target: args.target, ...(verifier ? { verifierEnvelope: encryptToken(verifier) } : {}), expiresAt: Date.now() + 10 * 60_000 });
+  const redirectUri = oauthRedirectUri(args.provider);
+  if (args.provider === "notion") { const { clientId } = notionConfig(); const url = new URL("https://api.notion.com/v1/oauth/authorize"); url.search = new URLSearchParams({ client_id: clientId, response_type: "code", owner: "user", redirect_uri: redirectUri, state }).toString(); return { url: url.toString() }; }
+  const { clientId } = airtableConfig(); const challenge = createHash("sha256").update(verifier!).digest("base64url"); const url = new URL("https://airtable.com/oauth2/v1/authorize"); url.search = new URLSearchParams({ client_id: clientId, response_type: "code", redirect_uri: redirectUri, scope: "data.records:read schema.bases:read", state, code_challenge: challenge, code_challenge_method: "S256" }).toString(); return { url: url.toString() };
+} });
+
+export const completeOAuthCallback = internalAction({ args: { provider: v.union(v.literal("notion"), v.literal("airtable")), state: v.string(), code: v.string() }, handler: async (ctx, args) => {
+  const state = await ctx.runMutation(internal.contentIntegrations.consumeOAuthStateInternal, { stateHash: stateHash(args.state) });
+  if (!state || state.provider !== args.provider) throw new Error("OAuth state is invalid or expired.");
+  const verifier = state.verifierEnvelope ? decryptToken(state.verifierEnvelope) : undefined;
+  const credentials = await exchangeCode(args.provider, args.code, verifier);
+  const pendingId = randomUUID();
+  await ctx.runMutation(internal.contentIntegrations.createOAuthPendingInternal, { pendingId, provider: args.provider, eventId: state.eventId, userId: state.userId, target: state.target, credentialEnvelope: encryptOAuth(credentials), oauthExpiresAt: credentials.expiresAt, expiresAt: Date.now() + 15 * 60_000 });
+  const eventSlug = await ctx.runQuery(internal.events.getSlugInternal, { eventId: state.eventId });
+  return { pendingId, eventSlug };
+} });
+
+export const listNotionOAuthDatabases = action({ args: { eventId: v.id("events"), pendingId: v.string() }, handler: async (ctx, args) => {
+  const identity = await assertEventOrganizerAction(ctx, args.eventId);
+  const pending = await ctx.runQuery(internal.contentIntegrations.getOAuthPendingInternal, { pendingId: args.pendingId, userId: identity.subject, provider: "notion" });
+  if (!pending || pending.eventId !== args.eventId) throw new Error("Notion authorization is invalid or expired. Connect again.");
+  return listNotionDatabases(decryptOAuth(pending.credentialEnvelope).accessToken);
+} });
+
+export const listAirtableOAuthBases = action({ args: { eventId: v.id("events"), pendingId: v.string() }, handler: async (ctx, args) => {
+  const identity = await assertEventOrganizerAction(ctx, args.eventId);
+  const pending = await ctx.runQuery(internal.contentIntegrations.getOAuthPendingInternal, { pendingId: args.pendingId, userId: identity.subject, provider: "airtable" });
+  if (!pending || pending.eventId !== args.eventId) throw new Error("Airtable authorization is invalid or expired. Connect again.");
+  return listAirtableBases((await refreshAirtable(decryptOAuth(pending.credentialEnvelope))).accessToken);
+} });
+
+export const listAirtableOAuthTables = action({ args: { eventId: v.id("events"), pendingId: v.string(), baseId: v.string() }, handler: async (ctx, args) => {
+  const identity = await assertEventOrganizerAction(ctx, args.eventId);
+  const pending = await ctx.runQuery(internal.contentIntegrations.getOAuthPendingInternal, { pendingId: args.pendingId, userId: identity.subject, provider: "airtable" });
+  if (!pending || pending.eventId !== args.eventId) throw new Error("Airtable authorization is invalid or expired. Connect again.");
+  return listAirtableTables((await refreshAirtable(decryptOAuth(pending.credentialEnvelope))).accessToken, args.baseId);
+} });
+
+async function finishOAuth(ctx: ActionCtx, args: { eventId: Id<"events">; pendingId: string; provider: "notion" | "airtable"; config: Record<string, string> }) {
+  const identity = await assertEventOrganizerAction(ctx, args.eventId);
+  const pending = await ctx.runMutation(internal.contentIntegrations.consumeOAuthPendingInternal, { pendingId: args.pendingId, userId: identity.subject, provider: args.provider });
+  if (!pending || pending.eventId !== args.eventId) throw new Error(`${args.provider === "notion" ? "Notion" : "Airtable"} authorization is invalid or expired. Connect again.`);
+  await ctx.runMutation(internal.contentIntegrations.upsertInternal, { eventId: args.eventId, provider: args.provider, authMethod: args.provider === "notion" ? "notion_oauth" : "airtable_oauth", direction: "pull", target: pending.target, config: args.config, credentialHint: oauthHint(args.provider), credentialEnvelope: pending.credentialEnvelope, oauthExpiresAt: pending.oauthExpiresAt, status: "connected", updatedByUserId: identity.subject });
+  return { status: "connected" as const };
+}
+export const finishNotionOAuth = action({ args: { eventId: v.id("events"), pendingId: v.string(), databaseId: v.string() }, handler: (ctx, args) => finishOAuth(ctx as never, { ...args, provider: "notion", config: { notionDatabaseId: args.databaseId } }) });
+export const finishAirtableOAuth = action({ args: { eventId: v.id("events"), pendingId: v.string(), baseId: v.string(), tableName: v.string() }, handler: (ctx, args) => finishOAuth(ctx as never, { ...args, provider: "airtable", config: { airtableBaseId: args.baseId, airtableTableName: args.tableName } }) });
 
 function tokenHint(token: string) {
   const trimmed = token.trim();
@@ -106,7 +232,12 @@ export const importNotion = action({
     const identity = await assertEventOrganizerAction(ctx, args.eventId);
     const stored = await ctx.runQuery(internal.contentIntegrations.getInternal, { eventId: args.eventId, provider: "notion" });
     if (!stored) throw new Error("No Notion connection for this event.");
-    const token = decryptToken(stored.credentialEnvelope);
+    // Paste-token connections store a bare secret; OAuth connections store an encrypted
+    // {accessToken, refreshToken, expiresAt} envelope (see completeOAuthCallback). Using
+    // decryptToken unconditionally here sent that whole JSON blob to Notion as the bearer
+    // token, which Notion correctly rejected as invalid — this branch was missing even
+    // though importAirtable already has the equivalent check for airtable_oauth.
+    const token = stored.authMethod === "notion_oauth" ? decryptOAuth(stored.credentialEnvelope).accessToken : decryptToken(stored.credentialEnvelope);
     const databaseId = stored.config.notionDatabaseId;
     if (!databaseId) throw new Error("No Notion connection for this event.");
 
@@ -247,7 +378,11 @@ export const importAirtable = action({
       provider: "airtable",
     });
     if (!stored) throw new Error("No Airtable connection for this event.");
-    const personalAccessToken = decryptToken(stored.credentialEnvelope);
+    const refreshedCredentials = stored.authMethod === "airtable_oauth"
+      ? await refreshAirtable(decryptOAuth(stored.credentialEnvelope))
+      : undefined;
+    const personalAccessToken = refreshedCredentials?.accessToken ?? decryptToken(stored.credentialEnvelope);
+    const credentialEnvelope = refreshedCredentials ? encryptOAuth(refreshedCredentials) : stored.credentialEnvelope;
     const baseId = stored.config.airtableBaseId;
     const tableName = stored.config.airtableTableName;
     if (!baseId || !tableName) throw new Error("No Airtable connection for this event.");
@@ -312,7 +447,8 @@ export const importAirtable = action({
         target: stored.target,
         config: stored.config,
         credentialHint: stored.credentialHint,
-        credentialEnvelope: stored.credentialEnvelope,
+        credentialEnvelope,
+        oauthExpiresAt: refreshedCredentials?.expiresAt ?? stored.oauthExpiresAt,
         status: "error",
         lastError: cause instanceof Error ? cause.message.slice(0, 500) : "Airtable import failed.",
         lastSyncedAt: stored.lastSyncedAt,
@@ -330,7 +466,8 @@ export const importAirtable = action({
       target: stored.target,
       config: stored.config,
       credentialHint: stored.credentialHint,
-      credentialEnvelope: stored.credentialEnvelope,
+      credentialEnvelope,
+      oauthExpiresAt: refreshedCredentials?.expiresAt ?? stored.oauthExpiresAt,
       status: "connected",
       lastSyncedAt: Date.now(),
       lastSyncCursor: hasMore ? nextCursor : undefined,

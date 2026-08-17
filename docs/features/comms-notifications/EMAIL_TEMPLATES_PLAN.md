@@ -1,6 +1,6 @@
 # Namos Sessions Email Templates — Build Plan
 
-Scope: this repo only (Namos Sessions / Kanrei CFP tool, formerly Namos Sessions). Do not touch
+Scope: this repo only (Namos Sessions / Kanrei CFP tool, formerly Takumi Talks). Do not touch
 other projects.
 
 ## Why this differs from the earlier Sentio plan

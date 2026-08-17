@@ -206,13 +206,33 @@ export default function DashboardHome() {
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not submit this run."); } finally { setSubmitting(false); }
   };
 
-  const submissions = useRepoQuery<Submission[]>("submissions.list", { eventId: event.id }).data ?? (EMPTY as unknown as Submission[]);
-  const agenda = useRepoQuery<AgendaItem[]>("agenda.list", { eventId: event.id }).data ?? (EMPTY as unknown as AgendaItem[]);
-  const speakers = useRepoQuery<Speaker[]>("speakers.list", { eventId: event.id }).data ?? (EMPTY as unknown as Speaker[]);
-  const tasks = useRepoQuery<OnboardingTask[]>("tasks.list", { eventId: event.id }).data ?? (EMPTY as unknown as OnboardingTask[]);
-  const comms = useRepoQuery<Comm[]>("comms.list", { eventId: event.id }).data ?? (EMPTY as unknown as Comm[]);
-  const forms = useRepoQuery<SubmissionForm[]>("forms.list", { eventId: event.id }).data ?? (EMPTY as unknown as SubmissionForm[]);
+  // `.data` is `undefined` until a query resolves, which is not the same thing
+  // as "this event has nothing". Collapsing both into `[]` is what made an event
+  // with 529 submissions render "No submissions yet" and drop the whole dashboard
+  // into the first-run CFP setup rail whenever a subscription was slow to land.
+  // The empty arrays stay — every derived count below depends on them — but the
+  // loading flag is kept alongside so the copy can say "not yet known" instead of
+  // asserting zero.
+  const submissionsQuery = useRepoQuery<Submission[]>("submissions.list", { eventId: event.id });
+  const agendaQuery = useRepoQuery<AgendaItem[]>("agenda.list", { eventId: event.id });
+  const speakersQuery = useRepoQuery<Speaker[]>("speakers.list", { eventId: event.id });
+  const tasksQuery = useRepoQuery<OnboardingTask[]>("tasks.list", { eventId: event.id });
+  const commsQuery = useRepoQuery<Comm[]>("comms.list", { eventId: event.id });
+  const formsQuery = useRepoQuery<SubmissionForm[]>("forms.list", { eventId: event.id });
+  const submissions = submissionsQuery.data ?? (EMPTY as unknown as Submission[]);
+  const agenda = agendaQuery.data ?? (EMPTY as unknown as AgendaItem[]);
+  const speakers = speakersQuery.data ?? (EMPTY as unknown as Speaker[]);
+  const tasks = tasksQuery.data ?? (EMPTY as unknown as OnboardingTask[]);
+  const comms = commsQuery.data ?? (EMPTY as unknown as Comm[]);
+  const forms = formsQuery.data ?? (EMPTY as unknown as SubmissionForm[]);
   const cfpCount = forms.length;
+  // Any unresolved query means the numbers on screen are provisional.
+  const dataPending = submissionsQuery.data === undefined
+    || agendaQuery.data === undefined
+    || speakersQuery.data === undefined
+    || tasksQuery.data === undefined
+    || commsQuery.data === undefined
+    || formsQuery.data === undefined;
 
   const speakerSummary = useMemo(() => summarizeSpeakerOperations(projectSpeakerOperationsRows({ speakers, submissions, tasks, comms, now: Date.now() })), [comms, speakers, submissions, tasks]);
   const unscheduledAccepted = useMemo(() => {
@@ -227,13 +247,13 @@ export default function DashboardHome() {
   const attentionItems = [
     {
       icon: ClipboardList,
-      label: latestTask?.title ?? "No open tasks",
+      label: latestTask?.title ?? (tasksQuery.data === undefined ? "Loading tasks…" : "No open tasks"),
       detail: latestTask ? `${openTasks.length} open task${openTasks.length === 1 ? "" : "s"} · Open task queue` : "Open the task queue",
       to: `/events/${event.slug}/portals/tasks`,
     },
     {
       icon: ClipboardList,
-      label: latestSubmission?.title || "No submissions yet",
+      label: latestSubmission?.title || (submissionsQuery.data === undefined ? "Loading submissions…" : "No submissions yet"),
       detail: latestSubmission ? `${submissions.length} submission${submissions.length === 1 ? "" : "s"} · Review submissions` : "Open the submission queue",
       to: `/events/${event.slug}/program/abstracts`,
     },
@@ -335,7 +355,7 @@ export default function DashboardHome() {
               {/* Before a CFP exists the agent suggestions are dead ends —
                   there is no program to check yet. Point at the three jobs
                   that actually have to happen first. */}
-              {cfpCount === 0 ? (
+              {cfpCount === 0 && !dataPending ? (
                 <div className="flex flex-wrap justify-center gap-2">
                   {setupSteps.map((step) => (
                     <Link
@@ -348,7 +368,7 @@ export default function DashboardHome() {
                     </Link>
                   ))}
                 </div>
-              ) : access.data && (
+              ) : access.data !== false && (
                 <div className="flex flex-wrap justify-center gap-2">
                   {suggestions.map((suggestion) => (
                     <button
@@ -365,7 +385,17 @@ export default function DashboardHome() {
             </div>
           )}
         </div>
-        {access.data && (
+        {/* Render unless access is *definitively* denied. `agentRuns.canUse` is a reactive
+            subscription, and this app's reactive transport has a known, still-unresolved
+            defect where a subscription can stay unresolved indefinitely (see #211/#217 and
+            the note in VoiceChatButton.tsx) — the socket drops roughly every 60s and heavy
+            subscription sets never finish syncing. Gating on truthiness meant an unresolved
+            gate removed the entire composer — text input, dictation, voice chat, send — from
+            the dashboard with no way to ever get it back, which is exactly what shipped.
+            `undefined` now means "show it": this is a UI affordance, not a security boundary.
+            Every mutation behind it still calls assertEventOrganizerAccess server-side, so a
+            user who genuinely lacks access gets a real error on submit instead of a blank page. */}
+        {access.data !== false && (
           <div className="p-3">
             <form onSubmit={(e) => { e.preventDefault(); if (!busy && value.trim()) void submit(); }} className="mx-auto w-full">
               {/* The field is defined by background contrast, not a border. The
@@ -447,17 +477,15 @@ export default function DashboardHome() {
           hides fully instead of leaving a floating icon column behind. */}
       {!railCollapsed && (
       <div className="w-72 shrink-0 h-full min-h-0 overflow-y-auto px-1 py-1 space-y-1.5">
-        {cfpCount === 0 && (
+        {cfpCount === 0 && !dataPending && (
           <RailSection title="Start here" storageKey="namos-dashboard-rail-setup">
             <div className="space-y-0.5">
-              {setupSteps.map((step, index) => (
+              {/* Label only. No step numbers, no explanatory sub-line — the rail is a list of
+                  places to go, and "Create CFP" already says what it does. */}
+              {setupSteps.map((step) => (
                 <Link key={step.to} to={step.to} className={cn(RAIL_ROW, "gap-2")}>
-                  <span className="flex h-4 w-4 shrink-0 items-center justify-center text-[10px] font-medium text-muted-foreground">{index + 1}</span>
                   <step.icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-medium">{step.label}</p>
-                    <p className="truncate text-[10px] text-muted-foreground">{step.detail}</p>
-                  </div>
+                  <p className="min-w-0 flex-1 truncate text-xs font-medium">{step.label}</p>
                   <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 </Link>
               ))}
@@ -469,10 +497,7 @@ export default function DashboardHome() {
             {attentionItems.map((item, index) => (
               <Link key={`${item.to}-${index}`} to={item.to} className={cn(RAIL_ROW, "gap-2")}>
                 <item.icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-medium">{item.label}</p>
-                  <p className="truncate text-[10px] text-muted-foreground">{item.detail}</p>
-                </div>
+                <p className="min-w-0 flex-1 truncate text-xs font-medium">{item.label}</p>
                 <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               </Link>
             ))}
@@ -495,15 +520,12 @@ export default function DashboardHome() {
               {actionItems.map((item) => (
                 <Link key={item.to} to={item.to} className={cn(RAIL_ROW, "gap-2")}>
                   <item.icon className="h-4 w-4 text-muted-foreground" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium">{item.label}</p>
-                    <p className="text-[10px] text-muted-foreground">{item.detail}</p>
-                  </div>
+                  <p className="min-w-0 flex-1 truncate text-xs font-medium">{item.label}</p>
                   <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
                 </Link>
               ))}
             </div>
-          ) : <p className="px-2 py-3 text-xs text-muted-foreground">Nothing needs your attention right now.</p>}
+          ) : <p className="px-2 py-3 text-xs text-muted-foreground">{dataPending ? "Checking…" : "Nothing outstanding."}</p>}
         </RailSection>
       </div>
       )}

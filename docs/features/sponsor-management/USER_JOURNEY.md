@@ -1,8 +1,8 @@
 # Sponsor Management — User Journey
 
 **Issue:** #104  
-**Journey status:** Implemented; authenticated organizer walkthrough pending  
-**Last updated:** 2026-08-12
+**Journey status:** Done — authenticated organizer walkthrough passed
+**Last updated:** 2026-08-13
 
 ## 1. User
 
@@ -141,6 +141,13 @@ The journey is visibly successful when all of the following are observable in th
 
 ## Verification Record
 
-The server-side portion has been exercised against the live development Convex deployment: a public Workshop response persisted with the expected sponsor id and `accept_queue` status, and the public form projection contained only public labels/options. Automated typechecking, tests, lint, and production build passed before this journey document was added.
-
-The exact authenticated organizer journey above has **not yet been completed in a running browser** because the available browser stopped at Clerk sign-in and no signed-in Chrome session was connected. Per this journey's completion rule, issue #104 remains `in-progress` and plan task T025 remains unchecked until an authenticated run visibly confirms every step, including persistence after refresh and the Linked submissions → Abstracts handoff.
+The exact journey passed on 2026-08-13 against the configured development Convex deployment and
+Clerk instance. `PR113 Verified Sponsor` retained its tier, two contacts, changed primary contact,
+three template tasks, completed task state, and persisted routing rule after reload and a fresh
+organizer sign-in. A verified public submitter sent `PR113 Routed Workshop 1415` with Session
+format `Workshop`; only the organizer-authored public option was visible, while the resulting
+record was linked to the sponsor in `accept_queue`. Sponsor detail linked directly to the exact
+selected Abstracts record. Deleting the in-use tier was blocked with the inline message
+`Reassign or remove sponsors in this tier before deleting it.` and exposed no request id or
+stack trace. Desktop, 390px, and dark-mode evidence plus the full session recording are stored
+under `test-artifacts/e2e-real-user-20260813-135557/`.

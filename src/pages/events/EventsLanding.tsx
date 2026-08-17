@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, Copy, Trash2 } from "lucide-react";
+import { CalendarDays, Copy, MoreHorizontal, Trash2 } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
@@ -19,6 +19,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -305,10 +311,7 @@ export default function EventsLanding() {
       header: "Event",
       kind: "row-header",
       cell: (event) => (
-        <div className="min-w-0">
-          <p className="truncate font-semibold text-foreground">{event.name}</p>
-          <p className="mt-0.5 truncate text-xs font-normal text-muted-foreground">/events/{event.slug}</p>
-        </div>
+        <p className="truncate font-semibold text-foreground">{event.name}</p>
       ),
     },
     {
@@ -331,40 +334,35 @@ export default function EventsLanding() {
       key: "actions",
       header: "",
       headerLabel: "Actions",
-      width: "11rem",
+      width: "3rem",
       align: "right",
-      cell: (event) => (
-        <div className="flex items-center justify-end gap-1.5">
-          <Button size="sm" onClick={() => navigate(`/events/${event.slug}/dashboard`)}>
-            Open
-          </Button>
-          {manageableEventIds.has(event.id) && (
-            <>
+      cell: (event) =>
+        manageableEventIds.has(event.id) ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
               <Button
                 size="icon"
                 variant="ghost"
-                aria-label={`Duplicate ${event.name}`}
-                title={`Duplicate ${event.name}`}
-                onClick={() => setEditor({ mode: "duplicate", source: event })}
+                aria-label={`Actions for ${event.name}`}
+                onClick={(clickEvent) => clickEvent.stopPropagation()}
               >
-                <Copy className="h-4 w-4" />
+                <MoreHorizontal className="h-4 w-4" />
               </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => setEditor({ mode: "duplicate", source: event })}>
+                <Copy className="mr-2 h-4 w-4" />
+                Duplicate
+              </DropdownMenuItem>
               {event.status === "draft" && (
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="text-destructive hover:text-destructive"
-                  aria-label={`Delete ${event.name}`}
-                  title={`Delete ${event.name}`}
-                  onClick={() => setDeleteCandidate(event)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <DropdownMenuItem className="text-destructive" onSelect={() => setDeleteCandidate(event)}>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete
+                </DropdownMenuItem>
               )}
-            </>
-          )}
-        </div>
-      ),
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null,
     },
   ];
   return (
@@ -416,7 +414,8 @@ export default function EventsLanding() {
             columns={columns}
             empty="No events match this status."
             ariaLabel="Events"
-            rowActivation="none"
+            getRowLabel={(event) => event.name}
+            onRowActivated={(event) => navigate(`/events/${event.slug}/dashboard`)}
             minWidth={680}
           />
         ) : (

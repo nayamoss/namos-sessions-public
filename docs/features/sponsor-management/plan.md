@@ -85,14 +85,15 @@
 - [x] T022: Add the Sponsors nav entry (gated on `sponsorsEnabled`) and route in `AppLayout.tsx`/`App.tsx`.
 - [x] T023: Extend `TasksAdmin.tsx` to filter/display/create sponsor-targeted tasks.
 - [x] T024: Extend the submission form builder's routing rule UI with the "Link submission to sponsor" target.
-- [ ] T025: Verify the full flow end-to-end in the browser: create tier → create sponsor → add contact → mark it primary → add task from a template → configure a CFP routing rule that assigns the sponsor → submit a test CFP response that matches the rule → confirm the resulting submission is linked to the sponsor and lands in the accept queue → confirm nothing sponsor-related is visible on the public CFP form itself beyond the dropdown option.
+- [x] T025: Verify the full flow end-to-end in the browser: create tier → create sponsor → add contact → mark it primary → add task from a template → configure a CFP routing rule that assigns the sponsor → submit a test CFP response that matches the rule → confirm the resulting submission is linked to the sponsor and lands in the accept queue → confirm nothing sponsor-related is visible on the public CFP form itself beyond the dropdown option.
 
-  **Partial live verification (2026-08-12):** the Convex schema deployed, the seed reran
-  idempotently, and a real public submission matching the seeded sponsor rule persisted with the
-  expected `sponsorId` and `accept_queue` status. `publicForms:get` exposed only the configured
-  dropdown labels/options and no sponsor record, tier, contact, or routing data. The organizer UI
-  walkthrough remains unchecked because the available browser session stopped at Clerk sign-in
-  and no signed-in Chrome connection was available.
+  **Authenticated live verification (2026-08-13):** the owner created `PR113 Verified Tier` and
+  `PR113 Verified Sponsor`, added two contacts and changed the primary, applied the Sponsor
+  Deliverables template, completed a task, persisted a Workshop → Accept queue → sponsor rule,
+  and submitted `PR113 Routed Workshop 1415` through the public CFP. The sponsor detail showed
+  that exact response in Accept Queue and linked to its exact Abstracts record. The public form
+  exposed no sponsor internals. Reload/new-session persistence and the clean guarded-tier error
+  passed at desktop and 390px, including dark mode.
 
 > ⚠️ A feature is NOT done until it is visible and usable in the UI. Backend-only work that has
 > no UI entry point must still have a plan for where/how the user will access it. If the UI
@@ -107,7 +108,7 @@
 - T025 (end-to-end browser verification) depends on every prior task.
 
 ## Verification Checklist
-- [ ] Exact `USER_JOURNEY.md` flow completed in an authenticated running browser
+- [x] Exact `USER_JOURNEY.md` flow completed in an authenticated running browser
 - [x] All acceptance paths are implemented and reachable in code
 - [x] Feature has organizer UI entry points (not just backend operations)
 - [x] `sponsorsEnabled` toggle correctly shows/hides the Sponsors nav item and route
@@ -119,5 +120,5 @@
 - [x] No regressions in existing Speakers/Tasks/Submission Form Builder flows
 - [x] Docs updated if needed
 
-The unchecked journey item is release-significant. API, database, and automated checks supplement
-but do not replace the required organizer-visible browser run documented in `USER_JOURNEY.md`.
+The organizer-visible journey passed against the configured development deployment; automated
+gates and the captured evidence supplement that browser record.

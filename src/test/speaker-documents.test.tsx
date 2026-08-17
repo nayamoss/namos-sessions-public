@@ -14,7 +14,10 @@ describe("speaker documents", () => {
   it("loads the signed-in speaker's submissions through the speaker-scoped query", async () => {
     const list = vi.fn().mockResolvedValue([submission]);
     const repository = {
-      events: { listForPortal: async () => [event] },
+      events: {
+        listForPortal: async () => [event],
+        portalSpeakerIdentity: async () => ({ event, speaker, publishedEvents: [event] }),
+      },
       speakers: { getMine: async () => speaker, listDocuments: async () => [] },
       submissions: { list },
     } as unknown as Repository;

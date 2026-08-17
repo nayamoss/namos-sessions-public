@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { DynamicFormRenderer, isFieldVisible, type DynamicField } from "@/components/shared/DynamicFormRenderer";
@@ -20,6 +20,7 @@ import { emailEditable, CfpEmailVerificationPanel, useCfpEmailVerification } fro
 import { TurnstileWidget } from "@/components/security/TurnstileWidget";
 import { preloadTurnstile } from "@/lib/turnstile";
 import { track } from "@/lib/analytics";
+import { contrastForeground, hexToHslTriplet } from "@/lib/color";
 
 // Visual language deliberately mirrors /onboarding (OnboardingWizard.tsx): one focused question
 // per screen, a thin top progress bar instead of a step-name tracker, a big heading, and pill
@@ -46,7 +47,8 @@ function dynamicFields(config: PublicSubmissionFormConfig | null, section: "abst
   }) satisfies DynamicField[];
 }
 
-function Wordmark({ eventName }: { eventName: string }) {
+function Wordmark({ eventName, logoUrl }: { eventName: string; logoUrl?: string }) {
+  if (logoUrl) return <img src={logoUrl} className="max-h-10 max-w-48 object-contain" alt={eventName} />;
   return (
     <span className="inline-flex items-center gap-2 text-foreground">
       <span className="text-sm font-semibold">{eventName}</span>
@@ -91,12 +93,12 @@ function BackButton({ onClick, disabled }: { onClick: () => void; disabled?: boo
 }
 
 /** Full-bleed wizard shell shared by every step, matching /onboarding's OnboardingWizard shell. */
-function WizardShell({ eventName, step, total, wide, children }: { eventName: string; step: number; total: number; wide?: boolean; children: ReactNode }) {
+function WizardShell({ eventName, logoUrl, step, total, wide, children }: { eventName: string; logoUrl?: string; step: number; total: number; wide?: boolean; children: ReactNode }) {
   return (
     <div className="relative flex min-h-screen flex-col bg-background text-foreground">
       <ProgressBar step={step} total={total} />
       <header className="flex items-center justify-between px-6 py-6 sm:px-10">
-        <Wordmark eventName={eventName} />
+        <Wordmark eventName={eventName} logoUrl={logoUrl} />
         <span className="text-xs font-medium text-muted-foreground">{step + 1} / {total}</span>
       </header>
       <main className="flex flex-1 items-start justify-center px-6 pb-28 pt-6 sm:px-10">
@@ -109,10 +111,10 @@ function WizardShell({ eventName, step, total, wide, children }: { eventName: st
 }
 
 /** Centered single-message shell for the closed / submitted end states — same visual language, no steps. */
-function MessageShell({ eventName, children }: { eventName: string; children: ReactNode }) {
+function MessageShell({ eventName, logoUrl, children }: { eventName: string; logoUrl?: string; children: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
-      <header className="px-6 py-6 sm:px-10"><Wordmark eventName={eventName} /></header>
+      <header className="px-6 py-6 sm:px-10"><Wordmark eventName={eventName} logoUrl={logoUrl} /></header>
       <main className="flex flex-1 items-center justify-center px-6 pb-16 sm:px-10">
         <div className="w-full max-w-lg space-y-4">{children}</div>
       </main>
@@ -138,6 +140,11 @@ export default function SubmissionPage() {
   const [idempotencyKey] = useState(() => globalThis.crypto?.randomUUID?.() ?? `submission-${Date.now()}`);
   const loading = config === undefined;
   const portalUrl = "/portal";
+  const brandingStyle = useMemo(() => {
+    const accentColor = config?.event.accentColor;
+    const primary = accentColor ? hexToHslTriplet(accentColor) : null;
+    return primary && accentColor ? { "--primary": primary, "--primary-foreground": contrastForeground(accentColor) } as CSSProperties : undefined;
+  }, [config?.event.accentColor]);
   const abstractFields = useMemo(() => dynamicFields(config ?? null, "abstract"), [config]);
   const participantFields = useMemo(() => dynamicFields(config ?? null, "participant"), [config]);
   const visibleAbstractFields = abstractFields.filter((field) => isFieldVisible(field, values));
@@ -266,12 +273,12 @@ export default function SubmissionPage() {
   }
   if (submitted) {
     return (
-      <MessageShell eventName={eventName}>
+      <div style={brandingStyle}><MessageShell eventName={eventName} logoUrl={config.event.logoUrl}>
         <p className="text-sm font-medium text-muted-foreground">Submission received</p>
         <h1 className="text-3xl font-semibold sm:text-4xl">Thank you, {account.firstName}.</h1>
         <p className="text-sm text-muted-foreground">{config.form.successPageMessage ?? `We have received your proposal for ${config.event.name}.`}{config.form.confirmationEnabled ? ` A confirmation will be sent to ${account.email}.` : ""}</p>
         {config.form.autoRedirectToPortal && <p className="text-sm">Taking you to your speaker portal in {seconds} seconds. <Link className="underline" to={portalUrl}>Open the speaker portal now</Link>.</p>}
-      </MessageShell>
+      </MessageShell></div>
     );
   }
 
@@ -286,7 +293,7 @@ export default function SubmissionPage() {
   const back = () => { setErrors([]); setStep((value) => value - 1); };
 
   return (
-    <WizardShell eventName={eventName} step={step} total={steps.length} wide={wide}>
+    <div style={brandingStyle}><WizardShell eventName={eventName} logoUrl={config.event.logoUrl} step={step} total={steps.length} wide={wide}>
       <h1 className="text-2xl font-semibold sm:text-3xl">{heading}</h1>
       {config.form.closeDate && step === 0 && (
         <p className="mt-3 rounded-[10px] bg-card px-3 py-2 text-sm text-muted-foreground">
@@ -379,7 +386,7 @@ export default function SubmissionPage() {
           {submitting ? "Submitting…" : step === steps.length - 1 ? "Submit proposal" : "Continue"}
         </PrimaryButton>
       </div>
-    </WizardShell>
+    </WizardShell></div>
   );
 }
 

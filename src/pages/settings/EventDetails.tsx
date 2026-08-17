@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
-import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -200,7 +199,7 @@ export default function EventDetails() {
   ) => setEvent((current) => ({ ...current, [key]: value }));
   const setItems = setRooms;
   return (
-    <AppLayout title="Event Settings">
+    <>
       <div className="space-y-4">
         <ContentToolbar
           ariaLabel="Event settings actions"
@@ -350,7 +349,7 @@ export default function EventDetails() {
           </>
         )}
       </div>
-    </AppLayout>
+    </>
   );
 }
 function Collection<Item extends EditableCollectionItem>({

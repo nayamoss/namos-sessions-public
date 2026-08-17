@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent, type ReactNode } from "react";
 import { useUser } from "@clerk/clerk-react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowRight, Camera, ChevronDown, Eye, EyeOff, Loader2 } from "lucide-react";
+import { ArrowRight, Camera, ChevronDown, Eye, EyeOff, Loader2, Smartphone } from "lucide-react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { TimezoneCombobox } from "@/components/shared/TimezoneCombobox";
 import { DateTimeField } from "@/components/shared/DateTimeField";
@@ -22,6 +22,7 @@ const stepMeta = [
   { id: "welcome", label: "Welcome" },
   { id: "identity", label: "A couple quick things" },
   { id: "conference", label: "Your conference" },
+  { id: "mobile", label: "On the go" },
   { id: "import", label: "Import data" },
 ] as const;
 
@@ -326,6 +327,10 @@ export default function OnboardingWizard() {
       }
       return;
     }
+    if (step === 3) {
+      setStep(4);
+      return;
+    }
     await complete();
   };
 
@@ -567,6 +572,50 @@ export default function OnboardingWizard() {
             )}
 
             {step === 3 && (
+              <section className="space-y-6">
+                <div>
+                  <h1 className="text-2xl font-semibold sm:text-3xl">Take it with you</h1>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Namos Sessions is built to work on your phone — no app required. Open
+                    it in your mobile browser and everything you just set up is there:
+                    the schedule, speakers, and reviews.
+                  </p>
+                </div>
+                <div className="space-y-4 rounded-[12px] bg-card p-6">
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-primary/10 text-primary">
+                      <Smartphone aria-hidden="true" className="h-4 w-4" />
+                    </span>
+                    <div>
+                      <p className="text-sm font-medium">Works on any phone today</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Sign in at the same address on your phone or tablet — the whole
+                        dashboard is designed for small screens, so you can run a session
+                        from the hallway.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-primary/10 text-primary">
+                      <span aria-hidden="true" className="text-xs font-semibold">Soon</span>
+                    </span>
+                    <div>
+                      <p className="text-sm font-medium">iOS and Android apps are coming</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Native apps are on the way. Nothing to do now — we'll let you know
+                        the moment they're ready.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Button type="button" variant="outline" className="h-11 rounded-[12px]" onClick={goBack}>Back</Button>
+                  <PrimaryButton onClick={() => void next()} autoFocus>Got it</PrimaryButton>
+                </div>
+              </section>
+            )}
+
+            {step === 4 && (
               <section className="space-y-6">
                 <ErrorBoundary fallback={<StepErrorFallback />}>
                   {event.id ? (

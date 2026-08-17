@@ -45,12 +45,17 @@ export function PortalIdentityProvider({ children }: { children: ReactNode }) {
       setLoading(true);
       setError(undefined);
       try {
-        const event = (await repo.events.listForPortal())[0];
+        // Resolved server-side across every reachable event. Taking listForPortal()[0] and
+        // asking only that event for a speaker record meant a speaker whose record lived on a
+        // later event — or on an event still in draft, which listForPortal excludes — got
+        // "No speaker profile found" despite having a real record. See events.portalSpeakerIdentity.
+        const identity = await repo.events.portalSpeakerIdentity();
+        const event = identity.event ?? identity.publishedEvents[0];
         if (!event) {
           if (active) { setEventId(undefined); setEventName(undefined); setEventData(undefined); setEventSpeakers([]); setSelectedSpeakerId(undefined); setHandoffMismatch(false); }
           return;
         }
-        const ownSpeaker = await repo.speakers.getMine({ eventId: event.id });
+        const ownSpeaker = identity.speaker ?? undefined;
         // A matched Clerk account is scoped to only its own speaker record. Accounts that don't
         // match a speaker never see any other speaker's record — there is no listing fallback.
         const speakersForHandoffCheck = ownSpeaker ? [ownSpeaker] : await repo.speakers.list({ eventId: event.id }).catch(() => []);

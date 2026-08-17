@@ -151,7 +151,7 @@ last so its documented examples can be copy-checked against the real Phase 3 res
 
 ## Completion Evidence — 2026-08-12
 
-- Provisioned `naya-moss/namos-sessions` with dev `merry-ox-749` and production
+- Provisioned `maintainer/takumi-talks` with dev `merry-ox-749` and production
   `good-rabbit-379`; the additive schema and backfill ran on both before the final schema cutover.
 - Both deployments had zero legacy rows at migration time. Development was then seeded with one
   event per final status and verified to contain only `startsAt`, `endsAt`, and uppercase status.

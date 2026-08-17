@@ -14,6 +14,8 @@ type AirtableListResponse = {
   records: AirtableRecord[];
   offset?: string;
 };
+export type AirtableBaseOption = { id: string; name: string };
+export type AirtableTableOption = { id: string; name: string };
 
 function airtableHeaders(personalAccessToken: string) {
   return { authorization: `Bearer ${personalAccessToken}` };
@@ -21,6 +23,20 @@ function airtableHeaders(personalAccessToken: string) {
 
 function airtableTableUrl(baseId: string, tableName: string) {
   return `${AIRTABLE_API}/${encodeURIComponent(baseId)}/${encodeURIComponent(tableName)}`;
+}
+
+export async function listAirtableBases(accessToken: string): Promise<AirtableBaseOption[]> {
+  const response = await fetch("https://api.airtable.com/v0/meta/bases", { headers: airtableHeaders(accessToken) });
+  if (!response.ok) await throwAirtableError(response);
+  const body = await response.json() as { bases?: AirtableBaseOption[] };
+  return body.bases ?? [];
+}
+
+export async function listAirtableTables(accessToken: string, baseId: string): Promise<AirtableTableOption[]> {
+  const response = await fetch(`https://api.airtable.com/v0/meta/bases/${encodeURIComponent(baseId)}/tables`, { headers: airtableHeaders(accessToken) });
+  if (!response.ok) await throwAirtableError(response);
+  const body = await response.json() as { tables?: AirtableTableOption[] };
+  return body.tables ?? [];
 }
 
 async function throwAirtableError(response: Response): Promise<never> {

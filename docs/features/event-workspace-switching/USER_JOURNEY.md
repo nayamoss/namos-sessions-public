@@ -1,8 +1,8 @@
 # Event Workspace Switching — User Journey
 
 **Feature:** #105  
-**Status:** Implemented; full authenticated journey not yet executed  
-**Last updated:** 2026-08-12
+**Status:** Done — authenticated journey passed
+**Last updated:** 2026-08-13
 
 This is the authoritative UI journey for planning, implementation review, and QA. Direct
 Convex calls, database inspection, and hand-entered internal routes do not satisfy it.
@@ -146,7 +146,18 @@ No console output, database row, or backend response alone counts as visible suc
 
 ## QA status
 
-Automated tests, typecheck, lint, and production build supplement this journey, but do not
-complete it. The local browser reached Clerk sign-in on 2026-08-12; no authenticated in-app
-session or connected signed-in Chrome session was available. Journeys A–D must therefore be
-executed start to finish before this feature or its QA task is marked done.
+Journeys A–D passed on 2026-08-13 in the Codex in-app browser against the configured Clerk and
+development Convex environment. Test records were clearly prefixed `PR113`: Event B used slug
+`pr113-browser-event-b-1358`, the duplicate used `pr113-event-a-duplicate-1405`, and the
+event-only identity was `pr113.audit.20260813+clerk_test@example.com`.
+
+The owner created Event B, switched Event A/B without losing the Abstracts suffix, reloaded and
+opened a copied URL, invited then removed the event-only reviewer, and verified denied direct
+Event A/Event B URLs rendered **Event unavailable** without protected data. Duplication preserved
+8 forms, 3 tracks, the `Speaker reminder` communication template, and optional team membership;
+the duplicate had no submissions, speakers, agenda items, or evaluations. Organization team
+management passed for the owner, and an active admin saw the team read-only with no Invite or
+Remove controls. Verification caught an admin onboarding redirect, an unscoped Abstracts field
+query, raw Convex error framing, and a legacy membership-schema incompatibility; all were fixed
+and the affected owner, admin, and reviewer flows passed on retest. Desktop, 390px, dark-mode,
+reload persistence, console review, and the development Convex deployment were included.

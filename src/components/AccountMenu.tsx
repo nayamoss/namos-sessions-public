@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { SignOutButton, useUser } from "@clerk/clerk-react";
-import { ArrowLeft, ChevronDown, LogOut, Settings2, UserRound, Users } from "lucide-react";
+import { ArrowLeft, Building2, ChevronDown, Keyboard, LogOut, Megaphone, MessageSquare, Route, Settings2, UserRound, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isClerkEnabled } from "@/data/backend";
 import { ThemeToggleMenuItem } from "@/components/ThemeMenuItems";
@@ -9,13 +9,19 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useOptionalCurrentEvent } from "@/components/EventContext";
 import { useRepo, useOptionalRepo } from "@/data/repo";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { ProfileSettingsDialog } from "@/components/ProfileSettingsDialog";
+import { FeedbackDialog } from "@/components/FeedbackDialog";
 import { resetAnalytics, setAnalyticsIdentity, track } from "@/lib/analytics";
+import { useOptionalSettingsModal } from "@/components/settings/SettingsModalContext";
+import { useOnboardingTourStore } from "@/lib/onboardingTourStore";
 
 /** Groups are separated by whitespace only — never a rule or divider. */
 const contentClass = cardSurfaceClasses("default", "bg-muted p-1.5 shadow-none");
@@ -70,7 +76,11 @@ function AdminModeMenuItem({ eventSlug }: { eventSlug?: string }) {
   );
 }
 
+// Everything that's a destination for managing *your account/event*, not a feature shortcut,
+// nests under one "Settings" submenu — keeping the top-level list short instead of stacking
+// Profile settings / Event settings / Speaker portal as separate rows.
 function MenuLinks({ context, eventSlug, onOpenProfileSettings }: { context: "admin" | "portal"; eventSlug?: string; onOpenProfileSettings?: () => void }) {
+  const settingsModal = useOptionalSettingsModal();
   const profileSettings = onOpenProfileSettings ? (
     <DropdownMenuItem onSelect={onOpenProfileSettings} className={itemClass}>
       <UserRound className="h-4 w-4 shrink-0" />
@@ -81,45 +91,88 @@ function MenuLinks({ context, eventSlug, onOpenProfileSettings }: { context: "ad
   if (context === "portal") {
     return (
       <>
-        {profileSettings}
-        <DropdownMenuItem asChild>
-          <Link to="/portal/profile" className={itemClass}>
-            <UserRound className="h-4 w-4 shrink-0" />
-            Speaker profile
-          </Link>
-        </DropdownMenuItem>
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger className={itemClass}>
+            <Settings2 className="h-4 w-4 shrink-0" />
+            Settings
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className={cn("w-52", contentClass)}>
+            {profileSettings}
+            <DropdownMenuItem asChild>
+              <Link to="/portal/profile" className={itemClass}>
+                <UserRound className="h-4 w-4 shrink-0" />
+                Speaker profile
+              </Link>
+            </DropdownMenuItem>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
         <AdminModeMenuItem eventSlug={eventSlug} />
       </>
     );
   }
 
   return (
-    <>
-      {profileSettings}
-      <DropdownMenuItem asChild>
-        <Link to={eventSlug ? `/events/${eventSlug}/settings/event` : "/events"} className={itemClass}>
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger className={itemClass}>
+        <Settings2 className="h-4 w-4 shrink-0" />
+        Settings
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className={cn("w-52", contentClass)}>
+        {profileSettings}
+        {/* Goes through the settings-modal context (not a plain Link) so it opens as an
+        overlay instead of a page navigation — the whole point of the settings-modal-refactor.
+        Falls back to a real navigation only when no SettingsModalProvider is mounted. */}
+        <DropdownMenuItem onSelect={() => settingsModal?.openSettings("event")} className={itemClass} disabled={!settingsModal && !eventSlug}>
           <Settings2 className="h-4 w-4 shrink-0" />
           Event settings
-        </Link>
-      </DropdownMenuItem>
-      <DropdownMenuItem asChild>
-        <Link to="/portal" className={itemClass} onClick={() => track("cta_converted", { destination: "portal" })}>
-          <Users className="h-4 w-4 shrink-0" />
-          Speaker portal
-        </Link>
-      </DropdownMenuItem>
-    </>
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => settingsModal?.openSettings("organization")} className={itemClass}>
+          <Building2 className="h-4 w-4 shrink-0" />
+          Organization settings
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link to="/portal" className={itemClass} onClick={() => track("cta_converted", { destination: "portal" })}>
+            <Users className="h-4 w-4 shrink-0" />
+            Speaker portal
+          </Link>
+        </DropdownMenuItem>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
   );
 }
 
 function AccountMenuView({ collapsed, context, userName, userInitials, avatarUrl, signOut, onOpenProfileSettings, profileSettings }: AccountMenuViewProps) {
   const [accountOpen, setAccountOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const startTour = useOnboardingTourStore((state) => state.startTour);
   const eventSlug = useOptionalCurrentEvent()?.event.slug;
+  const featureLinks = (
+    <>
+      <DropdownMenuItem asChild>
+        <Link to="/updates" className={itemClass} onClick={() => setAccountOpen(false)}>
+          <Megaphone className="h-4 w-4 shrink-0" />
+          What&apos;s new
+        </Link>
+      </DropdownMenuItem>
+      <DropdownMenuItem className={itemClass} onSelect={() => { setAccountOpen(false); startTour(); }}>
+        <Route className="h-4 w-4 shrink-0" />
+        Take a tour
+      </DropdownMenuItem>
+      <DropdownMenuItem className={itemClass} onSelect={() => { setAccountOpen(false); setFeedbackOpen(true); }}>
+        <MessageSquare className="h-4 w-4 shrink-0" />
+        Feedback
+      </DropdownMenuItem>
+      <DropdownMenuItem className={itemClass} onSelect={() => { setAccountOpen(false); window.dispatchEvent(new Event("namos:open-shortcuts")); }}>
+        <Keyboard className="h-4 w-4 shrink-0" />
+        Shortcuts
+      </DropdownMenuItem>
+    </>
+  );
 
   if (collapsed) {
     return (
       <div className="pb-2">
-        <DropdownMenu>
+        <DropdownMenu open={accountOpen} onOpenChange={setAccountOpen}>
           <DropdownMenuTrigger asChild>
             <button
               className={cn("mx-auto block h-8 w-8 rounded-full transition-opacity hover:opacity-80", triggerFocusClass)}
@@ -136,12 +189,14 @@ function AccountMenuView({ collapsed, context, userName, userInitials, avatarUrl
             </div>
             <MenuLinks context={context} eventSlug={eventSlug} onOpenProfileSettings={onOpenProfileSettings} />
             <div className="pt-1.5">
+              {featureLinks}
               <ThemeToggleMenuItem />
               {signOut}
             </div>
           </DropdownMenuContent>
         </DropdownMenu>
         {profileSettings}
+        {feedbackOpen && <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />}
       </div>
     );
   }
@@ -171,12 +226,14 @@ function AccountMenuView({ collapsed, context, userName, userInitials, avatarUrl
         >
           <MenuLinks context={context} eventSlug={eventSlug} onOpenProfileSettings={onOpenProfileSettings} />
           <div className="pt-1.5">
+            {featureLinks}
             <ThemeToggleMenuItem />
             {signOut}
           </div>
         </DropdownMenuContent>
       </DropdownMenu>
       {profileSettings}
+      {feedbackOpen && <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />}
     </div>
   );
 }

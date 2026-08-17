@@ -113,7 +113,8 @@ I land directly on its editable record instead of a dead click.
 
 ## Out of Scope
 
-- Month view (not shipped, not requested).
+- ~~Month view (not shipped, not requested).~~ Superseded: Month view shipped and is live in the
+  view tabs (`Agenda.tsx`, `AgendaView`). See `AUDIT-2026-08-16.md`.
 - `capacity` conflict class (attendance vs. room capacity — no capacity field currently modeled).
 - Saved Views as a real per-user feature (no saved-view infrastructure exists anywhere in this
   app; a dedicated future feature if requested).

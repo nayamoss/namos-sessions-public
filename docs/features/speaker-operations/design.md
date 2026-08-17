@@ -3,7 +3,7 @@
 Companion to [`requirements.md`](./requirements.md). Ordered work lives in
 [`plan.md`](./plan.md).
 
-**GitHub issue:** [#70](https://github.com/nayamoss/namos-sessions/issues/70)
+**GitHub issue:** [#70](https://github.com/nayamoss/takumi-talks/issues/70)
 
 ## Product and information architecture
 

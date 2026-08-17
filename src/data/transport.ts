@@ -1,4 +1,4 @@
-import type { Repository } from "./repo";
+import type { PortalSpeakerIdentity, Repository } from "./repo";
 import type {
   ActivityEntry,
   ApiKey,
@@ -75,10 +75,12 @@ export const readOperations = [
   "events.list",
   "events.listMine",
   "events.listForPortal",
+  "events.portalSpeakerIdentity",
   "events.get",
   "events.getBySlug",
   "events.rooms.list",
   "events.tracks.list",
+  "files.getUrl",
   "eventMembers.list",
   "eventMembers.canManage",
   "tags.list",
@@ -141,6 +143,7 @@ export const readOperations = [
 
 export type ReadOperation = (typeof readOperations)[number];
 export type WriteOperation =
+  | "files.generateUploadUrl"
   | "events.save"
   | "events.duplicate"
   | "events.remove"
@@ -208,6 +211,12 @@ export type WriteOperation =
   | "contentIntegrations.importNotion"
   | "contentIntegrations.connectAirtable"
   | "contentIntegrations.importAirtable"
+  | "contentIntegrations.startOAuth"
+  | "contentIntegrations.listNotionOAuthDatabases"
+  | "contentIntegrations.finishNotionOAuth"
+  | "contentIntegrations.listAirtableOAuthBases"
+  | "contentIntegrations.listAirtableOAuthTables"
+  | "contentIntegrations.finishAirtableOAuth"
   | "contentIntegrations.connectSanity"
   | "contentIntegrations.publishSanity"
   | "contentIntegrations.disconnect"
@@ -424,6 +433,12 @@ export function createRepository(transport: DataTransport): Repository {
         transport.write<NotionImportResult>("contentIntegrations.importNotion", { eventId }),
       connectAirtable: (input: AirtableConnectInput) =>
         transport.write<{ status: "connected" }>("contentIntegrations.connectAirtable", input),
+      startOAuth: (input) => transport.write<{ url: string }>("contentIntegrations.startOAuth", input),
+      listNotionOAuthDatabases: (input) => transport.write("contentIntegrations.listNotionOAuthDatabases", input),
+      finishNotionOAuth: (input) => transport.write("contentIntegrations.finishNotionOAuth", input),
+      listAirtableOAuthBases: (input) => transport.write("contentIntegrations.listAirtableOAuthBases", input),
+      listAirtableOAuthTables: (input) => transport.write("contentIntegrations.listAirtableOAuthTables", input),
+      finishAirtableOAuth: (input) => transport.write("contentIntegrations.finishAirtableOAuth", input),
       importAirtable: ({ eventId }) =>
         transport.write<AirtableImportResult>("contentIntegrations.importAirtable", { eventId }),
       connectSanity: (input: SanityConnectInput) =>
@@ -440,6 +455,8 @@ export function createRepository(transport: DataTransport): Repository {
       list: () => transport.read<Event[]>("events.list", {}),
       listMine: () => transport.read<Event[]>("events.listMine", {}),
       listForPortal: () => transport.read<Event[]>("events.listForPortal", {}),
+      portalSpeakerIdentity: () =>
+        transport.read<PortalSpeakerIdentity>("events.portalSpeakerIdentity", {}),
       get: (eventId) => transport.read<Event | null>("events.get", { eventId }),
       getBySlug: (slug) =>
         transport.read<Event | null>("events.getBySlug", { slug }),
@@ -454,6 +471,10 @@ export function createRepository(transport: DataTransport): Repository {
         transport.read<Track[]>("events.tracks.list", { eventId }),
       saveTrack: (track) => transport.write("events.tracks.save", track),
       removeTrack: (input) => transport.write("events.tracks.remove", input),
+    },
+    files: {
+      generateUploadUrl: () => transport.write<{ uploadUrl: string }>("files.generateUploadUrl", {}),
+      getUrl: (storageId) => transport.read<string | null>("files.getUrl", { storageId }),
     },
     eventMembers: {
       list: ({ eventId }) =>
