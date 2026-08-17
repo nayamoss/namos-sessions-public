@@ -6,6 +6,7 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { computeReviewerProgress, type ReviewerProgressRow } from "../src/lib/reviewer-progress";
 import type { Infer } from "convex/values";
+import { eventOrganizers, notifyEvent } from "./notifications";
 
 type Criterion = Infer<typeof evaluationCriterion>;
 type CriterionScore = Infer<typeof evaluationCriterionScore>;
@@ -283,7 +284,19 @@ async function createAssignments(
       .withIndex("by_plan_submission_reviewer_round", (q) => q.eq("evaluationPlanId", input.evaluationPlanId).eq("submissionId", submissionId).eq("reviewerUserId", reviewerUserId).eq("round", input.round))
       .unique();
     if (existing) { assignmentIds.push(existing._id); skipped += 1; continue; }
-    assignmentIds.push(await ctx.db.insert("evaluation_assignments", { eventId: input.eventId, evaluationPlanId: input.evaluationPlanId, submissionId, reviewerUserId, round: input.round, createdAt: now }));
+    const assignmentId = await ctx.db.insert("evaluation_assignments", { eventId: input.eventId, evaluationPlanId: input.evaluationPlanId, submissionId, reviewerUserId, round: input.round, createdAt: now });
+    const submission = await ctx.db.get(submissionId);
+    const event = await ctx.db.get(input.eventId);
+    await notifyEvent(ctx, {
+      eventId: input.eventId,
+      kind: "reviewer_assigned",
+      title: "Review assigned",
+      body: submission?.title ?? "A submission was assigned for review.",
+      linkPath: event ? `/events/${event.slug}/program/evaluation` : undefined,
+      relatedId: assignmentId,
+      recipientUserIds: [reviewerUserId],
+    });
+    assignmentIds.push(assignmentId);
     created += 1;
   }
   return { assignmentIds, created, skipped };
@@ -435,6 +448,8 @@ export const save = mutation({
       if (!existing || existing.eventId !== args.eventId || existing.submissionId !== args.submissionId) throw new Error("Review not found for this event and submission.");
       if (existing.assignmentId !== args.assignmentId) throw new Error("Review assignment cannot be changed.");
       await ctx.db.patch(args.id, { reviewerName, ...scoreFields, comments, updatedAt: now });
+      const event = await ctx.db.get(args.eventId);
+      await notifyEvent(ctx, { eventId: args.eventId, kind: "evaluation_completed", title: "Evaluation completed", body: submission.title, linkPath: event ? `/events/${event.slug}/program/abstracts?selected=${args.submissionId}` : undefined, relatedId: args.id, recipientUserIds: await eventOrganizers(ctx, args.eventId) });
       return args.id;
     }
 
@@ -447,8 +462,13 @@ export const save = mutation({
     if (existing) {
       if (existing.eventId !== args.eventId) throw new Error("Review not found for this event.");
       await ctx.db.patch(existing._id, { ...scoreFields, comments, updatedAt: now });
+      const event = await ctx.db.get(args.eventId);
+      await notifyEvent(ctx, { eventId: args.eventId, kind: "evaluation_completed", title: "Evaluation completed", body: submission.title, linkPath: event ? `/events/${event.slug}/program/abstracts?selected=${args.submissionId}` : undefined, relatedId: existing._id, recipientUserIds: await eventOrganizers(ctx, args.eventId) });
       return existing._id;
     }
-    return ctx.db.insert("evaluations", { eventId: args.eventId, submissionId: args.submissionId, assignmentId: args.assignmentId, reviewerName, ...scoreFields, comments, createdAt: now, updatedAt: now });
+    const evaluationId = await ctx.db.insert("evaluations", { eventId: args.eventId, submissionId: args.submissionId, assignmentId: args.assignmentId, reviewerName, ...scoreFields, comments, createdAt: now, updatedAt: now });
+    const event = await ctx.db.get(args.eventId);
+    await notifyEvent(ctx, { eventId: args.eventId, kind: "evaluation_completed", title: "Evaluation completed", body: submission.title, linkPath: event ? `/events/${event.slug}/program/abstracts?selected=${args.submissionId}` : undefined, relatedId: evaluationId, recipientUserIds: await eventOrganizers(ctx, args.eventId) });
+    return evaluationId;
   },
 });

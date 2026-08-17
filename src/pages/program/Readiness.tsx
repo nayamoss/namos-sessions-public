@@ -1,15 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  AlertTriangle,
-  ClipboardList,
-  MailWarning,
-  UserRoundCheck,
-  UsersRound,
+  CheckCircle2,
+  RefreshCw,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
-import { ReadinessCategoryCard } from "@/components/shared/ReadinessCategoryCard";
+import { ContentToolbar } from "@/components/shared/ContentToolbar";
+import { DataGrid, type DataGridColumn } from "@/components/shared/DataGrid";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useRepo } from "@/data/repo";
 import type {
   AgendaConflict,
@@ -28,16 +35,13 @@ import {
 import { projectSpeakerOperationsRows } from "@/lib/speaker-operations";
 import { agendaEventDays } from "./Agenda";
 
-const categories: Array<{
-  category: ReadinessCategory;
-  icon: typeof AlertTriangle;
-}> = [
-  { category: "agenda_conflicts", icon: AlertTriangle },
-  { category: "speaker_confirmations", icon: UsersRound },
-  { category: "onboarding_tasks", icon: ClipboardList },
-  { category: "proposal_decisions", icon: UserRoundCheck },
-  { category: "comms_delivery", icon: MailWarning },
-];
+const categoryLabels: Record<ReadinessCategory, string> = {
+  agenda_conflicts: "Schedule",
+  speaker_confirmations: "Speakers",
+  onboarding_tasks: "Tasks",
+  proposal_decisions: "Abstracts",
+  comms_delivery: "Communications",
+};
 type ReadinessData = {
   event?: Event;
   agenda: AgendaItem[];
@@ -56,6 +60,14 @@ const emptyData: ReadinessData = {
   tasks: [],
   comms: [],
   errors: {},
+};
+type ReadinessRow = {
+  id: string;
+  category: string;
+  title: string;
+  detail?: string;
+  eventDate?: string;
+  to: string;
 };
 function message(error: unknown) {
   return error instanceof Error
@@ -131,18 +143,9 @@ export default function Readiness() {
             comms: data.comms,
             now: Date.now(),
           })
-        : categories.map(({ category }) => ({
+        : (Object.keys(categoryLabels) as ReadinessCategory[]).map((category) => ({
             category,
-            label:
-              category === "agenda_conflicts"
-                ? "Agenda conflicts"
-                : category === "speaker_confirmations"
-                  ? "Speaker confirmations"
-                  : category === "onboarding_tasks"
-                    ? "Onboarding tasks"
-                    : category === "proposal_decisions"
-                      ? "Proposal decisions"
-                      : "Comms delivery",
+            label: categoryLabels[category],
             items: [],
           })),
     [data],
@@ -154,86 +157,124 @@ export default function Readiness() {
   const days = data.event
     ? agendaEventDays(data.event.startDate, data.event.endDate)
     : [];
+  const rows = useMemo<ReadinessRow[]>(
+    () =>
+      filtered.flatMap((group) =>
+        group.items.map((item) => ({
+          id: `${group.category}:${item.id}`,
+          category: group.label,
+          title: item.title,
+          detail: item.detail,
+          eventDate: item.eventDate,
+          to: item.to,
+        })),
+      ),
+    [filtered],
+  );
+  const columns: DataGridColumn<ReadinessRow>[] = [
+    {
+      key: "category",
+      header: "Area",
+      width: "10rem",
+      cell: (row) => <span className="text-muted-foreground">{row.category}</span>,
+    },
+    {
+      key: "blocker",
+      header: "Needs attention",
+      cell: (row) => <span className="font-medium">{row.title}</span>,
+    },
+    {
+      key: "when",
+      header: "Event day",
+      width: "10rem",
+      cell: (row) => row.eventDate
+        ? new Intl.DateTimeFormat("en-US", {
+            month: "short",
+            day: "numeric",
+            timeZone: data.event?.timezone,
+          }).format(new Date(`${row.eventDate}T12:00:00Z`))
+        : <span className="text-muted-foreground">Any time</span>,
+    },
+    {
+      key: "action",
+      header: "",
+      width: "8rem",
+      align: "right",
+      cell: (row) => (
+        <Button asChild variant="ghost" size="sm">
+          <Link to={row.to}>Open</Link>
+        </Button>
+      ),
+    },
+  ];
+
   return (
     <AppLayout title="Readiness">
-      <div className="space-y-4">
-        <section
-          className="flex flex-wrap gap-2"
-          aria-label="Filter readiness by event day"
-        >
-          <Button
-            id="readiness-day-all"
-            type="button"
-            variant={day === "all" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setDay("all")}
-          >
-            All
-          </Button>
-          {days.map((value) => (
-            <Button
-              key={value}
-              type="button"
-              variant={day === value ? "default" : "outline"}
-              size="sm"
-              onClick={() => setDay(value)}
-            >
-              {new Intl.DateTimeFormat("en-US", {
-                month: "short",
-                day: "numeric",
-                timeZone: data.event?.timezone,
-              }).format(new Date(`${value}T12:00:00Z`))}
+      <div className="space-y-3">
+        <ContentToolbar
+          ariaLabel="Readiness controls"
+          utilities={
+            <div className="flex items-center gap-2">
+              <Label className="sr-only" htmlFor="readiness-day">Event day</Label>
+              <Select value={day} onValueChange={(value) => setDay(value as string | "all")}>
+                <SelectTrigger id="readiness-day" className="h-8 w-44">
+                  <SelectValue placeholder="All event days" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All event days</SelectItem>
+                  {days.map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {new Intl.DateTimeFormat("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        timeZone: data.event?.timezone,
+                      }).format(new Date(`${value}T12:00:00Z`))}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          }
+          primaryAction={
+            <Button type="button" variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
+              <RefreshCw className="h-4 w-4" aria-hidden="true" />
+              {loading ? "Checking…" : "Refresh"}
             </Button>
-          ))}
-        </section>
+          }
+        />
         {loading ? (
           <div
             className="space-y-3"
             aria-busy="true"
             aria-label="Loading readiness"
           >
-            <>
-              {categories.map(({ category }) => (
-                <div
-                  key={category}
-                  className={cardSurfaceClasses("default", "animate-pulse bg-muted/60 p-5")}
-                >
-                  <div className="h-4 w-40 rounded bg-muted" />
-                  <div className="mt-4 h-4 w-3/4 rounded bg-muted" />
-                </div>
-              ))}
-            </>
+            <div className="h-11 animate-pulse rounded-md bg-muted" />
+            <div className="h-11 animate-pulse rounded-md bg-muted" />
+            <div className="h-11 animate-pulse rounded-md bg-muted" />
           </div>
+        ) : rows.length === 0 && Object.keys(data.errors).length === 0 ? (
+          <section className="flex min-h-52 flex-col items-center justify-center text-center">
+            <CheckCircle2 className="h-6 w-6 text-muted-foreground" aria-hidden="true" />
+            <h2 className="mt-3 text-base font-semibold">No readiness blockers</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              The agenda, speakers, tasks, abstracts, and communications are clear.
+            </p>
+          </section>
         ) : (
-          <div className="space-y-3">
-            {filtered.map((group) => {
-              const original = groups.find(
-                (candidate) => candidate.category === group.category,
-              )!;
-              const notDateSpecificCount =
-                day === "all"
-                  ? 0
-                  : original.items.filter(
-                      (item) => item.eventDate === undefined,
-                    ).length;
-              return (
-                <ReadinessCategoryCard
-                  key={group.category}
-                  label={group.label}
-                  icon={
-                    categories.find((item) => item.category === group.category)!
-                      .icon
-                  }
-                  items={group.items}
-                  notDateSpecificCount={notDateSpecificCount}
-                  loadError={data.errors[group.category]}
-                />
-              );
-            })}
-          </div>
+          <>
+            {Object.values(data.errors).map((error) => (
+              <p key={error} role="alert" className="text-sm text-destructive">{error}</p>
+            ))}
+            <DataGrid
+              rows={rows}
+              columns={columns}
+              empty="No blockers match this event day."
+              appearance="embedded"
+              rowActivation="none"
+            />
+          </>
         )}
       </div>
     </AppLayout>
   );
 }
-import { cardSurfaceClasses } from "@/components/ui/card";

@@ -14,12 +14,25 @@ export type EmbedId = Brand<string, "EmbedId">;
 
 export type SubmissionStatus =
   | "draft" | "pending" | "accept_queue" | "accepted"
-  | "decline_queue" | "declined" | "withdrawn";
+  | "maybe" | "decline_queue" | "declined" | "withdrawn";
 
 export type EventStatus = "draft" | "published" | "archived";
 export interface Event { id: EventId; name: string; slug: string; type?: string; websiteUrl?: string; location?: string; timezone: string; startDate: number; endDate: number; description?: string; contactEmail?: string; logoFileId?: string; programPublishedAt?: number; theme?: string; logoStorageKey?: string; backgroundStorageKey?: string; exhibitorsEnabled: boolean; sponsorsEnabled: boolean; defaultOnboardingTemplateId?: string; status: EventStatus; }
 
-export interface ApiKey { id: string; label: string; keyPrefix: string; createdAt: number; lastUsedAt?: number; revokedAt?: number; }
+export type ApiScope = "events:read" | "submissions:read" | "submissions:write" | "speakers:read" | "agenda:read" | "tasks:read";
+export interface ApiKey { id: string; label: string; keyPrefix: string; scopes: ApiScope[]; createdAt: number; lastUsedAt?: number; revokedAt?: number; }
+export interface ApiAuditLogEntry { id: string; tokenLabel: string; method: string; path: string; status: number; scopeUsed: string; createdAt: number; }
+export type ActivityCategory = "agenda" | "api" | "agent" | "comms" | "notification";
+export interface ActivityEntry {
+  id: string;
+  category: ActivityCategory;
+  action: string;
+  title: string;
+  detail?: string;
+  actorLabel?: string;
+  status?: "success" | "warning" | "error" | "info";
+  createdAt: number;
+}
 export interface GeneratedApiKey { id: string; rawKey: string; }
 export interface Room { id: string; eventId: EventId; name: string; capacity?: number; sortOrder: number; }
 export interface Track { id: string; eventId: EventId; name: string; color?: string; sortOrder: number; }
@@ -43,7 +56,7 @@ export type SubmissionRoutingRule = {
   assignTagIds?: TagId[];
   assignTrackId?: string;
   assignSponsorId?: SponsorId;
-  setStatus?: "pending" | "accept_queue" | "accepted";
+  setStatus?: "pending" | "accept_queue" | "accepted" | "maybe";
   reviewerUserIds?: string[];
 };
 export interface SubmissionFormWrite {
@@ -81,7 +94,8 @@ export type SubmissionEditability =
   | { editable: false; reason: SubmissionEditLockReason; closedAt?: number };
 export interface Submission { id: SubmissionId; eventId: EventId; formId: FormId; speakerIds: SpeakerId[]; tagIds: TagId[]; trackId?: string; sponsorId?: SponsorId; status: SubmissionStatus; title?: string; answers?: Record<string, unknown>; updatedAt?: number; lastSpeakerEditAt?: number; speakerEditCount?: number; editability?: SubmissionEditability; }
 export type SpeakerConfirmationStatus = "awaiting" | "confirmed" | "declined";
-export interface Speaker { id: SpeakerId; eventId: EventId; name: string; email?: string; firstName?: string; lastName?: string; bio?: string; salutation?: string; honorific?: string; pronouns?: string; gender?: string; linkedinUrl?: string; xUrl?: string; facebookUrl?: string; websiteUrl?: string; headshotStorageKey?: string; confirmationStatus: SpeakerConfirmationStatus; }
+export interface Speaker { id: SpeakerId; eventId: EventId; name: string; email?: string; firstName?: string; lastName?: string; bio?: string; salutation?: string; honorific?: string; pronouns?: string; gender?: string; linkedinUrl?: string; xUrl?: string; facebookUrl?: string; websiteUrl?: string; headshotStorageKey?: string; confirmationStatus: SpeakerConfirmationStatus; createdAt?: number; updatedAt?: number; }
+export interface SpeakerNote { id: string; eventId: EventId; speakerId: SpeakerId; authorId: string; body: string; createdAt: number; updatedAt: number; }
 export interface SpeakerImportRow { firstName: string; lastName: string; email: string; bio?: string; talkTitle?: string; talkAbstract?: string; }
 export interface SpeakerImportResult { importedSpeakers: number; importedTalks: number; skipped: Array<{ row: number; reason: string }>; }
 export type SpeakerDocumentKind = "slides" | "supporting_doc";
@@ -123,7 +137,7 @@ export interface ReviewerReminderBatch { status: "sent" | "failed" | "skipped"; 
 export interface AgendaItem { id: AgendaItemId; eventId: EventId; title: string; roomId: string; trackId?: string; submissionId?: SubmissionId; speakerIds: SpeakerId[]; startTime: number; endTime: number; videoUrl?: string; locationDetails?: string; calendarUid?: string; calendarSequence?: number; isPublished: boolean; }
 export interface SpeakerAgendaItem extends AgendaItem { roomName: string; trackName?: string; }
 export interface AgendaConflict { itemA: AgendaItemId; itemB: AgendaItemId; reason: "room_overlap" | "speaker_overlap" | "speaker_unavailable" | "track_overlap"; speakerId?: SpeakerId; }
-export interface OnboardingTask { id: TaskId; eventId: EventId; speakerId?: SpeakerId; submissionId?: SubmissionId; sponsorId?: SponsorId; linkedFormId?: FormId; targetType: "contact" | "group" | "submission" | "sponsor"; title: string; source: "manual" | "auto" | "agent"; status: "pending" | "in_progress" | "completed"; dueDate?: number; completedAt?: number; }
+export interface OnboardingTask { id: TaskId; eventId: EventId; speakerId?: SpeakerId; submissionId?: SubmissionId; sponsorId?: SponsorId; linkedFormId?: FormId; targetType: "contact" | "group" | "submission" | "sponsor"; title: string; source: "manual" | "auto" | "agent"; status: "pending" | "in_progress" | "completed"; dueDate?: number; completedAt?: number; createdAt?: number; updatedAt?: number; }
 export type AgentRunStatus = "queued" | "running" | "needs_input" | "needs_approval" | "completed" | "failed" | "cancelled";
 export type AgentProviderMode = "managed" | "bring_your_own";
 export interface AgentRun { id: AgentRunId; eventId: EventId; threadId?: string; requestedByUserId: string; objective: string; status: AgentRunStatus; model: string; providerMode?: AgentProviderMode; idempotencyKey: string; stepCount: number; maxSteps: number; inputTokens?: number; outputTokens?: number; finalSummary?: string; error?: string; startedAt?: number; completedAt?: number; createdAt: number; updatedAt: number; }
@@ -135,6 +149,17 @@ export interface AgentRunDetail { run: AgentRun; events: AgentRunEvent[]; propos
 export type TaskTemplateItem = { title: string; description?: string; targetType: OnboardingTask["targetType"]; linkedFormId?: FormId; dueDateOffsetDays?: number };
 export interface TaskTemplate { id: string; eventId: EventId; name: string; description?: string; items: TaskTemplateItem[]; isSeeded: boolean; }
 export interface Comm { id: string; eventId: EventId; type: string; speakerId?: SpeakerId; status?: "queued" | "sent" | "failed"; sentAt?: number; createdAt?: number; }
+export interface EventAnalyticsSummary {
+  version: 1;
+  generatedAt: number;
+  submissions: { total: number; draft: number; pending: number; inReview: number; accepted: number; declined: number; withdrawn: number; acceptanceRate: number };
+  reviews: { assigned: number; completed: number; completionRate: number };
+  speakers: { total: number; awaiting: number; confirmed: number; declined: number; profileComplete: number };
+  agenda: { total: number; published: number; acceptedSessions: number; scheduledAccepted: number; scheduleRate: number };
+  communications: { total: number; queued: number; sent: number; failed: number };
+  tasks: { total: number; pending: number; inProgress: number; completed: number; overdue: number; completionRate: number };
+  history: { available: false; daily: [] };
+}
 export type CommTemplateKind = "submission_confirmation" | "acceptance" | "rejection" | "consolidated_decision" | "reminder" | "calendar_invite" | "custom";
 export interface CommTemplate { id: string; eventId: EventId; name: string; kind: CommTemplateKind; subject: string; body: string; createdAt: number; updatedAt: number; }
 export interface CommTemplateWrite { id?: string; eventId: EventId; name: string; kind: CommTemplateKind; subject: string; body: string; }
@@ -142,7 +167,9 @@ export interface CommPreview { kind: "acceptance" | "rejection" | "consolidated_
 export interface CommSendRecipientResult { speakerId?: string; toEmail?: string; status: "sent" | "failed" | "skipped"; error?: string; reason?: string; }
 export interface CommSendResult { status: "sent" | "failed" | "skipped"; requested: number; sent: number; failed: number; skipped: number; results: CommSendRecipientResult[]; }
 // Role lives on this row, never in an env var or hardcoded list — see convex/organizers.ts.
-export interface Organizer { id: string; userId: string; email: string; role: "owner" | "admin"; onboardingCompletedAt?: number; createdAt: number; }
+export interface Organizer { id: string; organizationId?: string; userId: string; email: string; role: "owner" | "admin"; onboardingCompletedAt?: number; createdAt: number; }
+/** The tenant boundary. Every event and every Organizer row belongs to exactly one. */
+export interface Organization { id: string; name: string; createdByUserId: string; createdAt: number; }
 // Onboarding-captured personalization for any signed-in user — see schema.ts's `userProfiles`
 // comment for why this is separate from Organizer.
 export interface UserProfile { id: string; userId: string; displayName?: string; signupRole?: "solo" | "team"; referralSource?: string; updatedAt: number; }
@@ -184,8 +211,75 @@ export interface EmailIntegration {
 }
 export interface EmailIntegrationCredentials { apiKey?: string; accessKeyId?: string; secretAccessKey?: string; username?: string; password?: string; }
 export interface EmailIntegrationSaveInput { eventId: EventId; authMethod: EmailAuthMethod; sender: string; region?: string; credentials: EmailIntegrationCredentials; }
+
+export type ContentIntegrationProvider = "notion" | "airtable" | "sanity";
+export type ContentIntegrationTarget = "speakers" | "submissions";
+export type ContentIntegrationStoredTarget = ContentIntegrationTarget | "public_program";
+/** Never carries the credential itself — only a masked hint of what is stored. */
+export interface ContentIntegration {
+  id: string;
+  eventId: EventId;
+  provider: ContentIntegrationProvider;
+  target: ContentIntegrationStoredTarget;
+  config?: {
+    notionDatabaseId?: string;
+    airtableBaseId?: string;
+    airtableTableName?: string;
+    sanityProjectId?: string;
+    sanityDataset?: string;
+  };
+  credentialHint: string;
+  status: "connected" | "error";
+  lastError?: string;
+  lastSyncedAt?: number;
+  updatedAt: number;
+}
+export interface NotionConnectInput {
+  eventId: EventId;
+  notionToken: string;
+  notionDatabaseId: string;
+  target: ContentIntegrationTarget;
+}
+export interface AirtableConnectInput {
+  eventId: EventId;
+  personalAccessToken: string;
+  baseId: string;
+  tableName: string;
+  target: ContentIntegrationTarget;
+}
+export interface SanityConnectInput {
+  eventId: EventId;
+  projectId: string;
+  dataset: string;
+  apiToken: string;
+}
+export interface SanityPublishResult {
+  published: number;
+  failed: number;
+  hasMore: boolean;
+  failures: Array<{ name: string; reason: string }>;
+}
+export interface ContentImportResult {
+  created: number;
+  updated: number;
+  skipped: number;
+  hasMore: boolean;
+}
+export type NotionImportResult = ContentImportResult;
+export type AirtableImportResult = ContentImportResult;
 /** Organizer-safe projection. The API key itself is never returned. */
-export interface AgentProviderSetting { eventId: EventId; mode: AgentProviderMode; provider: "openai"; credentialHint?: string; status: "ready" | "error"; lastError?: string; managedAvailable: boolean; updatedAt: number; }
+export interface AgentProviderSetting {
+  eventId: EventId;
+  mode: AgentProviderMode;
+  provider: "openai";
+  credentialHint?: string;
+  status: "ready" | "error";
+  lastError?: string;
+  managedAvailable: boolean;
+  billingOwnerAssigned: boolean;
+  managedUsage?: { periodStart: number; planSlug: string; runLimit: number; tokenLimit: number; usedRuns: number; usedTokens: number; reservedRuns: number; reservedTokens: number };
+  updatedAt: number;
+}
 export type AvailabilitySlot = {
   date: number;
   /** Exact event-local hour for new records. */
@@ -210,11 +304,13 @@ export interface PublicEmbedSession { key: string; title: string; startTime?: nu
 export interface PublicEmbedView { name: string; view: EmbedView; theme: EmbedTheme; primaryColor: string; dateFormat: EmbedDateFormat; timeFormat: EmbedTimeFormat; event: { name: string; timezone: string }; tracks: Array<{ key: string; name: string }>; sessions: PublicEmbedSession[]; speakers: Array<{ key: string; name: string; headshotUrl?: string; bio?: string; links?: PublicEmbedSpeakerLink[]; sessions?: Array<{ title: string; startTime?: number; roomName?: string }> }>; }
 
 // These are deliberately projection-only types for unauthenticated embeds. They contain no
-// record ids, email addresses, internal statuses, or draft data.
-export interface PublicEmbedAgendaItem { title: string; startTime: number; endTime: number; roomName: string; trackName?: string; speakerNames: string[]; }
+// database record ids, email addresses, internal statuses, or draft data. `sessionKey` is an
+// opaque public keys derived server-side solely for shareable attendee URLs and DOM anchors.
+export interface PublicEmbedAgendaSpeaker { speakerKey: string; name: string; }
+export interface PublicEmbedAgendaItem { sessionKey: string; title: string; description?: string; startTime: number; endTime: number; roomName: string; trackName?: string; locationDetails?: string; speakers: PublicEmbedAgendaSpeaker[]; }
 export interface PublicEmbedSpeakerLink { label: "LinkedIn" | "X" | "Facebook" | "Website"; url: string; }
-export interface PublicEmbedSpeaker { name: string; bio?: string; headshotUrl?: string; links: PublicEmbedSpeakerLink[]; }
-export interface PublicEmbed { eventName: string; eventTimezone: string; agenda: PublicEmbedAgendaItem[]; speakers: PublicEmbedSpeaker[]; }
+export interface PublicEmbedSpeaker { speakerKey: string; name: string; bio?: string; headshotUrl?: string; links: PublicEmbedSpeakerLink[]; }
+export interface PublicEmbed { eventName: string; eventTimezone: string; eventStartDate: number; eventEndDate: number; eventLocation?: string; eventDescription?: string; eventWebsiteUrl?: string; eventLogoUrl?: string; lastUpdatedAt: number; roomNames: string[]; trackNames: string[]; agenda: PublicEmbedAgendaItem[]; speakers: PublicEmbedSpeaker[]; }
 
 // Public CFP configuration uses opaque, per-response field keys instead of database ids.
 // This is the complete unauthenticated read model for a form; organizer notification and

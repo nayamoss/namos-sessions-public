@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { CalendarPlus, Download } from "lucide-react";
+import { CalendarDays, CalendarPlus, Download } from "lucide-react";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { SkeletonList } from "@/components/shared/SkeletonList";
 import { Button } from "@/components/ui/button";
 import { useRepo } from "@/data/repo";
@@ -111,9 +112,8 @@ export function PortalSchedule() {
       ) : loading ? (
         <SkeletonList rows={3} label="Loading your schedule…" />
       ) : items.length === 0 ? (
-        <section className={cardSurfaceClasses("default", "bg-muted p-8 text-center")}>
-          <p className="font-medium">No published sessions yet</p>
-          <p className="mt-1 text-sm text-muted-foreground">Your confirmed schedule will appear here after the organizer publishes it.</p>
+        <section className={cardSurfaceClasses("default")}>
+          <EmptyState icon={CalendarDays} title="Your schedule has not been published yet" message="Confirmed sessions will appear here as soon as the organizer publishes the event schedule." />
         </section>
       ) : (
         <section className="grid gap-4 md:grid-cols-2" aria-label="Published sessions">

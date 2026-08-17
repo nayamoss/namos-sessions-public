@@ -19,11 +19,31 @@ function escapeAttribute(value: string) { return value.replaceAll("&", "&amp;").
 export function iframeSnippet(origin: string, embedId: EmbedId, view: EmbedView) { const src = escapeAttribute(publicEmbedUrl(origin, embedId)); const title = escapeAttribute(`${embedViewLabels[view]} embed — Namos Sessions`); return `<iframe src="${src}" title="${title}" loading="lazy" width="100%" height="${iframeHeight(view)}" style="border:0;width:100%;" referrerpolicy="strict-origin-when-cross-origin"></iframe>`; }
 
 /** Legacy public feeds remain live while saved embeds migrate customers to opaque IDs. */
-export const embedFeeds = ["agenda", "sessions", "itinerary", "speakers"] as const;
+export const embedFeeds = ["agenda", "sessions", "itinerary", "speakers", "gallery"] as const;
 export type EmbedFeed = (typeof embedFeeds)[number];
 export function isEmbedFeed(value: string | undefined): value is EmbedFeed { return embedFeeds.includes(value as EmbedFeed); }
-export const embedFeedTitles: Record<EmbedFeed, string> = { agenda: "Agenda", sessions: "Sessions", itinerary: "Schedule itinerary", speakers: "Speakers" };
-export const embedFeedEmptyCopy: Record<EmbedFeed, string> = { agenda: "The agenda has not been published yet.", sessions: "The session catalog has not been published yet.", itinerary: "The itinerary will appear once the schedule is published.", speakers: "Speakers will appear once accepted." };
+export const embedFeedTitles: Record<EmbedFeed, string> = { agenda: "Agenda", sessions: "Sessions", itinerary: "Schedule itinerary", speakers: "Speakers", gallery: "Speaker gallery" };
+export const embedFeedEmptyCopy: Record<EmbedFeed, string> = { agenda: "The agenda has not been published yet.", sessions: "The session catalog has not been published yet.", itinerary: "The itinerary will appear once the schedule is published.", speakers: "Speakers will appear once accepted.", gallery: "Speakers will appear once accepted." };
+
+/** Deterministic initials + a stable accent tone per person, drawn from existing design tokens. */
+export function initialsFor(name: string) {
+  const parts = name.split(/\s+/).filter(Boolean);
+  return (parts.length > 1 ? [parts[0], parts[parts.length - 1]] : parts).map(part => part[0]?.toUpperCase() ?? "").join("") || "?";
+}
+
+const avatarTones = [
+  "bg-accent text-accent-foreground",
+  "bg-success/15 text-success",
+  "bg-warning/15 text-warning",
+  "bg-info/15 text-info",
+  "bg-primary/10 text-primary",
+] as const;
+
+export function avatarToneFor(name: string) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  return avatarTones[hash % avatarTones.length];
+}
 const uncategorized = "Uncategorized";
 function groupByDay(embed: PublicEmbed) { const formatter = new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric", timeZone: embed.eventTimezone }); const days = new Map<string, PublicEmbedAgendaItem[]>(); for (const item of embed.agenda) { const label = formatter.format(item.startTime); days.set(label, [...(days.get(label) ?? []), item]); } return [...days.entries()].map(([label, items]) => ({ label, items })); }
 export function agendaDayTrackGroups(embed: PublicEmbed) { return groupByDay(embed).map(day => { const tracks = new Map<string, PublicEmbedAgendaItem[]>(); for (const item of day.items) { const track = item.trackName ?? uncategorized; tracks.set(track, [...(tracks.get(track) ?? []), item]); } return { label: day.label, tracks: [...tracks.entries()].map(([track, items]) => ({ track, items })) }; }); }

@@ -1,6 +1,8 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 import {
   BrowserRouter,
+  Link,
   Navigate,
   Outlet,
   Route,
@@ -24,6 +26,8 @@ import { AuthSplitLayout } from "@/pages/public/AuthSplitLayout";
 import { RepoProvider } from "@/data/provider";
 import { useRepo } from "@/data/repo";
 import { resolveOnboardingStatus } from "@/lib/onboarding-status";
+import { AnalyticsRuntime } from "@/components/AnalyticsConsent";
+import { track } from "@/lib/analytics";
 const EventDetails = lazy(() => import("@/pages/settings/EventDetails"));
 const Library = lazy(() => import("@/pages/settings/Library"));
 const Integrations = lazy(() => import("@/pages/settings/Integrations"));
@@ -47,9 +51,11 @@ const CommTemplateEditor = lazy(
 const Speakers = lazy(() => import("@/pages/program/Speakers"));
 const Sponsors = lazy(() => import("@/pages/program/Sponsors"));
 const DashboardHome = lazy(() => import("@/pages/dashboard/DashboardHome"));
+const EventAnalytics = lazy(() => import("@/pages/dashboard/EventAnalytics"));
 const SubmissionPage = lazy(() => import("@/pages/public/SubmissionPage"));
 const PortalHome = lazy(() => import("@/pages/portal/PortalHome"));
 const EmbedPage = lazy(() => import("@/pages/public/EmbedPage"));
+const AttendeeSite = lazy(() => import("@/pages/public/AttendeeSite"));
 const PublicEmbedPage = lazy(() => import("@/pages/public/PublicEmbedPage"));
 const EmbedsListPage = lazy(() => import("@/pages/cms/EmbedsListPage"));
 const EmbedEditorPage = lazy(() => import("@/pages/cms/EmbedEditorPage"));
@@ -57,6 +63,7 @@ const OnboardingWizard = lazy(
   () => import("@/pages/onboarding/OnboardingWizard"),
 );
 const ApiKeys = lazy(() => import("@/pages/settings/ApiKeys"));
+const ActivityLog = lazy(() => import("@/pages/settings/ActivityLog"));
 const ApiDocs = lazy(() => import("@/pages/public/ApiDocs"));
 const EventsLanding = lazy(() => import("@/pages/events/EventsLanding"));
 const OrganizationSettings = lazy(
@@ -109,27 +116,87 @@ function RequireAuth() {
 function RequireOnboarding() {
   const repo = useRepo();
   const location = useLocation();
-  const [status, setStatus] = useState<"loading" | "incomplete" | "complete">(
-    "loading",
-  );
+  const [status, setStatus] = useState<
+    "loading" | "incomplete" | "complete" | "unavailable"
+  >("loading");
+  const check = useCallback(() => {
+    setStatus("loading");
+    return Promise.all([repo.organizers.getMine(), repo.events.listMine()])
+      .then(([organizer, events]) =>
+        resolveOnboardingStatus(organizer, events.length),
+      )
+      .catch((cause) => {
+        // A failed lookup means we could not reach the backend or the session was
+        // rejected — it says nothing about whether this person has onboarded.
+        // Treating it as "incomplete" used to redirect fully signed-in organizers
+        // and speakers into the setup wizard, where the same failure resurfaced as
+        // an auth error. Surface the failure instead of guessing (see #223).
+        console.error(cause);
+        return "unavailable" as const;
+      });
+  }, [repo]);
   useEffect(() => {
     let cancelled = false;
-    void Promise.all([repo.organizers.getMine(), repo.events.listMine()])
-      .then(([organizer, events]) => {
-        if (!cancelled)
-          setStatus(resolveOnboardingStatus(organizer, events.length));
-      })
-      .catch(() => {
-        if (!cancelled) setStatus("incomplete");
-      });
+    void check().then((next) => {
+      if (!cancelled) setStatus(next);
+    });
     return () => {
       cancelled = true;
     };
-  }, [location.pathname, repo]);
+  }, [check, location.pathname]);
   if (status === "loading")
     return <p className="p-6 text-sm text-muted-foreground">Loading…</p>;
+  if (status === "unavailable")
+    return (
+      <div className="space-y-3 p-6">
+        <p className="text-sm font-medium">We couldn&apos;t load your workspace.</p>
+        <p className="text-sm text-muted-foreground">
+          You are still signed in. This is a connection problem, not a problem with
+          your account.
+        </p>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={() => {
+            void check().then(setStatus);
+          }}
+        >
+          Try again
+        </Button>
+      </div>
+    );
   if (status === "incomplete") return <Navigate to="/onboarding" replace />;
   return <Outlet />;
+}
+
+// A signed-out visitor hitting any gated route lands on /sign-in, where Clerk's only route to
+// creating an account is a small grey line inside the card. Organizers arriving from the
+// marketing site read that as "there is no way in" and leave, so each auth screen carries an
+// explicit, full-width link to the other one. `redirect_url` is carried across so a visitor who
+// was bounced here from a deep link still lands there after signing up.
+function AuthAltAction({
+  to,
+  prompt,
+  action,
+}: {
+  to: string;
+  prompt: string;
+  action: string;
+}) {
+  const { search } = useLocation();
+  return (
+    <p className="mt-6 text-center text-sm text-[#4A5568]">
+      {prompt}{" "}
+      <Link
+        to={`${to}${search}`}
+        onClick={() => track("cta_converted", { destination: to === "/sign-up" ? "sign_up" : "sign_in" })}
+        className="font-semibold text-[#0066FF] underline-offset-4 hover:underline"
+      >
+        {action}
+      </Link>
+    </p>
+  );
 }
 
 function LegacySpeakersRedirect() {
@@ -172,6 +239,7 @@ export default function App() {
         <Toaster />
         <Sonner />
         <BrowserRouter>
+          <AnalyticsRuntime />
           <Suspense
             fallback={
               <p className="p-6 text-sm text-muted-foreground">Loading…</p>
@@ -186,6 +254,14 @@ export default function App() {
                       routing="path"
                       path="/sign-in"
                       signUpUrl="/sign-up"
+                      // Clerk's own footer prompt is suppressed in favour of the larger
+                      // AuthAltAction below; showing both put the same link on screen twice.
+                      appearance={{ elements: { footerAction: { display: "none" } } }}
+                    />
+                    <AuthAltAction
+                      to="/sign-up"
+                      prompt="New to Namos Sessions?"
+                      action="Create an organizer account"
                     />
                   </AuthSplitLayout>
                 }
@@ -198,6 +274,12 @@ export default function App() {
                       routing="path"
                       path="/sign-up"
                       signInUrl="/sign-in"
+                      appearance={{ elements: { footerAction: { display: "none" } } }}
+                    />
+                    <AuthAltAction
+                      to="/sign-in"
+                      prompt="Already have an account?"
+                      action="Sign in"
                     />
                   </AuthSplitLayout>
                 }
@@ -300,6 +382,10 @@ export default function App() {
                     element={<Navigate to="/events" replace />}
                   />
                   <Route
+                    path="/settings/activity"
+                    element={<Navigate to="/events" replace />}
+                  />
+                  <Route
                     path="/events/:eventSlug"
                     element={
                       <EventProvider>
@@ -308,6 +394,7 @@ export default function App() {
                     }
                   >
                     <Route path="dashboard" element={<DashboardHome />} />
+                    <Route path="analytics" element={<EventAnalytics />} />
                     <Route path="program/forms" element={<SubmissionForms />} />
                     <Route
                       path="program/forms/:id/edit"
@@ -356,6 +443,7 @@ export default function App() {
                       }
                     />
                     <Route path="settings/api" element={<ApiKeys />} />
+                    <Route path="settings/activity" element={<ActivityLog />} />
                     <Route path="settings/components" element={<ComponentShowcase />} />
                     <Route path="cms/embeds" element={<EmbedsListPage />} />
                     <Route path="cms/embeds/new" element={<EmbedEditorPage />} />
@@ -363,6 +451,16 @@ export default function App() {
                   </Route>
                 </Route>
               </Route>
+              <Route
+                path="/e/:eventSlug"
+                element={
+                  <Suspense
+                    fallback={<PublicLoading>Loading event…</PublicLoading>}
+                  >
+                    <AttendeeSite />
+                  </Suspense>
+                }
+              />
               <Route
                 path="/e/:eventSlug/:feed"
                 element={

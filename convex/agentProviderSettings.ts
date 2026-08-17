@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { assertEventOrganizerAccess } from "./functions";
 
 const mode = v.union(v.literal("managed"), v.literal("bring_your_own"));
@@ -9,15 +9,46 @@ export const status = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
     await assertEventOrganizerAccess(ctx, args.eventId);
+    const event = await ctx.db.get(args.eventId);
+    if (!event) throw new Error("Event not found.");
     const stored = await ctx.db.query("agent_provider_settings").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).unique();
-    if (!stored) return { eventId: args.eventId, mode: "managed" as const, provider: "openai" as const, status: process.env.OPENAI_API_KEY ? "ready" as const : "error" as const, managedAvailable: Boolean(process.env.OPENAI_API_KEY), updatedAt: 0 };
-    return { eventId: stored.eventId, mode: stored.mode, provider: stored.provider, credentialHint: stored.credentialHint, status: stored.mode === "managed" && !process.env.OPENAI_API_KEY ? "error" as const : stored.status, lastError: stored.lastError, managedAvailable: Boolean(process.env.OPENAI_API_KEY), updatedAt: stored.updatedAt };
+    const periodStart = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1);
+    const usage = event.billingOwnerUserId
+      ? await ctx.db.query("agent_managed_allowances").withIndex("by_owner_period", (q) => q.eq("billingOwnerUserId", event.billingOwnerUserId!).eq("periodStart", periodStart)).unique()
+      : null;
+    const shared = { billingOwnerAssigned: Boolean(event.billingOwnerUserId), managedUsage: usage ? { periodStart: usage.periodStart, planSlug: usage.planSlug, runLimit: usage.runLimit, tokenLimit: usage.tokenLimit, usedRuns: usage.usedRuns, usedTokens: usage.usedTokens, reservedRuns: usage.reservedRuns, reservedTokens: usage.reservedTokens } : undefined };
+    if (!stored) return { eventId: args.eventId, mode: "managed" as const, provider: "openai" as const, status: process.env.OPENAI_API_KEY ? "ready" as const : "error" as const, managedAvailable: Boolean(process.env.OPENAI_API_KEY), updatedAt: 0, ...shared };
+    return { eventId: stored.eventId, mode: stored.mode, provider: stored.provider, credentialHint: stored.credentialHint, status: stored.mode === "managed" && !process.env.OPENAI_API_KEY ? "error" as const : stored.status, lastError: stored.lastError, managedAvailable: Boolean(process.env.OPENAI_API_KEY), updatedAt: stored.updatedAt, ...shared };
+  },
+});
+
+// Legacy events predate immutable billing ownership. An installation owner can set it once;
+// it is intentionally never transferable through the product UI.
+export const assignBillingOwner = mutation({
+  args: { eventId: v.id("events") },
+  handler: async (ctx, args) => {
+    const identity = await assertEventOrganizerAccess(ctx, args.eventId);
+    const organizer = await ctx.db.query("organizers").withIndex("by_userId", (q) => q.eq("userId", identity.subject)).unique();
+    if (organizer?.role !== "owner") throw new Error("Only a Namos owner can assign a billing owner for an existing event.");
+    const event = await ctx.db.get(args.eventId);
+    if (!event) throw new Error("Event not found.");
+    if (event.billingOwnerUserId) return { billingOwnerAssigned: true };
+    await ctx.db.patch(event._id, { billingOwnerUserId: identity.subject, updatedAt: Date.now() });
+    return { billingOwnerAssigned: true };
   },
 });
 
 export const getInternal = internalQuery({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => ctx.db.query("agent_provider_settings").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).unique(),
+});
+
+export const eventForBilling = internalQuery({
+  args: { eventId: v.id("events") },
+  handler: async (ctx, args) => {
+    const event = await ctx.db.get(args.eventId);
+    return event ? { billingOwnerUserId: event.billingOwnerUserId } : null;
+  },
 });
 
 export const upsertInternal = internalMutation({
@@ -37,6 +68,14 @@ export const recordUsage = internalMutation({
     const run = await ctx.db.get(args.runId);
     if (!run) throw new Error("Agent run no longer exists.");
     const providerMode = run.providerMode ?? "managed";
-    return ctx.db.insert("agent_usage_records", { eventId: run.eventId, runId: run._id, providerMode, provider: "openai", model: run.model, inputTokens: Math.max(0, Math.floor(args.inputTokens)), outputTokens: Math.max(0, Math.floor(args.outputTokens)), billable: providerMode === "managed", createdAt: Date.now() });
+    const inputTokens = Math.max(0, Math.floor(args.inputTokens));
+    const outputTokens = Math.max(0, Math.floor(args.outputTokens));
+    const existing = await ctx.db.query("agent_usage_records").withIndex("by_run", (q) => q.eq("runId", run._id)).first();
+    if (existing) {
+      await ctx.db.patch(existing._id, { inputTokens: existing.inputTokens + inputTokens, outputTokens: existing.outputTokens + outputTokens });
+      return { inputTokens: existing.inputTokens + inputTokens, outputTokens: existing.outputTokens + outputTokens };
+    }
+    await ctx.db.insert("agent_usage_records", { eventId: run.eventId, runId: run._id, providerMode, provider: "openai", model: run.model, inputTokens, outputTokens, billable: providerMode === "managed", createdAt: Date.now() });
+    return { inputTokens, outputTokens };
   },
 });

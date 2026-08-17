@@ -68,7 +68,7 @@ describe("speaker operations projection", () => {
 
   it("derives summary and every supported view from the same rows", () => {
     const rows = projectSpeakerOperationsRows({ speakers, submissions, tasks, comms, now });
-    expect(summarizeSpeakerOperations(rows)).toEqual({ accepted: 2, needsAttention: 2, overdue: 1, confirmed: 1 });
+    expect(summarizeSpeakerOperations(rows)).toEqual({ accepted: 2, needsAttention: 2, overdue: 1, confirmed: 1, profileIncomplete: 1 });
     expect(filterSpeakerOperationsRows(rows, "grace", "all").map((row) => row.id)).toEqual([graceId]);
     expect(filterSpeakerOperationsRows(rows, "", "overdue").map((row) => row.id)).toEqual([adaId]);
     expect(filterSpeakerOperationsRows(rows, "", "awaiting").map((row) => row.id)).toEqual([adaId]);

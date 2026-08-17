@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Plus, RotateCw, Trash2, UserRound } from "lucide-react";
+import { RotateCw, Trash2, UserRound } from "lucide-react";
 import { useUser } from "@clerk/clerk-react";
 import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
@@ -111,7 +111,7 @@ function InviteEventMember({
   return (
     <DetailPane title="Invite a teammate" onClose={onClose}>
       <div className="space-y-5">
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="mt-1 text-base text-muted-foreground">
           Access applies only to {event.name}.
         </p>
       </div>
@@ -193,7 +193,7 @@ function InviteEventMember({
             </Select>
           </FormField>
           {sourceEventId && (
-            <div className={cardSurfaceClasses("default", "max-h-64 divide-y divide-muted overflow-y-auto bg-muted/40")}>
+            <div className={cardSurfaceClasses("default", "max-h-64 space-y-1 overflow-y-auto bg-muted/40 p-1")}>
               {sourceMembers.length ? (
                 sourceMembers.map((member) => (
                   <label
@@ -219,7 +219,7 @@ function InviteEventMember({
                   </label>
                 ))
               ) : (
-                <p className="px-3 py-4 text-sm text-muted-foreground">
+                <p className="px-3 py-4 text-base text-muted-foreground">
                   That event has no event-specific members.
                 </p>
               )}
@@ -359,15 +359,11 @@ export default function EventTeam() {
           search={
             <div>
               <h2 className="text-base font-semibold">{event.name}</h2>
-              <p className="text-sm text-muted-foreground">
-                Event-scoped organizers and reviewers · {members.length} of {EVENT_TEAM_MEMBER_LIMIT} seats used.
-              </p>
             </div>
           }
           primaryAction={
             canManage ? (
               <Button onClick={() => setInviting(true)} disabled={seatsRemaining === 0}>
-                <Plus className="mr-2 h-4 w-4" />
                 {seatsRemaining === 0 ? "Team full" : "Invite teammate"}
               </Button>
             ) : undefined
@@ -391,13 +387,12 @@ export default function EventTeam() {
         ) : members.length ? (
           <SectionCard
             title="Team members"
-            description="Pending invitations can be resent or revoked here. Accepted members can be removed from this event."
-            contentClassName="divide-y divide-muted"
+            contentClassName="space-y-2"
           >
             {members.map((member) => (
               <div
                 key={member.id}
-                className="flex items-center gap-4 px-4 py-3"
+                className={cardSurfaceClasses("default", "flex items-center gap-4 bg-muted/40 px-4 py-3")}
               >
                 <div className="flex h-9 w-9 items-center justify-center rounded-md bg-background">
                   <UserRound className="h-4 w-4 text-muted-foreground" />
@@ -445,7 +440,7 @@ export default function EventTeam() {
             ))}
           </SectionCard>
         ) : (
-          <EmptyState message="No event-specific members yet. Organization owners and admins still have access." />
+          <EmptyState icon={UserRound} title="Invite your event team" message="Add organizers and reviewers for this event. Organization owners and admins already have access." action={canManage && seatsRemaining > 0 ? <Button onClick={() => setInviting(true)}>Invite teammate</Button> : undefined} />
         )}
       </div>
       <AlertDialog

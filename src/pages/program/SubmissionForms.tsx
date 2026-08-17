@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { FilePlus2 } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { TemplateGallery } from "@/components/forms/TemplateGallery";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
+import { DataGrid, type DataGridColumn } from "@/components/shared/DataGrid";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { SkeletonList } from "@/components/shared/SkeletonList";
-import { StatusTabs } from "@/components/shared/StatusTabs";
+import { FilterMenu } from "@/components/shared/StatusTabs";
 import { useRepo } from "@/data/repo";
 import type { EventId, Submission, SubmissionForm } from "@/data/types";
 
@@ -47,7 +50,10 @@ export default function SubmissionForms() {
   const [status, setStatus] = useState<FormStatus>("all");
   const [forms, setForms] = useState<FormRow[]>([]);
   const [eventId, setEventId] = useState<EventId>();
-  const [showGallery, setShowGallery] = useState(false);
+  // ?new=true lands here from the command palette's "Create a CFP" action, so
+  // the deep link opens the template gallery instead of just the list.
+  const [params, setParams] = useSearchParams();
+  const [showGallery, setShowGallery] = useState(() => params.get("new") === "true");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string>();
 
@@ -84,6 +90,17 @@ export default function SubmissionForms() {
     void loadForms();
   }, [loadForms]);
 
+  // Navigating to ?new=true while already on this page must open the gallery
+  // too — the initial state only runs on mount.
+  useEffect(() => {
+    if (params.get("new") === "true") setShowGallery(true);
+  }, [params]);
+
+  const closeGallery = useCallback(() => {
+    setShowGallery(false);
+    if (params.get("new")) setParams({}, { replace: true });
+  }, [params, setParams]);
+
   const visible = useMemo(
     () =>
       status === "all" ? forms : forms.filter((form) => form.status === status),
@@ -91,6 +108,18 @@ export default function SubmissionForms() {
   );
   const openCount = forms.filter((form) => form.isOpen).length;
   const closedCount = forms.length - openCount;
+  const columns: DataGridColumn<FormRow>[] = [
+    {
+      key: "name",
+      header: "Call for papers",
+      cell: (form) => <span className="font-medium">{form.name}</span>,
+    },
+    {
+      key: "status",
+      header: "Status",
+      cell: (form) => <span className="capitalize">{form.status}</span>,
+    },
+  ];
 
   const selectTemplate = async (templateId: string) => {
     if (!eventId)
@@ -101,18 +130,18 @@ export default function SubmissionForms() {
 
   if (showGallery)
     return (
-      <AppLayout title="Submission Forms">
+      <AppLayout title="Calls for papers">
         <TemplateGallery
           appliesTo="cfp"
           onSelect={selectTemplate}
           onBlank={() => navigate(`/events/${activeEvent.slug}/program/forms/new/edit`)}
-          onCancel={() => setShowGallery(false)}
+          onCancel={closeGallery}
         />
       </AppLayout>
     );
 
   return (
-    <AppLayout title="Submission Forms">
+    <AppLayout title="Calls for papers">
       <div className="space-y-3">
         {loadError && (
           <p role="alert" className="text-sm text-destructive">
@@ -122,7 +151,7 @@ export default function SubmissionForms() {
         <ContentToolbar
           ariaLabel="Submission form controls"
           utilities={
-            <StatusTabs
+            <FilterMenu
               ariaLabel="Submission form statuses"
               value={status}
               onValueChange={(value) => setStatus(value as FormStatus)}
@@ -140,38 +169,43 @@ export default function SubmissionForms() {
               size="sm"
               onClick={() => setShowGallery(true)}
             >
-              + Add
+              Create a CFP
             </Button>
           }
         />
         {loading ? (
           <SkeletonList rows={4} label="Loading submission forms…" />
-        ) : visible.length ? (
-          <div className="grid gap-4 md:grid-cols-2">
-            {visible.map((form) => (
-              <Link
-                key={form.id}
-                to={`/events/${activeEvent.slug}/program/forms/${form.id}/edit`}
-                className={cardSurfaceClasses("default", "p-6")}
-              >
-                <p className="text-base font-semibold">{form.name}</p>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  {form.status === "open" ? "Open" : "Closed"} ·{" "}
-                  {form.submissions} submissions · {form.drafts} drafts
-                </p>
-              </Link>
-            ))}
-          </div>
         ) : (
-          <div className={cardSurfaceClasses("default", "p-8 text-center")}>
-            <p className="font-medium">No submission forms in this view</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Create a form to start collecting proposals for this event.
-            </p>
-          </div>
+          <DataGrid
+            rows={visible}
+            columns={columns}
+            ariaLabel="Calls for papers"
+            getRowLabel={(form) => form.name}
+            onRowActivated={(form) =>
+              navigate(`/events/${activeEvent.slug}/program/forms/${form.id}/edit`)
+            }
+            empty={
+              <EmptyState
+                compact
+                icon={FilePlus2}
+                title={forms.length ? "No calls match this view" : "Create your first call for papers"}
+                message={forms.length ? "Choose another status." : "Add a form when you are ready to collect proposals."}
+                action={
+                  forms.length ? (
+                    <Button variant="outline" size="sm" onClick={() => setStatus("all")}>
+                      Show all
+                    </Button>
+                  ) : (
+                    <Button variant="accent" size="sm" onClick={() => setShowGallery(true)}>
+                      Add call
+                    </Button>
+                  )
+                }
+              />
+            }
+          />
         )}
       </div>
     </AppLayout>
   );
 }
-import { cardSurfaceClasses } from "@/components/ui/card";

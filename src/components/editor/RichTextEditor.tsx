@@ -13,6 +13,8 @@ interface RichTextEditorProps {
   onChange: (value: string) => void;
   placeholder?: string;
   disabled?: boolean;
+  ariaLabel?: string;
+  ariaLabelledBy?: string;
 }
 
 export function RichTextEditor({
@@ -20,6 +22,8 @@ export function RichTextEditor({
   onChange,
   placeholder = "Write policy content...",
   disabled = false,
+  ariaLabel,
+  ariaLabelledBy,
 }: RichTextEditorProps) {
   // An inline link row, not window.prompt: a native dialog blocks the whole page
   // and hangs any automated walkthrough of the speaker profile.
@@ -41,6 +45,8 @@ export function RichTextEditor({
     editorProps: {
       attributes: {
         class: "tiptap",
+        ...(ariaLabel ? { "aria-label": ariaLabel } : {}),
+        ...(ariaLabelledBy ? { "aria-labelledby": ariaLabelledBy } : {}),
       },
     },
     onUpdate: ({ editor: current }) => onChange(current.getHTML()),

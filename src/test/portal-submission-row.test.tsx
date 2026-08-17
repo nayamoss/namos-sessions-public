@@ -20,6 +20,12 @@ describe("portal submission row", () => {
     expect(screen.queryByRole("link", { name: /Edit Reliable agents/ })).not.toBeInTheDocument();
   });
 
+  it("never exposes the internal maybe status to speakers", () => {
+    render(<MemoryRouter><PortalSubmissionRow submission={submission("maybe")} timezone="America/New_York" /></MemoryRouter>);
+    expect(screen.getByText("Under review")).toBeInTheDocument();
+    expect(screen.queryByText(/maybe/i)).not.toBeInTheDocument();
+  });
+
   it("renders the backend close-date verdict instead of an edit link", () => {
     const closed = { ...submission("pending"), editability: { editable: false as const, reason: "submissions_closed" as const, closedAt: Date.UTC(2026, 7, 1) } };
     render(<MemoryRouter><PortalSubmissionRow submission={closed} timezone="America/New_York" /></MemoryRouter>);

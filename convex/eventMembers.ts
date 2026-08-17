@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import { assertEventAccess, assertEventOrganizerAccess, getEventMembership, isOrganizer, requireIdentity } from "./functions";
+import { assertEventAccess, assertEventOrganizerAccess, getEventMembership, isEventOrganizer, isOrganizerOf, requireIdentity } from "./functions";
+import { eventOrganizers, notifyEvent } from "./notifications";
 import {
   EVENT_TEAM_MEMBER_LIMIT,
   isEventTeamEmail,
@@ -19,7 +20,8 @@ export const hasAccess = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
     const identity = await requireIdentity(ctx);
-    if (await isOrganizer(ctx, identity)) return true;
+    const event = await ctx.db.get(args.eventId);
+    if (event && (await isOrganizerOf(ctx, identity, event.organizationId))) return true;
     return Boolean(await getEventMembership(ctx, args.eventId, identity));
   },
 });
@@ -28,8 +30,7 @@ export const hasOrganizerAccess = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
     const identity = await requireIdentity(ctx);
-    if (await isOrganizer(ctx, identity)) return true;
-    return (await getEventMembership(ctx, args.eventId, identity))?.role === "organizer";
+    return isEventOrganizer(ctx, args.eventId, identity);
   },
 });
 
@@ -56,7 +57,18 @@ export const add = mutation({
     const members = await ctx.db.query("event_members").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect();
     if (members.length >= EVENT_TEAM_MEMBER_LIMIT) throw new Error(`This event team is limited to ${EVENT_TEAM_MEMBER_LIMIT} people.`);
     const now = Date.now();
-    return ctx.db.insert("event_members", { eventId: args.eventId, userId, email, role: args.role, invitedByUserId: identity.subject, invitedAt: now, createdAt: now });
+    const memberId = await ctx.db.insert("event_members", { eventId: args.eventId, userId, email, role: args.role, invitedByUserId: identity.subject, invitedAt: now, createdAt: now });
+    const event = await ctx.db.get(args.eventId);
+    await notifyEvent(ctx, {
+      eventId: args.eventId,
+      kind: "invite_sent",
+      title: "Team invitation sent",
+      body: `${email} was invited as a ${args.role}.`,
+      linkPath: event ? `/events/${event.slug}/settings/team` : undefined,
+      relatedId: memberId,
+      recipientUserIds: (await eventOrganizers(ctx, args.eventId)).filter((userId) => userId !== identity.subject),
+    });
+    return memberId;
   },
 });
 
@@ -84,6 +96,15 @@ export const prepareInvite = internalMutation({
         inviteError: undefined,
         invitedAt: now,
       });
+      await notifyEvent(ctx, {
+        eventId: args.eventId,
+        kind: "invite_sent",
+        title: "Team invitation sent",
+        body: `${email} was invited as a ${args.role}.`,
+        linkPath: `/events/${event.slug}/settings/team`,
+        relatedId: existing._id,
+        recipientUserIds: (await eventOrganizers(ctx, args.eventId)).filter((userId) => userId !== identity.subject),
+      });
       return {
         memberId: existing._id,
         eventName: event.name,
@@ -102,6 +123,15 @@ export const prepareInvite = internalMutation({
       inviteEmailStatus: "pending",
       invitedAt: now,
       createdAt: now,
+    });
+    await notifyEvent(ctx, {
+      eventId: args.eventId,
+      kind: "invite_sent",
+      title: "Team invitation sent",
+      body: `${email} was invited as a ${args.role}.`,
+      linkPath: `/events/${event.slug}/settings/team`,
+      relatedId: memberId,
+      recipientUserIds: (await eventOrganizers(ctx, args.eventId)).filter((userId) => userId !== identity.subject),
     });
     return { memberId, eventName: event.name, eventSlug: event.slug };
   },
@@ -148,12 +178,18 @@ export const recordInviteOutcome = internalMutation({
     error: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    if (!(await ctx.db.get(args.memberId))) return;
+    const member = await ctx.db.get(args.memberId);
+    if (!member) return;
     await ctx.db.patch(args.memberId, {
       clerkInvitationId: args.clerkInvitationId,
       inviteEmailStatus: args.emailStatus,
       inviteError: args.error?.slice(0, 500),
     });
+    // NOTE: emailStatus here is Clerk's invite-email delivery outcome ("sent" vs "failed" to
+    // send the email), not whether the invitee has accepted. Acceptance is a separate event —
+    // see claimPending below, which fires when the invited user actually signs in and their
+    // pending membership is claimed. Don't conflate the two: this hook must never fire
+    // invite_accepted/invite_declined.
   },
 });
 
@@ -180,6 +216,16 @@ export const removeAfterClerkRevoke = internalMutation({
       }
     }
     await ctx.db.delete(existing._id);
+    const event = await ctx.db.get(args.eventId);
+    await notifyEvent(ctx, {
+      eventId: args.eventId,
+      kind: "member_removed",
+      title: "Team member removed",
+      body: `${existing.email} was removed from the event team.`,
+      linkPath: event ? `/events/${event.slug}/settings/team` : undefined,
+      relatedId: args.memberId,
+      recipientUserIds: await eventOrganizers(ctx, args.eventId),
+    });
   },
 });
 
@@ -193,7 +239,23 @@ export const claimPending = mutation({
     if (!email) return 0;
     const matches = await ctx.db.query("event_members").withIndex("by_email", (q) => q.eq("email", email)).collect();
     const pending = matches.filter((member) => member.userId.startsWith("pending:"));
-    for (const member of pending) await ctx.db.patch(member._id, { userId: identity.subject });
+    for (const member of pending) {
+      await ctx.db.patch(member._id, { userId: identity.subject });
+      // This is the real invite-acceptance moment — the invited user has signed in and their
+      // pending membership is now claimed. See recordInviteOutcome above for why that hook is
+      // NOT the acceptance signal.
+      const event = await ctx.db.get(member.eventId);
+      await notifyEvent(ctx, {
+        eventId: member.eventId,
+        kind: "invite_accepted",
+        title: "Team invitation accepted",
+        body: `${member.email} accepted the team invitation.`,
+        linkPath: event ? `/events/${event.slug}/settings/team` : undefined,
+        relatedId: member._id,
+        recipientUserIds: [member.invitedByUserId],
+        highPriority: true,
+      });
+    }
     return pending.length;
   },
 });

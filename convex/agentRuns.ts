@@ -37,6 +37,21 @@ async function authorizedRun(ctx: MutationCtx, eventId: Id<"events">, runId: Id<
   return run;
 }
 
+async function releaseManagedReservation(ctx: MutationCtx, run: Doc<"agent_runs">) {
+  if (!run.managedAllowanceId) return;
+  const allowance = await ctx.db.get(run.managedAllowanceId);
+  if (!allowance) return;
+  const usage = await ctx.db.query("agent_usage_records").withIndex("by_run", (q) => q.eq("runId", run._id)).first();
+  if (usage?.settledAt) return;
+  const now = Date.now();
+  await ctx.db.patch(allowance._id, {
+    reservedRuns: Math.max(0, allowance.reservedRuns - 1),
+    reservedTokens: Math.max(0, allowance.reservedTokens - (run.managedReservedTokens ?? 0)),
+    updatedAt: now,
+  });
+  if (usage) await ctx.db.patch(usage._id, { settledAt: now });
+}
+
 export const canUse = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
@@ -91,7 +106,11 @@ export const create = mutation({
     const providerSetting = await ctx.db.query("agent_provider_settings").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).unique();
     const providerMode = providerSetting?.mode ?? "managed";
     if (providerMode === "bring_your_own" && (!providerSetting?.credentialEnvelope || providerSetting.status !== "ready")) throw new Error("Reconnect this event's OpenAI key in Settings before starting a run.");
-    if (providerMode === "managed" && !process.env.OPENAI_API_KEY) throw new Error("Namos-managed AI is temporarily unavailable. Choose Bring your own key in Settings, or contact support.");
+    if (providerMode === "managed") {
+      if (!process.env.OPENAI_API_KEY) throw new Error("Namos-managed AI is temporarily unavailable. Choose Bring your own key in Settings, or contact support.");
+      const event = await ctx.db.get(args.eventId);
+      if (!event?.billingOwnerUserId) throw new Error("This event needs a billing owner before Namos-managed AI can run.");
+    }
     const runId = await ctx.db.insert("agent_runs", { eventId: args.eventId, requestedByUserId: identity.subject, objective, status: "queued", model: process.env.OPENAI_AGENT_MODEL ?? "gpt-5.6-terra", providerMode, idempotencyKey, stepCount: 0, maxSteps: 12, createdAt: now, updatedAt: now });
     await ctx.db.insert("agent_run_events", { eventId: args.eventId, runId, sequence: 1, type: "user_message", message: objective, createdAt: now });
     await workflow.start(ctx, internal.agentWorkflow.execute, { runId }, { startAsync: true });
@@ -135,6 +154,7 @@ export const cancel = mutation({
     if (run.status === "cancelled") return;
     if (!cancellableStatuses.has(run.status)) throw new Error("This run can no longer be cancelled.");
     const now = Date.now();
+    await releaseManagedReservation(ctx, run);
     const proposals = await ctx.db.query("agent_action_proposals").withIndex("by_run", (q) => q.eq("runId", run._id)).collect();
     for (const proposal of proposals) {
       if (proposal.status === "pending") await ctx.db.patch(proposal._id, { status: "superseded", error: "Run cancelled before approval.", updatedAt: now });

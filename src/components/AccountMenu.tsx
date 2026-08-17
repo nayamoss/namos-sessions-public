@@ -14,6 +14,8 @@ import {
 import { useOptionalCurrentEvent } from "@/components/EventContext";
 import { useRepo, useOptionalRepo } from "@/data/repo";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { ProfileSettingsDialog } from "@/components/ProfileSettingsDialog";
+import { resetAnalytics, setAnalyticsIdentity, track } from "@/lib/analytics";
 
 /** Groups are separated by whitespace only — never a rule or divider. */
 const contentClass = cardSurfaceClasses("default", "bg-muted p-1.5 shadow-none");
@@ -27,6 +29,8 @@ type AccountMenuViewProps = {
   userInitials: string;
   avatarUrl?: string;
   signOut?: ReactNode;
+  onOpenProfileSettings?: () => void;
+  profileSettings?: ReactNode;
 };
 
 function UserAvatar({ avatarUrl, userInitials, className }: { avatarUrl?: string; userInitials: string; className: string }) {
@@ -66,10 +70,18 @@ function AdminModeMenuItem({ eventSlug }: { eventSlug?: string }) {
   );
 }
 
-function MenuLinks({ context, eventSlug }: { context: "admin" | "portal"; eventSlug?: string }) {
+function MenuLinks({ context, eventSlug, onOpenProfileSettings }: { context: "admin" | "portal"; eventSlug?: string; onOpenProfileSettings?: () => void }) {
+  const profileSettings = onOpenProfileSettings ? (
+    <DropdownMenuItem onSelect={onOpenProfileSettings} className={itemClass}>
+      <UserRound className="h-4 w-4 shrink-0" />
+      Profile settings
+    </DropdownMenuItem>
+  ) : null;
+
   if (context === "portal") {
     return (
       <>
+        {profileSettings}
         <DropdownMenuItem asChild>
           <Link to="/portal/profile" className={itemClass}>
             <UserRound className="h-4 w-4 shrink-0" />
@@ -83,6 +95,7 @@ function MenuLinks({ context, eventSlug }: { context: "admin" | "portal"; eventS
 
   return (
     <>
+      {profileSettings}
       <DropdownMenuItem asChild>
         <Link to={eventSlug ? `/events/${eventSlug}/settings/event` : "/events"} className={itemClass}>
           <Settings2 className="h-4 w-4 shrink-0" />
@@ -90,7 +103,7 @@ function MenuLinks({ context, eventSlug }: { context: "admin" | "portal"; eventS
         </Link>
       </DropdownMenuItem>
       <DropdownMenuItem asChild>
-        <Link to="/portal" className={itemClass}>
+        <Link to="/portal" className={itemClass} onClick={() => track("cta_converted", { destination: "portal" })}>
           <Users className="h-4 w-4 shrink-0" />
           Speaker portal
         </Link>
@@ -99,7 +112,7 @@ function MenuLinks({ context, eventSlug }: { context: "admin" | "portal"; eventS
   );
 }
 
-function AccountMenuView({ collapsed, context, userName, userInitials, avatarUrl, signOut }: AccountMenuViewProps) {
+function AccountMenuView({ collapsed, context, userName, userInitials, avatarUrl, signOut, onOpenProfileSettings, profileSettings }: AccountMenuViewProps) {
   const [accountOpen, setAccountOpen] = useState(false);
   const eventSlug = useOptionalCurrentEvent()?.event.slug;
 
@@ -121,13 +134,14 @@ function AccountMenuView({ collapsed, context, userName, userInitials, avatarUrl
               <UserAvatar avatarUrl={avatarUrl} userInitials={userInitials} className="h-8 w-8 shrink-0" />
               <p className="min-w-0 flex-1 truncate text-sm font-medium">{userName}</p>
             </div>
-            <MenuLinks context={context} eventSlug={eventSlug} />
+            <MenuLinks context={context} eventSlug={eventSlug} onOpenProfileSettings={onOpenProfileSettings} />
             <div className="pt-1.5">
               <ThemeToggleMenuItem />
               {signOut}
             </div>
           </DropdownMenuContent>
         </DropdownMenu>
+        {profileSettings}
       </div>
     );
   }
@@ -155,13 +169,14 @@ function AccountMenuView({ collapsed, context, userName, userInitials, avatarUrl
           sideOffset={8}
           className={cn("w-[var(--radix-dropdown-menu-trigger-width)]", contentClass)}
         >
-          <MenuLinks context={context} eventSlug={eventSlug} />
+          <MenuLinks context={context} eventSlug={eventSlug} onOpenProfileSettings={onOpenProfileSettings} />
           <div className="pt-1.5">
             <ThemeToggleMenuItem />
             {signOut}
           </div>
         </DropdownMenuContent>
       </DropdownMenu>
+      {profileSettings}
     </div>
   );
 }
@@ -175,14 +190,16 @@ function ClerkAccountMenu({ collapsed, context }: { collapsed: boolean; context:
   // Clerk instance has first/last name collection disabled, so `user.firstName` is never
   // populated by our own onboarding flow (only by an OAuth provider, if used).
   const [profileDisplayName, setProfileDisplayName] = useState<string>();
+  const [signupRole, setSignupRole] = useState<"solo" | "team">();
+  const [profileSettingsOpen, setProfileSettingsOpen] = useState(false);
   useEffect(() => {
     if (!repo) return;
     let active = true;
     // Optional chain, not just a try/catch around the call: some test fixtures provide a
     // partial mock Repository without a `profiles` key at all.
     void repo.profiles?.getMine()
-      .then((profile) => { if (active) setProfileDisplayName(profile?.displayName); })
-      .catch(() => { if (active) setProfileDisplayName(undefined); });
+      .then((profile) => { if (active) { setProfileDisplayName(profile?.displayName); setSignupRole(profile?.signupRole); } })
+      .catch(() => { if (active) { setProfileDisplayName(undefined); setSignupRole(undefined); } });
     return () => { active = false; };
   }, [repo]);
 
@@ -196,6 +213,21 @@ function ClerkAccountMenu({ collapsed, context }: { collapsed: boolean; context:
   // `hasImage` is the actual signal for whether the user chose one.
   const avatarUrl = user?.hasImage ? user.imageUrl : undefined;
 
+  useEffect(() => {
+    if (user?.id) setAnalyticsIdentity(user.id, { role: context === "portal" ? "speaker" : "organizer", ...(signupRole ? { signupRole } : {}) });
+  }, [context, signupRole, user?.id]);
+
+  async function saveProfileName(displayName: string) {
+    if (!repo?.profiles) throw new Error("Profile settings are unavailable right now.");
+    await repo.profiles.save({ displayName });
+    setProfileDisplayName(displayName);
+  }
+
+  async function uploadProfilePhoto(file: File) {
+    if (!user) throw new Error("You need to be signed in to update your photo.");
+    await user.setProfileImage({ file });
+  }
+
   return (
     <AccountMenuView
       collapsed={collapsed}
@@ -203,9 +235,20 @@ function ClerkAccountMenu({ collapsed, context }: { collapsed: boolean; context:
       userName={userName}
       userInitials={userInitials}
       avatarUrl={avatarUrl}
+      onOpenProfileSettings={() => setProfileSettingsOpen(true)}
+      profileSettings={
+        <ProfileSettingsDialog
+          open={profileSettingsOpen}
+          onOpenChange={setProfileSettingsOpen}
+          displayName={userName}
+          avatarUrl={avatarUrl}
+          onSaveName={saveProfileName}
+          onUploadPhoto={uploadProfilePhoto}
+        />
+      }
       signOut={
         <SignOutButton>
-          <DropdownMenuItem className={cn(itemClass, "text-destructive focus:text-destructive")}>
+          <DropdownMenuItem onSelect={resetAnalytics} className={cn(itemClass, "text-destructive focus:text-destructive")}>
             <LogOut className="h-4 w-4 shrink-0" />
             Sign out
           </DropdownMenuItem>

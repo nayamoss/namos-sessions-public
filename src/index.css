@@ -4,13 +4,10 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Compact density: scales every rem-based Tailwind dimension (spacing, sizing,
-   radius) app-wide from one lever. Stays relative to the browser's default font
-   size, so a user who raises it still gets larger UI — it is not a px pin.
-   The --text-* tokens below are corrected back up so labels land at the 12-13px
-   industry floor instead of compounding down to ~8.8px. */
+/* Keep the browser's normal rem scale. Controls, spacing, and type should remain
+   readable without relying on a page-wide compacting transform. */
 html {
-  font-size: 80%;
+  font-size: 100%;
 }
 
 html,
@@ -23,22 +20,20 @@ body,
   :root {
     color-scheme: light;
 
-    /* Compact type scale — wired to Tailwind's text-* utilities in tailwind.config.ts.
-       rem values are pre-multiplied for the 80% root above; comments are the real px. */
-    --text-xs: 0.9375rem; /* 12px */
-    --text-sm: 1.015625rem; /* 13px */
-    --text-base: 1.09375rem; /* 14px */
-    --text-lg: 1.25rem; /* 16px */
-    --text-xl: 1.40625rem; /* 18px */
-    --text-2xl: 1.640625rem; /* 21px */
-    --text-3xl: 2.03125rem; /* 26px */
-    --text-4xl: 2.34375rem; /* 30px */
+    --text-xs: 0.75rem;
+    --text-sm: 0.875rem;
+    --text-base: 1rem;
+    --text-lg: 1.125rem;
+    --text-xl: 1.25rem;
+    --text-2xl: 1.5rem;
+    --text-3xl: 1.875rem;
+    --text-4xl: 2.25rem;
 
     /* Takumi palette — near-black primary with soft, warm neutrals.
        --muted/--secondary/--surface-sunken must stay a visible step darker than
        --background: they fill search, badges, switch tracks and input surfaces,
        which sit directly on the page background and vanish if the two match. */
-    --background: 45 20% 96%;  /* faint warm gray page bg, distinct from white cards/inputs */
+    --background: 220 14% 97%;  /* faint neutral gray page bg, distinct from white cards/inputs */
     --foreground: 222 24% 14%;
 
     --card: 0 0% 100%;
@@ -50,11 +45,11 @@ body,
     --primary: 0 0% 14%;
     --primary-foreground: 0 0% 98%;
 
-    --secondary: 45 16% 91%;
+    --secondary: 220 13% 93%;
     --secondary-foreground: 222 24% 14%;
 
-    --muted: 45 16% 91%;
-    --muted-foreground: 45 8% 42%;
+    --muted: 220 13% 93%;
+    --muted-foreground: 220 9% 40%;
 
     --accent: 216 100% 96%;
     --accent-foreground: 216 90% 30%;
@@ -76,7 +71,7 @@ body,
     --info-foreground: 0 0% 100%;
 
     --surface-elevated: 0 0% 100%;
-    --surface-sunken: 45 16% 91%;
+    --surface-sunken: 220 13% 93%;
 
     --sidebar-background: 0 0% 100%;   /* matches card/surface, distinct from page bg */
     --sidebar-foreground: 222 24% 14%;
@@ -202,6 +197,10 @@ body,
 }
 
 @layer components {
+  .touch-target {
+    min-height: 2.5rem;
+  }
+
   .mobile-safe-shell {
     padding-top: env(safe-area-inset-top);
     padding-right: env(safe-area-inset-right);
@@ -338,8 +337,7 @@ select:focus-visible,
 [data-slot="textarea"]:focus-visible {
   border: none !important;
   outline: none !important;
-  box-shadow: none !important;
-  --tw-ring-shadow: none !important;
+  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.4) !important;
   --tw-shadow: none !important;
 }
 

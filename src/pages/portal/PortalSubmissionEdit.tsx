@@ -16,6 +16,7 @@ import { PortalAccessRequired } from "./PortalPages";
 import { SubmissionStatusBadge } from "@/components/shared/SubmissionStatusBadge";
 import { usePortalIdentity } from "./PortalIdentity";
 import { backendUnavailable } from "@/lib/backend";
+import { portalSubmissionStatusLabel } from "./portal-data";
 
 const fieldType = (type: string): DynamicField["type"] => type === "wysiwyg" ? "textarea" : type === "dropdown" || type === "multiselect" ? "select" : type === "email" || type === "number" ? type : "text";
 
@@ -84,7 +85,7 @@ export default function PortalSubmissionEdit() {
     if (requireRequired && !title.trim()) next.push("A submission title is required.");
     for (const field of rendererFields) {
       const value = answers[field.id] ?? "";
-      if (requireRequired && isFieldVisible(field, answers) && field.required && !value.trim()) next.push(`${field.label} is required.`);
+      if (requireRequired && isFieldVisible(field, answers) && fieldBlocksSubmission(field, value)) next.push(`${field.label} is required.`);
       if (field.maxChars !== undefined && value.length > field.maxChars) next.push(`${field.label} exceeds its character limit.`);
     }
     limits.filter((limit) => !limit.valid).forEach((limit) => next.push(`${limit.label} must be ${limit.maxCombinedChars.toLocaleString()} characters or fewer.`));
@@ -126,7 +127,7 @@ export default function PortalSubmissionEdit() {
   if (notAvailable) return <div className="space-y-4"><section className={cardSurfaceClasses("default", "p-8 text-center")}><p className="font-medium">That submission is not available on your portal.</p><Button asChild variant="ghost" size="sm" className="mt-3"><Link to="/portal/submissions">Back to my submissions</Link></Button></section></div>;
 
   const readOnly = unsupported || (view ? !view.editability.editable : false);
-  const context = view ? <div className="min-w-0"><p className="truncate text-sm font-medium">{view.submission.title}</p><div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><SubmissionStatusBadge status={view.submission.status} />{view.submission.updatedAt && <span>Updated {formatPortalDate(view.submission.updatedAt, timezone)}</span>}{view.submission.lastSpeakerEditAt && <span>· Edited {relativeEditTime(view.submission.lastSpeakerEditAt)}</span>}</div></div> : <span />;
+  const context = view ? <div className="min-w-0"><p className="truncate text-sm font-medium">{view.submission.title}</p><div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><SubmissionStatusBadge status={view.submission.status} label={portalSubmissionStatusLabel(view.submission.status)} />{view.submission.updatedAt && <span>Updated {formatPortalDate(view.submission.updatedAt, timezone)}</span>}{view.submission.lastSpeakerEditAt && <span>· Edited {relativeEditTime(view.submission.lastSpeakerEditAt)}</span>}</div></div> : <span />;
   const toolbar = <ContentToolbar ariaLabel="Submission editing actions" search={context} utilities={!loading && !readOnly ? <><Button type="button" variant="ghost" size="sm" onClick={() => requestLeave("/portal/submissions")}>Cancel</Button>{view?.editability.editable && view.editability.mode === "draft" && <Button type="button" variant="ghost" size="sm" disabled={saving} onClick={() => void save(false)}>Save draft</Button>}</> : undefined} primaryAction={!loading && (readOnly ? <Button asChild variant="ghost" size="sm"><Link to="/portal/submissions">Back to my submissions</Link></Button> : view ? <Button type="button" variant="accent" size="sm" disabled={saving} onClick={() => void save(view.editability.editable && view.editability.mode === "draft")}>{saving ? "Saving…" : view.editability.editable && view.editability.mode === "draft" ? "Submit proposal" : "Save changes"}</Button> : undefined)} />;
 
   const lockedEditability = view?.editability && "reason" in view.editability ? view.editability : undefined;
@@ -134,3 +135,4 @@ export default function PortalSubmissionEdit() {
 }
 import { cardSurfaceClasses } from "@/components/ui/card";
 import { stripHtmlTags } from "@/lib/strip-html";
+import { fieldBlocksSubmission } from "@/lib/field-answerable";

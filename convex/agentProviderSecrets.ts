@@ -5,7 +5,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 export type AgentCredentialEnvelope = { version: 1; iv: string; ciphertext: string; tag: string };
 
 function encryptionKey() {
-  const configured = process.env.AI_INTEGRATION_ENCRYPTION_KEY ?? process.env.EMAIL_INTEGRATION_ENCRYPTION_KEY;
+  const configured = process.env.AI_INTEGRATION_ENCRYPTION_KEY;
   if (!configured) throw new Error("AI credential encryption is not configured.");
   const key = Buffer.from(configured, "base64");
   if (key.length !== 32) throw new Error("AI_INTEGRATION_ENCRYPTION_KEY must be a base64-encoded 32-byte key.");

@@ -1,0 +1,85 @@
+import { v } from "convex/values";
+import { internalMutation } from "./_generated/server";
+
+// One-time migration from the pre-multi-tenancy data model, where a single global `organizers`
+// table acted as a deployment-wide ACL and every organizer implicitly owned every event.
+//
+// Run it immediately after deploying the code, once per deployment:
+//
+//   npx convex run migrations:backfillOrganizations '{"name":"Namos Sessions"}'
+//
+// Deploy and backfill are ONE operation, not two. Between them the guards fail closed, so
+// existing organizers cannot reach their own events until this has run.
+//
+// It is deliberately an internalMutation: it can only be invoked from the CLI by someone with
+// deploy access, never from the app or an HTTP route.
+//
+// Nothing is deleted and nothing changes hands. Every current organizer already sees every
+// current event, so putting all of them in one organization preserves today's access exactly.
+// The boundary only starts to apply to accounts created after this point, which is the intent.
+export const backfillOrganizations = internalMutation({
+  args: { name: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const alreadyMigrated = await ctx.db.query("organizations").first();
+    if (alreadyMigrated)
+      throw new Error(
+        `Migration has already run — organization "${alreadyMigrated.name}" exists. Refusing to create a second one.`,
+      );
+
+    const organizers = await ctx.db.query("organizers").collect();
+    const events = await ctx.db.query("events").collect();
+
+    // The legacy owner keeps ownership. Earliest owner row wins; fall back to the earliest row
+    // of any role, and finally to a placeholder if the table is empty (fresh deployment).
+    const byCreatedAt = [...organizers].sort((a, b) => a.createdAt - b.createdAt);
+    const legacyOwner =
+      byCreatedAt.find((row) => row.role === "owner") ?? byCreatedAt[0] ?? null;
+
+    const organizationId = await ctx.db.insert("organizations", {
+      name: args.name?.trim() || "My organization",
+      createdByUserId: legacyOwner?.userId ?? "system:migration",
+      createdAt: Date.now(),
+    });
+
+    let organizersPatched = 0;
+    for (const organizer of organizers) {
+      if (organizer.organizationId) continue;
+      await ctx.db.patch(organizer._id, { organizationId });
+      organizersPatched += 1;
+    }
+
+    let eventsPatched = 0;
+    for (const event of events) {
+      if (event.organizationId) continue;
+      await ctx.db.patch(event._id, { organizationId });
+      eventsPatched += 1;
+    }
+
+    return {
+      organizationId,
+      organizationName: args.name?.trim() || "My organization",
+      legacyOwnerUserId: legacyOwner?.userId ?? null,
+      organizersPatched,
+      eventsPatched,
+    };
+  },
+});
+
+// Read-only verification, safe to run before and after the migration above.
+export const auditTenancy = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const [organizations, organizers, events] = await Promise.all([
+      ctx.db.query("organizations").collect(),
+      ctx.db.query("organizers").collect(),
+      ctx.db.query("events").collect(),
+    ]);
+    return {
+      organizations: organizations.length,
+      organizers: organizers.length,
+      events: events.length,
+      organizersMissingOrg: organizers.filter((row) => !row.organizationId).length,
+      eventsMissingOrg: events.filter((row) => !row.organizationId).length,
+    };
+  },
+});

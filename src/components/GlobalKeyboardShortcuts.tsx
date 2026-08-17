@@ -11,6 +11,7 @@ import {
   GO_TO_SEQUENCES,
   SHORTCUT_HELP,
   SHORTCUTS,
+  VOICE_TOGGLE_EVENT,
   isKeyboardShortcutBlocked,
   matchesPrimaryShortcut,
   matchesShortcut,
@@ -29,6 +30,29 @@ export function GlobalKeyboardShortcuts({
   const [helpOpen, setHelpOpen] = useState(false);
   const pendingGoTo = useRef(false);
   const pendingTimer = useRef<number | null>(null);
+
+  // Alt+V gets its own capture-phase listener on `window`, exactly matching
+  // Imori's imori:toggle-voice pattern (app/dashboard/layout-client.tsx),
+  // rather than living inside the shared bubble-phase `document` handler
+  // below. The shared handler only sees a keydown if nothing between the
+  // focused element and `document` calls stopPropagation() on it first —
+  // several things in this app do (popovers, cmdk, rich-text editors), which
+  // is exactly why the first version of this shortcut silently never fired
+  // for a real user despite passing every test that dispatched the toggle
+  // event directly instead of a real keypress. Capture-phase on `window`
+  // runs before any of that, same as Imori's own binding.
+  useEffect(() => {
+    const handleVoiceKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const isTypingTarget = !!target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+      if (matchesShortcut(event, SHORTCUTS.voice) && !isTypingTarget) {
+        event.preventDefault();
+        window.dispatchEvent(new Event(VOICE_TOGGLE_EVENT));
+      }
+    };
+    window.addEventListener("keydown", handleVoiceKeyDown, true);
+    return () => window.removeEventListener("keydown", handleVoiceKeyDown, true);
+  }, []);
 
   useEffect(() => {
     const clearPendingGoTo = () => {

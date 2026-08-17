@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ClipboardList, Plus, Search } from "lucide-react";
+import { Check, ClipboardList, Search } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
-import { SkeletonList } from "@/components/shared/SkeletonList";
-import { StatusTabs } from "@/components/shared/StatusTabs";
+import { DataGrid, type DataGridColumn } from "@/components/shared/DataGrid";
+import { FilterMenu } from "@/components/shared/StatusTabs";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -263,9 +264,39 @@ export default function TasksAdmin() {
       );
     }
   };
+  const columns: DataGridColumn<OnboardingTask>[] = [
+    {
+      key: "task",
+      header: "Task",
+      kind: "row-header",
+      cell: (task) => (
+        <div className="min-w-0">
+          <p className="truncate font-semibold text-foreground">{task.title}</p>
+          <p className="mt-0.5 text-xs font-normal text-muted-foreground">
+            {task.source === "agent" ? "Operations Agent" : task.source === "manual" ? "Manual" : "Automatic"}
+          </p>
+        </div>
+      ),
+    },
+    { key: "target", header: "Assigned to", width: "14rem", cell: (task) => <span className="text-muted-foreground">{task.targetLabel}</span> },
+    { key: "due", header: "Due", width: "9rem", cell: (task) => <span className="text-muted-foreground">{task.dueLabel ?? "No due date"}</span> },
+    { key: "status", header: "Status", width: "9rem", cell: (task) => <span className="inline-flex rounded-full bg-muted px-2.5 py-1 text-xs font-medium">{statusLabels[task.status]}</span> },
+    {
+      key: "actions",
+      header: "",
+      headerLabel: "Actions",
+      width: "10rem",
+      align: "right",
+      cell: (task) => task.status === "completed" ? <span className="text-sm text-muted-foreground">Complete</span> : (
+        <Button type="button" variant="outline" size="sm" onClick={() => void advance(task.id)}>
+          {task.status === "in_progress" ? <><Check /> Mark done</> : "Start task"}
+        </Button>
+      ),
+    },
+  ];
 
   return (
-    <AppLayout title="Tasks">
+    <AppLayout title="Speaker tasks">
       <div className="space-y-3">
         {copyOpen && (
           <section
@@ -275,9 +306,6 @@ export default function TasksAdmin() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-base font-semibold">Copy from template</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Add a saved checklist to a submission.
-                </p>
               </div>
               <Button
                 type="button"
@@ -354,9 +382,6 @@ export default function TasksAdmin() {
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <h2 className="text-base font-semibold">Add task</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Create a manual onboarding task for this event.
-                </p>
               </div>
               <Button
                 type="button"
@@ -478,8 +503,8 @@ export default function TasksAdmin() {
               />
             </div>
           }
-          utilities={
-            <StatusTabs
+          utilities={<>
+            <FilterMenu
               ariaLabel="Task types"
               value={tab}
               onValueChange={(value) => setTab(value as "all" | TaskTarget)}
@@ -487,18 +512,11 @@ export default function TasksAdmin() {
                 { value: "all", label: "All Tasks", count: counts.all },
                 { value: "contact", label: "Contact Tasks", count: counts.contact },
                 { value: "group", label: "Group Tasks", count: counts.group },
-                {
-                  value: "submission",
-                  label: "Submission Tasks",
-                  count: counts.submission,
-                },
+                { value: "submission", label: "Submission Tasks", count: counts.submission },
                 { value: "sponsor", label: "Sponsor Tasks", count: counts.sponsor },
               ]}
             />
-          }
-          primaryAction={
-            <>
-              <Button
+            <Button
                 type="button"
                 variant="outline"
                 size="sm"
@@ -509,7 +527,9 @@ export default function TasksAdmin() {
               >
                 Copy from…
               </Button>
-              <Button
+          </>}
+          primaryAction={
+            <Button
                 type="button"
                 variant="accent"
                 size="sm"
@@ -518,76 +538,29 @@ export default function TasksAdmin() {
                   setCopyOpen(false);
                 }}
               >
-                <Plus /> Add
+                Add
               </Button>
-            </>
           }
         />
 
-        <section className="grid gap-3" aria-live="polite">
-          {loading ? (
-            <SkeletonList rows={4} label="Loading onboarding tasks…" />
-          ) : visibleTasks.length ? (
-            visibleTasks.map((task) => (
-              <article
-                key={task.id}
-                id={`task-${task.id}`}
-                className={cardSurfaceClasses("default", "flex flex-wrap items-center justify-between gap-4 p-5")}
-              >
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-sm font-semibold">{task.title}</h2>
-                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                      {task.source === "agent" ? "Operations Agent" : task.source === "manual" ? "Manual" : "Automatic"}
-                    </span>
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                    <span className="rounded-full bg-muted px-2 py-1">
-                      {targetLabels[task.target]}
-                    </span>
-                    <span className="rounded-full bg-muted px-2 py-1">
-                      {task.targetLabel}
-                    </span>
-                    {task.dueLabel && (
-                      <span className="px-1 py-1">{task.dueLabel}</span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="rounded-full bg-muted px-2.5 py-1 text-xs">
-                    {statusLabels[task.status]}
-                  </span>
-                  {task.status !== "completed" && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void advance(task.id)}
-                    >
-                      {task.status === "in_progress" ? (
-                        <>
-                          <Check /> Mark done
-                        </>
-                      ) : (
-                        "Start task"
-                      )}
-                    </Button>
-                  )}
-                </div>
-              </article>
-            ))
-          ) : (
-            <div className={cardSurfaceClasses("default", "px-6 py-12 text-center")}>
-              <ClipboardList className="mx-auto h-6 w-6 text-muted-foreground" />
-              <p className="mt-3 text-sm font-medium">
-                No tasks match this view
-              </p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Try another task type or clear the search.
-              </p>
-            </div>
-          )}
-        </section>
+        <DataGrid
+          rows={visibleTasks}
+          columns={columns}
+          empty={
+            <EmptyState
+              compact
+              icon={ClipboardList}
+              title={tasks.length ? "No tasks match this view" : "No tasks yet"}
+              message={tasks.length ? "Clear the search or choose another task type." : "Add a task when onboarding work is ready."}
+              action={tasks.length ? <Button variant="outline" size="sm" onClick={() => { setQuery(""); setTab("all"); }}>Clear filters</Button> : <Button variant="accent" size="sm" onClick={() => setAddOpen(true)}>Add task</Button>}
+            />
+          }
+          loading={loading}
+          skeletonRows={4}
+          rowActivation="none"
+          ariaLabel="Onboarding tasks"
+          minWidth={760}
+        />
       </div>
     </AppLayout>
   );

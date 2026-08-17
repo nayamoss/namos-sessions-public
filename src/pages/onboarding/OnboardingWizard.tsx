@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent, type ReactNode } from "react";
 import { useUser } from "@clerk/clerk-react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowRight, Camera, ChevronDown, Loader2 } from "lucide-react";
+import { ArrowRight, Camera, ChevronDown, Eye, EyeOff, Loader2 } from "lucide-react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { TimezoneCombobox } from "@/components/shared/TimezoneCombobox";
 import { DateTimeField } from "@/components/shared/DateTimeField";
@@ -31,6 +31,16 @@ const slugify = (value: string) =>
     .trim()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "") || "my-conference";
+
+// Keep enough of the local part visible to recognize the signed-in account without putting
+// the full identifier on display during a shared-screen onboarding flow. Long addresses mask
+// five characters; shorter ones mask at least three when possible.
+export const maskEmail = (email: string) => {
+  const [local, domain] = email.split("@");
+  if (!local || !domain) return email;
+  const hiddenLength = Math.min(local.length, Math.max(3, Math.min(5, Math.floor(local.length / 2))));
+  return `${"•".repeat(hiddenLength)}${local.slice(hiddenLength)}@${domain}`;
+};
 
 const blankEvent = (): Omit<Event, "id"> => ({
   name: "",
@@ -99,11 +109,12 @@ function PrimaryButton({ children, onClick, busy, disabled, type = "button", aut
 // Friendly, on-brand replacement for dumping a raw error (JSON payloads, Convex stack envelopes,
 // auth-provider rejections) straight into the page. The real cause is always logged to the
 // console via `friendlyErrorMessage` for debugging — this is only what the organizer sees.
-function InlineError({ message }: { message: string }) {
+function InlineError({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
-    <p role="alert" className="rounded-[12px] bg-destructive/10 px-4 py-3 text-sm text-destructive">
-      {message}
-    </p>
+    <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-[12px] bg-destructive/10 px-4 py-3 text-sm text-destructive">
+      <p>{message}</p>
+      {onRetry && <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={onRetry}>Retry setup</Button>}
+    </div>
   );
 }
 
@@ -147,9 +158,9 @@ export default function OnboardingWizard() {
   const [error, setError] = useState<string>();
   const [slugTouched, setSlugTouched] = useState(false);
   const [organizerExists, setOrganizerExists] = useState(false);
-  const [canClaimOwner, setCanClaimOwner] = useState(false);
   const [displayName, setDisplayName] = useState("");
   const [nameTouched, setNameTouched] = useState(false);
+  const [isEmailVisible, setIsEmailVisible] = useState(false);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string>();
   const avatarPreviewRef = useRef<string>();
@@ -188,14 +199,13 @@ export default function OnboardingWizard() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError(undefined);
     try {
-      const [organizer, events, canClaimOwner] = await Promise.all([
+      const [organizer, events] = await Promise.all([
         repo.organizers.getMine(),
         repo.events.listMine().catch(() => []),
-        repo.organizers.canClaimOwner(),
       ]);
       setOrganizerExists(Boolean(organizer));
-      setCanClaimOwner(canClaimOwner);
       const firstEvent = events.at(0);
       if (firstEvent) {
         setEvent(firstEvent);
@@ -247,19 +257,19 @@ export default function OnboardingWizard() {
   const next = async () => {
     setError(undefined);
     if (step === 0) {
-      if (!organizerExists && canClaimOwner) {
+      if (!organizerExists) {
         setBusy(true);
         try {
-          await repo.organizers.claimOwner();
+          // Every signup gets their OWN organization — never joins an existing one. The
+          // mutation is idempotent per user, so a resumed or replayed onboarding reuses the
+          // organization already created rather than minting a second.
+          await repo.organizations.createForCurrentUser({
+            name: displayName.trim() ? `${displayName.trim()}'s organization` : undefined,
+          });
           setOrganizerExists(true);
         } catch (cause) {
-          const message = friendlyErrorMessage(cause, "Could not claim owner access.");
-          // Another first user may win the one-time site-owner claim. That does not block this
-          // account from creating and owning its own conference.
-          if (!message.includes("owner already exists")) {
-            setError(message);
-            return;
-          }
+          setError(friendlyErrorMessage(cause, "Could not set up your organization."));
+          return;
         } finally {
           setBusy(false);
         }
@@ -350,9 +360,22 @@ export default function OnboardingWizard() {
       <ProgressBar step={step} total={total} />
       <header className="flex items-center justify-between px-6 py-6 sm:px-10">
         <Wordmark />
-        <span className="text-xs font-medium text-muted-foreground">
-          {step + 1} / {total}
-        </span>
+        <div className="flex items-center gap-4">
+          {/* Organizer setup is reached by anyone signed in without an organizer record —
+              which is also what a speaker looks like, since a speaker is matched by email
+              on a per-event basis and has no cross-event signal to route on. Without an
+              exit, a speaker who lands here is stuck being asked to create a conference.
+              This is the escape hatch; proper routing needs a speakers-by-email lookup. */}
+          <Link
+            to="/portal"
+            className="text-xs font-medium text-muted-foreground underline underline-offset-4 hover:text-foreground"
+          >
+            I&apos;m a speaker
+          </Link>
+          <span className="text-xs font-medium text-muted-foreground">
+            {step + 1} / {total}
+          </span>
+        </div>
       </header>
 
       <main className="flex flex-1 items-center justify-center px-6 pb-28 sm:px-10">
@@ -418,10 +441,25 @@ export default function OnboardingWizard() {
                       value={displayName}
                       onChange={(change) => { setNameTouched(true); setDisplayName(change.target.value); }}
                     />
-                    <p className="text-xs text-muted-foreground">Signed in as {email}</p>
+                    {email && (
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <p>Signed in as {isEmailVisible ? email : maskEmail(email)}</p>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setIsEmailVisible((visible) => !visible)}
+                          className="h-6 w-6 rounded p-1 text-muted-foreground hover:text-foreground"
+                          aria-label={isEmailVisible ? "Hide signed-in email address" : "Show signed-in email address"}
+                          title={isEmailVisible ? "Hide email" : "Show email"}
+                        >
+                          {isEmailVisible ? <EyeOff aria-hidden="true" className="h-3.5 w-3.5" /> : <Eye aria-hidden="true" className="h-3.5 w-3.5" />}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </div>
-                {error && <InlineError message={error} />}
+                {error && <InlineError message={error} onRetry={() => void load()} />}
                 <div className="flex justify-center sm:justify-start">
                   <PrimaryButton onClick={() => void next()} busy={busy}>
                     Continue

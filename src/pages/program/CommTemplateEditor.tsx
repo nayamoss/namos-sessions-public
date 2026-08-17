@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
+import DOMPurify from "dompurify";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
+import { RichTextEditor } from "@/components/editor/RichTextEditor";
 import { SkeletonList } from "@/components/shared/SkeletonList";
 import { Button } from "@/components/ui/button";
 import { Card, cardSurfaceClasses } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -121,6 +122,7 @@ export default function CommTemplateEditor() {
       portalUrl,
     }),
   };
+  const previewBody = DOMPurify.sanitize(preview.body);
 
   const save = async () => {
     if (!activeEvent) return;
@@ -224,14 +226,15 @@ export default function CommTemplateEditor() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="template-body">Body</Label>
-                <Textarea
-                  id="template-body"
-                  className="min-h-48 resize-y"
+                <Label id="template-body-label">Body</Label>
+                <RichTextEditor
                   value={draft.body}
-                  onChange={(event) =>
-                    setDraft((current) => ({ ...current, body: event.target.value }))
+                  onChange={(body) =>
+                    setDraft((current) => ({ ...current, body }))
                   }
+                  ariaLabel="Template body"
+                  ariaLabelledBy="template-body-label"
+                  placeholder="Write the message your recipients should receive…"
                 />
               </div>
               {message && (
@@ -264,9 +267,14 @@ export default function CommTemplateEditor() {
                 <p className="text-sm font-medium">
                   {preview.subject || "Subject preview"}
                 </p>
-                <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
-                  {preview.body || "Body preview"}
-                </p>
+                {preview.body ? (
+                  <div
+                    className="mt-2 text-sm text-muted-foreground [&_a]:underline [&_h2]:mt-4 [&_h2]:font-semibold [&_h3]:mt-3 [&_h3]:font-semibold [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5"
+                    dangerouslySetInnerHTML={{ __html: previewBody }}
+                  />
+                ) : (
+                  <p className="mt-2 text-sm text-muted-foreground">Body preview</p>
+                )}
               </div>
             </aside>
           </div>

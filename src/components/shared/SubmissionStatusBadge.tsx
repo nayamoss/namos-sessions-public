@@ -6,15 +6,16 @@ const labels: Record<SubmissionStatus, string> = {
   pending: "Pending",
   accept_queue: "Accept queue",
   accepted: "Accepted",
+  maybe: "Maybe",
   decline_queue: "Decline queue",
   declined: "Declined",
   withdrawn: "Withdrawn",
 };
 
-export function SubmissionStatusBadge({ status, className }: { status: SubmissionStatus; className?: string }) {
+export function SubmissionStatusBadge({ status, className, label }: { status: SubmissionStatus; className?: string; label?: string }) {
   const tone: StatusTone = status === "accepted"
     ? "success"
-    : status === "pending" || status === "accept_queue"
+    : status === "pending" || status === "accept_queue" || status === "maybe"
       ? "warning"
       : status === "declined" || status === "decline_queue"
         ? "destructive"
@@ -22,7 +23,7 @@ export function SubmissionStatusBadge({ status, className }: { status: Submissio
 
   return (
     <StatusBadge tone={tone} className={className}>
-      {labels[status]}
+      {label ?? labels[status]}
     </StatusBadge>
   );
 }

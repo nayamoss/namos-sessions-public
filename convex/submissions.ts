@@ -2,7 +2,9 @@ import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { mutation, query, assertEventOrganizerAccess } from "./functions";
+import { internalMutation } from "./_generated/server";
 import { assertOrganizerOrOwnsSpeaker } from "./speakers";
+import { eventOrganizers, notifyEvent } from "./notifications";
 import {
   assertAnswers,
   evaluateEditability,
@@ -16,6 +18,7 @@ const submissionStatus = v.union(
   v.literal("pending"),
   v.literal("accept_queue"),
   v.literal("accepted"),
+  v.literal("maybe"),
   v.literal("decline_queue"),
   v.literal("declined"),
   v.literal("withdrawn"),
@@ -140,7 +143,7 @@ export const submit = mutation({
       throw new Error("You have reached this form's submission limit.");
     const speakerId = await findOrCreateSpeaker(ctx, input);
     const now = Date.now();
-    return ctx.db.insert("submissions", {
+    const submissionId = await ctx.db.insert("submissions", {
       eventId: input.eventId,
       formId: input.formId,
       speakerId,
@@ -151,6 +154,17 @@ export const submit = mutation({
       createdAt: now,
       updatedAt: now,
     });
+    const event = await ctx.db.get(input.eventId);
+    await notifyEvent(ctx, {
+      eventId: input.eventId,
+      kind: "submission_received",
+      title: "New submission received",
+      body: input.title.trim(),
+      linkPath: event ? `/events/${event.slug}/program/abstracts?selected=${submissionId}` : undefined,
+      relatedId: submissionId,
+      recipientUserIds: await eventOrganizers(ctx, input.eventId),
+    });
+    return submissionId;
   },
 });
 
@@ -281,6 +295,16 @@ export const decide = mutation({
           ),
       );
     }
+    const event = await ctx.db.get(submission.eventId);
+    await notifyEvent(ctx, {
+      eventId: submission.eventId,
+      kind: "decision_sent",
+      title: `Submission ${args.status}`,
+      body: submission.title,
+      linkPath: event ? `/events/${event.slug}/program/abstracts?selected=${args.submissionId}` : undefined,
+      relatedId: args.submissionId,
+      recipientUserIds: await eventOrganizers(ctx, submission.eventId),
+    });
     return { ...submission, status: args.status };
   },
 });
@@ -295,6 +319,18 @@ export const setStatus = mutation({
       status: args.status,
       updatedAt: Date.now(),
     });
+    if (args.status === "withdrawn" && submission.status !== "withdrawn") {
+      const event = await ctx.db.get(submission.eventId);
+      await notifyEvent(ctx, {
+        eventId: submission.eventId,
+        kind: "submission_withdrawn",
+        title: "Submission withdrawn",
+        body: submission.title,
+        linkPath: event ? `/events/${event.slug}/program/abstracts?selected=${args.submissionId}` : undefined,
+        relatedId: args.submissionId,
+        recipientUserIds: await eventOrganizers(ctx, submission.eventId),
+      });
+    }
   },
 });
 
@@ -430,5 +466,47 @@ export const updateBySpeaker = mutation({
       speakerEditCount,
     });
     return { status, updatedAt: now, lastSpeakerEditAt: now, speakerEditCount };
+  },
+});
+
+// Content-integration import path (Notion, and later Airtable/Sanity): create-or-update keyed
+// on `eventId` + `sourceRef` so re-running an import never duplicates a row. Internal-only —
+// callers (the contentIntegrationsActions import actions) are already organizer-checked.
+export const upsertBySourceRef = internalMutation({
+  args: {
+    eventId: v.id("events"),
+    formId: v.id("submission_forms"),
+    sourceRef: v.string(),
+    title: v.string(),
+    status: submissionStatus,
+    answers: v.any(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("submissions")
+      .withIndex("by_event_sourceRef", (q) => q.eq("eventId", args.eventId).eq("sourceRef", args.sourceRef))
+      .unique();
+    const now = Date.now();
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        title: args.title,
+        status: args.status,
+        answers: { ...existing.answers, ...args.answers },
+        updatedAt: now,
+      });
+      return { id: existing._id, created: false };
+    }
+    const id = await ctx.db.insert("submissions", {
+      eventId: args.eventId,
+      formId: args.formId,
+      sourceRef: args.sourceRef,
+      title: args.title,
+      status: args.status,
+      answers: args.answers,
+      submittedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { id, created: true };
   },
 });

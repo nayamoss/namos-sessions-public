@@ -6,6 +6,7 @@ import {
   Columns3,
   Plus,
   Search,
+  Trash2,
   UserRoundCheck,
 } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -14,6 +15,8 @@ import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
 import { DataGrid, type DataGridColumn } from "@/components/shared/DataGrid";
 import { DetailPane } from "@/components/shared/DetailPane";
+import { ActivityTimeline, type SpeakerTimelineEvent } from "@/components/speakers/ActivityTimeline";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -24,6 +27,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -41,6 +45,7 @@ import type {
   Speaker,
   SpeakerConfirmationStatus,
   SpeakerId,
+  SpeakerNote,
   Submission,
   TaskId,
 } from "@/data/types";
@@ -275,6 +280,7 @@ export function SpeakerDetail({
   onConfirmationSaved,
   onTaskCreated,
   onTaskStatusChanged,
+  comms = [],
 }: {
   row: SpeakerOperationsRow;
   event: Event;
@@ -285,6 +291,7 @@ export function SpeakerDetail({
     taskId: string,
     status: OnboardingTask["status"],
   ) => void;
+  comms?: Comm[];
 }) {
   const repo = useRepo();
   const [confirmation, setConfirmation] = useState<SpeakerConfirmationStatus>(
@@ -305,6 +312,9 @@ export function SpeakerDetail({
   const [reminderPreview, setReminderPreview] = useState<CommPreview>();
   const [consolidatedPreview, setConsolidatedPreview] = useState<CommPreview>();
   const [sendingConsolidated, setSendingConsolidated] = useState(false);
+  const [notes, setNotes] = useState<SpeakerNote[]>();
+  const [noteBody, setNoteBody] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
   const currentSpeakerId = useRef(row.id);
 
   useEffect(() => {
@@ -317,7 +327,42 @@ export function SpeakerDetail({
     setDueDate("");
     setReminderPreview(undefined);
     setConsolidatedPreview(undefined);
+    setNotes(undefined);
+    setNoteBody("");
   }, [row.id, row.confirmationStatus]);
+
+  useEffect(() => {
+    let current = true;
+    void repo.speakerNotes.list({ eventId: event.id, speakerId: row.speaker.id })
+      .then((items) => { if (current) setNotes(items); })
+      .catch((error) => { if (current) setMessage({ tone: "error", text: error instanceof Error ? error.message : "Could not load notes." }); });
+    return () => { current = false; };
+  }, [event.id, repo.speakerNotes, row.speaker.id]);
+
+  const saveNote = async () => {
+    const body = noteBody.trim();
+    if (!body) return;
+    setSavingNote(true); setMessage(undefined);
+    try {
+      const id = await repo.speakerNotes.create({ eventId: event.id, speakerId: row.speaker.id, body });
+      setNotes((items) => [{ id, eventId: event.id, speakerId: row.speaker.id, authorId: "", body, createdAt: Date.now(), updatedAt: Date.now() }, ...(items ?? [])]);
+      setNoteBody(""); setMessage({ tone: "status", text: "Note saved." });
+    } catch (error) { setMessage({ tone: "error", text: error instanceof Error ? error.message : "Could not save note." }); }
+    finally { setSavingNote(false); }
+  };
+
+  const deleteNote = async (noteId: string) => {
+    setMessage(undefined);
+    try { await repo.speakerNotes.remove({ eventId: event.id, noteId }); setNotes((items) => items?.filter((note) => note.id !== noteId) ?? []); setMessage({ tone: "status", text: "Note deleted." }); }
+    catch (error) { setMessage({ tone: "error", text: error instanceof Error ? error.message : "Could not delete note." }); }
+  };
+
+  const timelineEvents = useMemo<SpeakerTimelineEvent[]>(() => [
+    ...(notes ?? []).map((note) => ({ id: `note-${note.id}`, type: "note" as const, timestamp: note.createdAt, title: "Added note", body: note.body })),
+    ...row.tasks.map((task) => ({ id: `task-${task.id}`, type: "task" as const, timestamp: task.completedAt ?? task.updatedAt ?? task.createdAt ?? task.dueDate ?? row.speaker.updatedAt ?? Date.now(), title: task.title, body: "", status: taskStatusLabels[task.status], isDone: task.status === "completed" })),
+    ...comms.filter((comm) => comm.speakerId === row.speaker.id).map((comm) => ({ id: `email-${comm.id}`, type: "email" as const, timestamp: comm.sentAt ?? comm.createdAt ?? Date.now(), title: comm.type === "reminder" ? "Sent reminder" : "Sent email", body: "", status: comm.status })),
+    ...(row.speaker.updatedAt ? [{ id: `status-${row.speaker.id}`, type: "status" as const, timestamp: row.speaker.updatedAt, title: "Confirmation status updated", body: "", status: confirmationLabels[row.confirmationStatus] }] : []),
+  ], [comms, notes, row.speaker.id, row.speaker.updatedAt, row.confirmationStatus, row.tasks]);
 
   const saveConfirmation = async () => {
     setSavingConfirmation(true);
@@ -591,7 +636,7 @@ export function SpeakerDetail({
             onClick={() => setAddOpen((open) => !open)}
             aria-expanded={addOpen}
           >
-            <Plus className="h-4 w-4" /> Add task
+            Add task
           </Button>
         </div>
 
@@ -698,6 +743,17 @@ export function SpeakerDetail({
             No onboarding tasks assigned.
           </p>
         )}
+      </section>
+
+      <section className="space-y-3" aria-labelledby="speaker-notes-heading">
+        <div><h3 id="speaker-notes-heading" className="text-sm font-semibold">Notes</h3><p className="mt-1 text-xs text-muted-foreground">Private organizer context for this speaker.</p></div>
+        <div className="space-y-2 rounded-lg bg-background p-3"><Textarea aria-label="New note" value={noteBody} onChange={(inputEvent) => setNoteBody(inputEvent.target.value)} onKeyDown={(keyEvent) => { if ((keyEvent.metaKey || keyEvent.ctrlKey) && keyEvent.key === "Enter") { keyEvent.preventDefault(); void saveNote(); } }} placeholder="Add a note…" disabled={savingNote} /><div className="flex items-center justify-between gap-2"><p className="text-xs text-muted-foreground">⌘/Ctrl + Enter to save</p><Button type="button" size="sm" onClick={() => void saveNote()} disabled={savingNote || !noteBody.trim()}>{savingNote ? "Saving…" : "Save note"}</Button></div></div>
+        {notes === undefined ? <p className="text-sm text-muted-foreground">Loading notes…</p> : notes.length === 0 ? <p className="rounded-lg bg-background px-3 py-6 text-center text-sm text-muted-foreground">No notes yet.</p> : <div className="space-y-2">{notes.map((note) => <article key={note.id} className="group rounded-lg bg-background p-3"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="whitespace-pre-wrap break-words text-sm">{note.body}</p><p className="mt-1 text-xs text-muted-foreground">{readableDate(note.createdAt)}</p></div><Button type="button" variant="ghost" size="icon" onClick={() => void deleteNote(note.id)} className="h-6 w-6 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100" title="Delete note"><Trash2 className="h-3.5 w-3.5" /><span className="sr-only">Delete note</span></Button></div></article>)}</div>}
+      </section>
+
+      <section className="space-y-3" aria-labelledby="speaker-activity-heading">
+        <div><h3 id="speaker-activity-heading" className="text-sm font-semibold">Activity</h3><p className="mt-1 text-xs text-muted-foreground">Notes, tasks, and delivery history in one record.</p></div>
+        <ActivityTimeline events={timelineEvents} loading={notes === undefined} />
       </section>
 
       {message && (
@@ -1115,6 +1171,7 @@ export default function Speakers() {
             ),
           )
         }
+        comms={comms}
       />
     ) : undefined;
 
@@ -1246,7 +1303,7 @@ export default function Speakers() {
                     onClick={openAddSpeaker}
                     disabled={loading || !event}
                   >
-                    <Plus className="h-4 w-4" /> Add speaker
+                    Add speaker
                   </Button>
                 }
               />
@@ -1262,45 +1319,19 @@ export default function Speakers() {
                 appearance="embedded"
               />
             ) : rows.length === 0 ? (
-              <section className="flex min-h-48 flex-col items-center justify-center gap-3 text-center">
-                <UserRoundCheck className="h-6 w-6 text-muted-foreground" />
-                <div>
-                  <p className="text-sm font-medium">No speakers yet</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Add a speaker manually or accept an abstract to build the
-                    roster.
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={openAddSpeaker}
-                >
-                  <Plus className="h-4 w-4" /> Add speaker
-                </Button>
-              </section>
+              <EmptyState
+                icon={UserRoundCheck}
+                title="No speakers yet"
+                message="Add a speaker manually or accept an abstract."
+                action={<Button type="button" variant="accent" size="sm" onClick={openAddSpeaker}><Plus /> Add speaker</Button>}
+              />
             ) : visibleRows.length === 0 ? (
-              <section className="flex min-h-48 flex-col items-center justify-center gap-3 text-center">
-                <Search className="h-6 w-6 text-muted-foreground" />
-                <div>
-                  <p className="text-sm font-medium">
-                    No speakers match this view
-                  </p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Clear the search and filters to return to the full
-                    accepted-speaker queue.
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setParams(new URLSearchParams())}
-                >
-                  Clear filters
-                </Button>
-              </section>
+              <EmptyState
+                icon={Search}
+                title="No speakers match this view"
+                message="Clear the search and filters to see every speaker."
+                action={<Button type="button" variant="outline" size="sm" onClick={() => setParams(new URLSearchParams())}>Clear filters</Button>}
+              />
             ) : (
               <DataGrid
                 rows={visibleRows}

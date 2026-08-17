@@ -1,6 +1,7 @@
 import { verifyToken } from "@clerk/backend";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../convex/_generated/api";
+import { buildEventAnalyticsSummary } from "../../src/lib/event-analytics";
 
 type Env = {
   AIRTABLE_API_KEY?: string;
@@ -15,6 +16,7 @@ type AirtableRecord = { id: string; fields: Record<string, unknown> };
 type AirtableResponse = AirtableRecord & { records: AirtableRecord[] };
 
 const tableFor: Record<Operation, string> = {
+  "analytics.summary": "Events",
   "events.list": "Events", "events.get": "Events", "events.getBySlug": "Events", "events.save": "Events",
   "events.rooms.list": "Rooms", "events.rooms.save": "Rooms", "events.rooms.remove": "Rooms",
   "events.tracks.list": "Tracks", "events.tracks.save": "Tracks", "events.tracks.remove": "Tracks",
@@ -69,6 +71,24 @@ async function airtable(env: Env, path: string, init?: RequestInit) {
   return response.json() as Promise<AirtableResponse>;
 }
 
+async function airtableEventRows(env: Env, tableName: string, eventId: unknown) {
+  const rows: Array<{ id: string } & Record<string, unknown>> = [];
+  let offset: string | undefined;
+  do {
+    const params = new URLSearchParams({
+      pageSize: "100",
+      filterByFormula: eventFilter(eventId),
+    });
+    if (offset) params.set("offset", offset);
+    const result = await airtable(env, `${encodeURIComponent(tableName)}?${params}`);
+    rows.push(...result.records.map(record));
+    offset = typeof (result as { offset?: unknown }).offset === "string"
+      ? (result as unknown as { offset: string }).offset
+      : undefined;
+  } while (offset);
+  return rows;
+}
+
 function eventFilter(eventId: unknown) {
   if (typeof eventId !== "string" || !eventId) throw new Error("An eventId is required for this operation.");
   return `({eventId}='${eventId.replaceAll("'", "\\'")}')`;
@@ -101,6 +121,33 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
     await requireAdmin(request, env);
     const { operation, input } = await request.json() as { operation?: Operation; input?: Record<string, unknown> };
     if (!operation || !input || !tableFor[operation]) return json(400, { error: "Unsupported data operation." });
+    if (operation === "analytics.summary") {
+      const [submissions, evaluations, assignments, speakers, agenda, communications, tasks] = await Promise.all([
+        airtableEventRows(env, "Submissions", input.eventId),
+        airtableEventRows(env, "Evaluations", input.eventId),
+        airtableEventRows(env, "Evaluation Assignments", input.eventId),
+        airtableEventRows(env, "Speakers", input.eventId),
+        airtableEventRows(env, "Agenda Items", input.eventId),
+        airtableEventRows(env, "Comms Log", input.eventId),
+        airtableEventRows(env, "Onboarding Tasks", input.eventId),
+      ]);
+      return json(200, buildEventAnalyticsSummary({
+        submissions: submissions.map((row) => ({ id: row.id, status: String(row.status || "pending") as never })),
+        evaluations: evaluations.map((row) => ({ assignmentId: typeof row.assignmentId === "string" ? row.assignmentId : undefined })),
+        assignments: assignments.map((row) => ({ id: row.id })),
+        speakers: speakers.map((row) => ({
+          confirmationStatus: row.confirmationStatus === "confirmed" || row.confirmationStatus === "declined" ? row.confirmationStatus : "awaiting",
+          bio: typeof row.bio === "string" ? row.bio : undefined,
+          headshotStorageKey: typeof row.headshotStorageKey === "string" ? row.headshotStorageKey : undefined,
+        })),
+        agenda: agenda.map((row) => ({ submissionId: typeof row.submissionId === "string" ? row.submissionId : undefined, isPublished: row.isPublished === true })),
+        communications: communications.map((row) => ({ status: row.status === "sent" || row.status === "failed" ? row.status : "queued" })),
+        tasks: tasks.map((row) => ({
+          status: row.status === "completed" || row.status === "in_progress" ? row.status : "pending",
+          dueDate: typeof row.dueDate === "number" ? row.dueDate : undefined,
+        })),
+      }));
+    }
     const table = encodeURIComponent(tableFor[operation]);
     if (operation === "events.getBySlug") {
       if (typeof input.slug !== "string" || !input.slug) return json(400, { error: "An event slug is required." });

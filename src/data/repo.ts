@@ -1,6 +1,9 @@
 import { createContext, useContext } from "react";
 import type {
+  ActivityEntry,
   ApiKey,
+  ApiScope,
+  ApiAuditLogEntry,
   GeneratedApiKey,
   AssignByFilterResult,
   AssignmentFilter,
@@ -17,6 +20,14 @@ import type {
   CommTemplate,
   CommTemplateWrite,
   CrossFieldLimit,
+  AirtableConnectInput,
+  AirtableImportResult,
+  ContentIntegration,
+  ContentIntegrationProvider,
+  NotionConnectInput,
+  NotionImportResult,
+  SanityConnectInput,
+  SanityPublishResult,
   EmailIntegration,
   EmailIntegrationSaveInput,
   AgentProviderSetting,
@@ -25,6 +36,7 @@ import type {
   EvaluationCriterion,
   EvaluationCriterionScore,
   EvaluationPlan,
+  EventAnalyticsSummary,
   Event,
   EventId,
   EventInviteResult,
@@ -34,6 +46,7 @@ import type {
   FormId,
   OnboardingTask,
   Organizer,
+  Organization,
   PublicEmbed,
   Embed,
   EmbedId,
@@ -53,6 +66,7 @@ import type {
   SpeakerId,
   SpeakerImportResult,
   SpeakerImportRow,
+  SpeakerNote,
   Sponsor,
   SponsorContact,
   SponsorDetail,
@@ -63,6 +77,7 @@ import type {
   Submission,
   SubmissionEditability,
   SubmissionForm,
+  SubmissionFormStatus,
   SubmissionFormWrite,
   SubmissionId,
   Tag,
@@ -75,6 +90,9 @@ import type {
 
 export interface EventScope {
   eventId: EventId;
+}
+export interface AnalyticsRepo {
+  summary(scope: EventScope): Promise<EventAnalyticsSummary>;
 }
 export interface EventsRepo {
   list(): Promise<Event[]>;
@@ -96,6 +114,8 @@ export interface EventsRepo {
     endDate: number;
     pullTeamFrom?: boolean;
   }): Promise<EventId>;
+  /** Permanently removes a draft event and every event-scoped record it owns. */
+  remove(eventId: EventId): Promise<void>;
   listRooms(scope: EventScope): Promise<Room[]>;
   saveRoom(room: Omit<Room, "id"> & { id?: string }): Promise<string>;
   removeRoom(input: EventScope & { id: string }): Promise<void>;
@@ -198,6 +218,13 @@ export interface FormsRepo {
   createFromTemplate(templateId: string, eventId: EventId): Promise<string>;
   duplicate(id: string, eventId: EventId): Promise<string>;
   remove(id: string, eventId: EventId): Promise<void>;
+  /** Open or close the public call for proposals. Separate from `save`, which never
+   *  changes status — see the note on the `setStatus` mutation in convex/forms.ts. */
+  setStatus(input: {
+    id: string;
+    eventId: EventId;
+    status: SubmissionFormStatus;
+  }): Promise<SubmissionFormStatus>;
 }
 export interface PublicSubmissionInput {
   eventId: EventId;
@@ -232,13 +259,18 @@ export interface PublicFormSubmissionInput {
   eventSlug: string;
   formId: string;
   idempotencyKey: string;
-  name: string;
+  firstName: string;
+  lastName: string;
+  /** Legacy single-field name, still accepted by the public HTTP API. */
+  name?: string;
   email: string;
   title: string;
   answers: Record<string, string>;
   /** The public form's opaque key for the primary abstract body, never a label. */
   abstractFieldKey?: string;
   participants?: PublicFormParticipantInput[];
+  /** Single-use Cloudflare Turnstile proof, verified at the edge before Convex is called. */
+  turnstileToken: string;
 }
 /** The resolved speaker is returned only so the portal handoff opens that speaker's record. */
 export interface PublicFormSubmissionResult {
@@ -367,6 +399,11 @@ export interface SpeakersRepo {
     input: SpeakerDocumentScope & { documentId: string },
   ): Promise<void>;
 }
+export interface SpeakerNotesRepo {
+  list(scope: EventScope & { speakerId: SpeakerId }): Promise<SpeakerNote[]>;
+  create(input: EventScope & { speakerId: SpeakerId; body: string }): Promise<string>;
+  remove(input: EventScope & { noteId: string }): Promise<void>;
+}
 // `score` is optional because a scorecard review records per-criterion values instead. Exactly
 // one of the two paths is used per call: legacy single score, or `criteriaScores`.
 export interface EvaluationWrite {
@@ -459,6 +496,7 @@ export interface AgendaRepo {
   listForSpeaker(scope: EventScope & { speakerId: SpeakerId }): Promise<SpeakerAgendaItem[]>;
   detectConflicts(scope: EventScope): Promise<AgendaConflict[]>;
   save(input: AgendaWrite): Promise<string>;
+  remove(input: EventScope & { id: string }): Promise<void>;
   publishSchedule(eventId: EventId): Promise<void>;
 }
 export interface TaskCreateInput {
@@ -565,24 +603,34 @@ export interface PortalFormsRepo {
   }): Promise<string>;
 }
 /**
- * Organizer role lives on a database row, never in an env var or hardcoded list.
- * `claimOwner` only succeeds while no organizer exists yet — a one-time bootstrap for the
- * very first signed-in account. After that, only an existing owner can `add`/`remove`.
+ * Organizer role lives on a database row, never in an env var or hardcoded list, and every row
+ * is scoped to one organization — see OrganizationsRepo. Holding a row grants access to that
+ * organization's events and nothing else. Only an existing owner of that organization can
+ * `add`/`remove`.
  */
 export interface OrganizersRepo {
-  list(): Promise<Organizer[]>;
+  list(organizationId: string): Promise<Organizer[]>;
   getMine(): Promise<Organizer | null>;
   isCurrentUserOrganizer(): Promise<boolean>;
-  canClaimOwner(): Promise<boolean>;
   hasAdminAccess(): Promise<boolean>;
-  claimOwner(): Promise<string>;
   completeOnboarding(): Promise<void>;
   add(input: {
+    organizationId: string;
     userId?: string;
     email: string;
     role: "owner" | "admin";
   }): Promise<string>;
-  remove(userId: string): Promise<void>;
+  remove(input: { organizationId: string; userId: string }): Promise<void>;
+}
+/**
+ * The tenant boundary. Every signup gets their own organization via `createForCurrentUser`
+ * (idempotent per user) and never joins an existing one uninvited.
+ */
+export interface OrganizationsRepo {
+  createForCurrentUser(input?: { name?: string }): Promise<string>;
+  listMine(): Promise<Organization[]>;
+  getMine(): Promise<Organization | null>;
+  rename(input: { organizationId: string; name: string }): Promise<void>;
 }
 /**
  * Onboarding-captured personalization (name, solo/team, referral source) for ANY signed-in
@@ -607,10 +655,24 @@ export interface EmailIntegrationsRepo {
   test(scope: EventScope): Promise<{ status: "sent"; testRecipient: string }>;
   disconnect(scope: EventScope): Promise<{ status: "disconnected" }>;
 }
+export interface ContentIntegrationsRepo {
+  status(scope: EventScope & { provider: ContentIntegrationProvider }): Promise<ContentIntegration | null>;
+  connectNotion(input: NotionConnectInput): Promise<{ status: "connected" }>;
+  importNotion(scope: EventScope): Promise<NotionImportResult>;
+  connectAirtable(input: AirtableConnectInput): Promise<{ status: "connected" }>;
+  importAirtable(scope: EventScope): Promise<AirtableImportResult>;
+  connectSanity(input: SanityConnectInput): Promise<{ status: "connected" }>;
+  publishSanity(scope: EventScope): Promise<SanityPublishResult>;
+  disconnect(scope: EventScope & { provider: ContentIntegrationProvider }): Promise<{ status: "disconnected" }>;
+}
 export interface ApiKeysRepo {
-  list(): Promise<ApiKey[]>;
-  generate(label: string): Promise<GeneratedApiKey>;
-  revoke(id: string): Promise<void>;
+  list(scope: EventScope): Promise<ApiKey[]>;
+  generate(input: EventScope & { label: string; scopes?: ApiScope[] }): Promise<GeneratedApiKey>;
+  revoke(input: EventScope & { id: string }): Promise<void>;
+  auditLog(scope: EventScope): Promise<ApiAuditLogEntry[]>;
+}
+export interface ActivityRepo {
+  list(scope: EventScope): Promise<ActivityEntry[]>;
 }
 export interface AgentRunsRepo {
   canUse(scope: EventScope): Promise<boolean>;
@@ -627,12 +689,17 @@ export interface AgentProviderSettingsRepo {
   status(scope: EventScope): Promise<AgentProviderSetting>;
   saveManaged(scope: EventScope): Promise<{ mode: "managed"; status: "ready" }>;
   saveByok(input: EventScope & { apiKey: string }): Promise<{ mode: "bring_your_own"; status: "ready" }>;
+  disconnectByok(scope: EventScope): Promise<{ mode: "managed"; status: "ready" }>;
+  assignBillingOwner(scope: EventScope): Promise<{ billingOwnerAssigned: true }>;
 }
 export interface Repository {
+  activity: ActivityRepo;
+  analytics: AnalyticsRepo;
   agentProviderSettings: AgentProviderSettingsRepo;
   agentRuns: AgentRunsRepo;
   apiKeys: ApiKeysRepo;
   emailIntegrations: EmailIntegrationsRepo;
+  contentIntegrations: ContentIntegrationsRepo;
   events: EventsRepo;
   eventMembers: EventMembersRepo;
   tags: TagsRepo;
@@ -642,6 +709,7 @@ export interface Repository {
   forms: FormsRepo;
   submissions: SubmissionsRepo;
   speakers: SpeakersRepo;
+  speakerNotes: SpeakerNotesRepo;
   evaluations: EvaluationRepo;
   agenda: AgendaRepo;
   tasks: TasksRepo;
@@ -652,6 +720,7 @@ export interface Repository {
   publicForms: PublicFormsRepo;
   portalForms: PortalFormsRepo;
   organizers: OrganizersRepo;
+  organizations: OrganizationsRepo;
   profiles: ProfilesRepo;
 }
 

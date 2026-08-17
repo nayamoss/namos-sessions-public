@@ -32,17 +32,38 @@ const agentRunStatus = v.union(
 );
 
 export default defineSchema({
-  // Who is allowed to manage events (vs. authenticated-but-not-an-organizer). Role is a
-  // database row, never an env var or hardcoded list — see convex/organizers.ts for how rows
-  // get here: a one-time "claim owner" bootstrap while this table is empty, then an existing
-  // owner explicitly adds anyone else. userId is the Clerk identity.subject.
+  // The tenant boundary. Every event and every organizers row belongs to exactly one of
+  // these. Created by convex/organizations.ts:createForCurrentUser when someone completes
+  // onboarding — each signup gets their own, and never joins an existing one uninvited.
+  organizations: defineTable({
+    name: v.string(),
+    createdByUserId: v.string(),
+    createdAt: v.number(),
+  }).index("by_createdByUserId", ["createdByUserId"]),
+  // Who is allowed to manage the events of ONE organization (vs. authenticated-but-not-an-
+  // organizer). Role is a database row, never an env var or hardcoded list — see
+  // convex/organizers.ts for how rows get here: the owner row is created alongside the
+  // organization itself, then that owner explicitly adds anyone else. userId is the Clerk
+  // identity.subject.
+  //
+  // organizationId is optional ONLY because rows written before the multi-tenancy migration
+  // predate it and Convex validates the schema against existing rows on deploy. It is never
+  // optional in meaning: every guard in convex/functions.ts treats a missing organizationId
+  // as deny, so an unbackfilled row grants nothing. Run migrations:backfillOrganizations
+  // immediately after deploying — see docs/features/multi-tenant-organizations/design.md.
   organizers: defineTable({
+    organizationId: v.optional(v.id("organizations")),
     userId: v.string(),
     email: v.string(),
     role: v.union(v.literal("owner"), v.literal("admin")),
     onboardingCompletedAt: v.optional(v.number()),
     createdAt: v.number(),
-  }).index("by_userId", ["userId"]).index("by_email", ["email"]),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_email", ["email"])
+    .index("by_organization", ["organizationId"])
+    .index("by_org_userId", ["organizationId", "userId"])
+    .index("by_org_email", ["organizationId", "email"]),
   // Onboarding-captured personalization (name, solo/team, referral source) for ANY signed-in
   // user, not just site owners/admins. Deliberately separate from `organizers` — that table
   // only ever gets a row for the one-time bootstrap owner or someone an owner explicitly adds
@@ -56,6 +77,15 @@ export default defineSchema({
     referralSource: v.optional(v.string()),
     updatedAt: v.number(),
   }).index("by_userId", ["userId"]),
+  // One row per push token. userId is Clerk's identity.subject and is updated when a device
+  // is signed into a different account, while the token index makes registration idempotent.
+  device_tokens: defineTable({
+    userId: v.string(),
+    token: v.string(),
+    platform: v.union(v.literal("ios")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_userId", ["userId"]).index("by_token", ["token"]),
   event_members: defineTable({
     eventId: v.id("events"),
     userId: v.string(),
@@ -77,25 +107,77 @@ export default defineSchema({
     .index("by_email", ["email"])
     .index("by_event_userId", ["eventId", "userId"])
     .index("by_event_email", ["eventId", "email"]),
+  notifications: defineTable({
+    eventId: v.id("events"),
+    recipientUserId: v.string(),
+    kind: v.union(
+      v.literal("invite_sent"),
+      v.literal("invite_accepted"),
+      v.literal("invite_declined"),
+      v.literal("member_removed"),
+      v.literal("submission_received"),
+      v.literal("submission_withdrawn"),
+      v.literal("reviewer_assigned"),
+      v.literal("evaluation_completed"),
+      v.literal("decision_sent"),
+      v.literal("comms_delivery_failed"),
+    ),
+    title: v.string(),
+    body: v.optional(v.string()),
+    linkPath: v.optional(v.string()),
+    relatedId: v.optional(v.string()),
+    readAt: v.optional(v.number()),
+    emailedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_recipient", ["recipientUserId", "createdAt"])
+    .index("by_recipient_unread", ["recipientUserId", "readAt"])
+    .index("by_event", ["eventId"]),
+  // organizationId is the tenant boundary for everything below an event: rooms, tracks,
+  // speakers, submissions, evaluations, sponsors and agenda items are all eventId-scoped
+  // already, so they inherit their tenant through here. Optional for the same migration
+  // reason as organizers.organizationId above, and likewise treated as deny when missing.
   events: defineTable({
+    organizationId: v.optional(v.id("organizations")),
     name: v.string(), slug: v.string(), type: v.optional(v.string()), websiteUrl: v.optional(v.string()),
     location: v.optional(v.string()), timezone: v.string(), startDate: v.number(), endDate: v.number(),
     description: v.optional(v.string()), contactEmail: v.optional(v.string()), logoFileId: v.optional(v.string()),
     programPublishedAt: v.optional(v.number()),
     theme: v.optional(v.string()), logoStorageKey: v.optional(v.string()), backgroundStorageKey: v.optional(v.string()),
     exhibitorsEnabled: v.boolean(), sponsorsEnabled: v.boolean(), defaultOnboardingTemplateId: v.optional(v.id("task_templates")),
+    // The Clerk user whose subscription pays for Namos-managed AI. Optional for existing
+    // events; an organization owner assigns it once before managed AI can be enabled.
+    billingOwnerUserId: v.optional(v.string()),
     status: v.union(v.literal("draft"), v.literal("published"), v.literal("archived")),
     createdAt: v.number(), updatedAt: v.number(),
-  }).index("by_slug", ["slug"]),
-  api_keys: defineTable({
+  }).index("by_slug", ["slug"]).index("by_organization", ["organizationId"]),
+  api_tokens: defineTable({
+    // A token is scoped to exactly one event — never a bare organizer-wide grant. Without
+    // this, any organizer's token (or the organizer-session token routes) could read/act on
+    // every event in the deployment, which is a real cross-tenant leak on any deployment
+    // that hosts more than one customer's events (see #178 security review, 2026-08-15).
+    eventId: v.id("events"),
     label: v.string(),
     keyHash: v.string(),
     keyPrefix: v.string(),
+    scopes: v.array(v.union(
+      v.literal("events:read"), v.literal("submissions:read"), v.literal("submissions:write"),
+      v.literal("speakers:read"), v.literal("agenda:read"), v.literal("tasks:read"),
+    )),
     createdByUserId: v.string(),
     createdAt: v.number(),
     lastUsedAt: v.optional(v.number()),
     revokedAt: v.optional(v.number()),
-  }).index("by_keyHash", ["keyHash"]),
+  }).index("by_keyHash", ["keyHash"]).index("by_event", ["eventId"]),
+  api_idempotency_keys: defineTable({
+    tokenId: v.id("api_tokens"), method: v.string(), path: v.string(), key: v.string(), bodyHash: v.string(),
+    status: v.number(), responseJson: v.string(), createdAt: v.number(), expiresAt: v.number(),
+  }).index("by_token_method_path_key", ["tokenId", "method", "path", "key"]).index("by_expiry", ["expiresAt"]),
+  api_audit_log: defineTable({
+    requestId: v.string(), tokenId: v.id("api_tokens"), operation: v.string(), method: v.string(), path: v.string(),
+    status: v.number(), scopeUsed: v.string(), createdAt: v.number(),
+  }).index("by_token", ["tokenId"]).index("by_createdAt", ["createdAt"]),
+  api_rate_limits: defineTable({ tokenId: v.id("api_tokens"), windowStart: v.number(), count: v.number() }).index("by_token", ["tokenId"]),
   rooms: defineTable({ eventId: v.id("events"), name: v.string(), capacity: v.optional(v.number()), sortOrder: v.number() }).index("by_event", ["eventId"]),
   tracks: defineTable({ eventId: v.id("events"), name: v.string(), color: v.optional(v.string()), sortOrder: v.number() }).index("by_event", ["eventId"]),
   tags: defineTable({
@@ -118,7 +200,7 @@ export default defineSchema({
       assignTagIds: v.optional(v.array(v.id("tags"))),
       assignTrackId: v.optional(v.id("tracks")),
       assignSponsorId: v.optional(v.id("sponsors")),
-      setStatus: v.optional(v.union(v.literal("pending"), v.literal("accept_queue"), v.literal("accepted"))),
+      setStatus: v.optional(v.union(v.literal("pending"), v.literal("accept_queue"), v.literal("accepted"), v.literal("maybe"))),
       reviewerUserIds: v.optional(v.array(v.string())),
     }))),
     closeDate: v.optional(v.number()), submissionLimit: v.optional(v.number()), allowMultipleDrafts: v.boolean(), autoRedirectToPortal: v.boolean(), successPageMessage: v.optional(v.string()), reminderEmailEnabled: v.boolean(), adminUserIds: v.array(v.string()), notifyAdminsOnNew: v.array(v.string()), notifyAdminsOnUpdate: v.array(v.string()), sendSubmitterConfirmation: v.boolean(), portalFormSettings: v.optional(v.object({ sendConfirmationEmail: v.boolean(), confirmationBody: v.optional(v.string()) })), status: v.union(v.literal("draft"), v.literal("open"), v.literal("closed")), createdAt: v.number(), updatedAt: v.number(),
@@ -139,12 +221,17 @@ export default defineSchema({
     xUrl: v.optional(v.string()),
     facebookUrl: v.optional(v.string()),
     websiteUrl: v.optional(v.string()),
+    sourceRef: v.optional(v.string()),
+    sanityDocId: v.optional(v.string()),
     headshotStorageKey: v.optional(v.string()),
     confirmationStatus: v.optional(v.union(v.literal("awaiting"), v.literal("confirmed"), v.literal("declined"))),
+    // Check-in is recorded independently of invitation confirmation, with the organizer who recorded it.
+    checkedInAt: v.optional(v.number()),
+    checkedInByUserId: v.optional(v.string()),
     status: v.union(v.literal("invited"), v.literal("active"), v.literal("inactive")),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_event", ["eventId"]).index("by_event_email", ["eventId", "email"]),
+  }).index("by_event", ["eventId"]).index("by_event_email", ["eventId", "email"]).index("by_event_sourceRef", ["eventId", "sourceRef"]).index("by_event_checkedIn", ["eventId", "checkedInAt"]),
   speaker_documents: defineTable({
     submissionId: v.id("submissions"),
     speakerId: v.id("speakers"),
@@ -155,6 +242,17 @@ export default defineSchema({
     fileName: v.string(),
     createdAt: v.number(),
   }).index("by_submission", ["submissionId"]).index("by_speaker", ["speakerId"]),
+  // Organizer-authored operational context for one speaker. This is intentionally
+  // distinct from onboarding tasks: a note is an observation, not work assigned to
+  // the speaker, and it never appears in the speaker portal.
+  speaker_notes: defineTable({
+    eventId: v.id("events"),
+    speakerId: v.id("speakers"),
+    authorId: v.string(),
+    body: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_event", ["eventId"]).index("by_speaker", ["speakerId"]),
   submissions: defineTable({
     eventId: v.id("events"),
     formId: v.id("submission_forms"),
@@ -164,14 +262,15 @@ export default defineSchema({
     trackId: v.optional(v.id("tracks")),
     sponsorId: v.optional(v.id("sponsors")),
     title: v.string(),
-    status: v.union(v.literal("draft"), v.literal("pending"), v.literal("accept_queue"), v.literal("accepted"), v.literal("decline_queue"), v.literal("declined"), v.literal("withdrawn")),
+    status: v.union(v.literal("draft"), v.literal("pending"), v.literal("accept_queue"), v.literal("accepted"), v.literal("maybe"), v.literal("decline_queue"), v.literal("declined"), v.literal("withdrawn")),
     answers: v.any(),
+    sourceRef: v.optional(v.string()),
     submittedAt: v.optional(v.number()),
     lastSpeakerEditAt: v.optional(v.number()),
     speakerEditCount: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_event", ["eventId"]).index("by_form", ["formId"]).index("by_form_idempotency", ["formId", "idempotencyKey"]).index("by_speaker", ["speakerId"]),
+  }).index("by_event", ["eventId"]).index("by_form", ["formId"]).index("by_form_idempotency", ["formId", "idempotencyKey"]).index("by_speaker", ["speakerId"]).index("by_event_sourceRef", ["eventId", "sourceRef"]),
   evaluations: defineTable({
     eventId: v.id("events"),
     submissionId: v.id("submissions"),
@@ -273,6 +372,9 @@ export default defineSchema({
     // Optional only for preview rows created before provider choice shipped. Every new run
     // writes an explicit snapshot in agentRuns.create.
     providerMode: v.optional(v.union(v.literal("managed"), v.literal("bring_your_own"))),
+    billingOwnerUserId: v.optional(v.string()),
+    managedAllowanceId: v.optional(v.id("agent_managed_allowances")),
+    managedReservedTokens: v.optional(v.number()),
     idempotencyKey: v.string(),
     stepCount: v.number(),
     maxSteps: v.number(),
@@ -313,8 +415,24 @@ export default defineSchema({
     inputTokens: v.number(),
     outputTokens: v.number(),
     billable: v.boolean(),
+    settledAt: v.optional(v.number()),
     createdAt: v.number(),
   }).index("by_event", ["eventId"]).index("by_run", ["runId"]),
+  // One durable, atomic quota bucket per Clerk billing owner and UTC month. The configured
+  // Clerk plan determines its limits; this table only records reservations and settled use.
+  agent_managed_allowances: defineTable({
+    billingOwnerUserId: v.string(),
+    periodStart: v.number(),
+    planSlug: v.string(),
+    runLimit: v.number(),
+    tokenLimit: v.number(),
+    reservedRuns: v.number(),
+    reservedTokens: v.number(),
+    usedRuns: v.number(),
+    usedTokens: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_owner_period", ["billingOwnerUserId", "periodStart"]),
   agent_run_events: defineTable({
     eventId: v.id("events"),
     runId: v.id("agent_runs"),
@@ -408,6 +526,7 @@ export default defineSchema({
     locationDetails: v.optional(v.string()),
     calendarUid: v.optional(v.string()),
     calendarSequence: v.optional(v.number()),
+    sanityDocId: v.optional(v.string()),
     isPublished: v.boolean(),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -479,6 +598,29 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_event", ["eventId"]),
+  content_integrations: defineTable({
+    eventId: v.id("events"),
+    provider: v.union(v.literal("notion"), v.literal("airtable"), v.literal("sanity")),
+    authMethod: v.union(v.literal("notion_internal_token"), v.literal("airtable_pat"), v.literal("sanity_token")),
+    direction: v.union(v.literal("pull"), v.literal("push")),
+    target: v.union(v.literal("speakers"), v.literal("submissions"), v.literal("public_program")),
+    config: v.object({
+      notionDatabaseId: v.optional(v.string()),
+      airtableBaseId: v.optional(v.string()),
+      airtableTableName: v.optional(v.string()),
+      sanityProjectId: v.optional(v.string()),
+      sanityDataset: v.optional(v.string()),
+    }),
+    credentialHint: v.string(),
+    credentialEnvelope: v.object({ version: v.literal(1), iv: v.string(), ciphertext: v.string(), tag: v.string() }),
+    status: v.union(v.literal("connected"), v.literal("error")),
+    lastError: v.optional(v.string()),
+    lastSyncedAt: v.optional(v.number()),
+    lastSyncCursor: v.optional(v.string()),
+    updatedByUserId: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_event", ["eventId"]).index("by_event_provider", ["eventId", "provider"]),
   // A browser receives only this opaque capability after a public CFP submission. The
   // server-side email handler exchanges it for the linked records, so database ids never
   // have to travel through the public form or its confirmation request.

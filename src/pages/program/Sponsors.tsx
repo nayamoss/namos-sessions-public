@@ -5,7 +5,6 @@ import {
   Check,
   Handshake,
   Pencil,
-  Plus,
   Search,
   Trash2,
 } from "lucide-react";
@@ -15,6 +14,7 @@ import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
 import { DataGrid, type DataGridColumn } from "@/components/shared/DataGrid";
 import { DetailPane } from "@/components/shared/DetailPane";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -65,6 +65,7 @@ const submissionStatusLabels: Record<SubmissionStatus, string> = {
   pending: "Pending",
   accept_queue: "Accept Queue",
   accepted: "Accepted",
+  maybe: "Maybe",
   decline_queue: "Decline Queue",
   declined: "Declined",
   withdrawn: "Withdrawn",
@@ -600,7 +601,7 @@ function SponsorDetailPane({
               size="sm"
               onClick={() => setEditingContact("new")}
             >
-              <Plus /> Add contact
+              Add contact
             </Button>
           </div>
           {editingContact === "new" && (
@@ -1211,7 +1212,7 @@ export default function Sponsors() {
           }
           primaryAction={
             <Button variant="accent" size="sm" onClick={() => openPane("add")}>
-              <Plus /> Add sponsor
+              Add sponsor
             </Button>
           }
         />
@@ -1221,22 +1222,19 @@ export default function Sponsors() {
           </p>
         )}
         {!loading && sponsors.length === 0 ? (
-          <div className={cardSurfaceClasses("default", "flex min-h-64 flex-col items-center justify-center bg-muted/60 p-8 text-center")}>
-            <Handshake className="h-10 w-10 text-muted-foreground" />
-            <h2 className="mt-4 text-base font-semibold">No sponsors yet</h2>
-            <p className="mt-2 max-w-md text-sm text-muted-foreground">
-              Add your first sponsor to start tracking tiers, contacts, and
-              deliverables.
-            </p>
-            <Button className="mt-4" size="sm" onClick={() => openPane("add")}>
-              Add sponsor
-            </Button>
+          <div className={cardSurfaceClasses("default")}>
+            <EmptyState
+              icon={Handshake}
+              title="Add your first sponsor"
+              message="Track tiers, contacts, deliverables, and sponsored submissions in one place."
+              action={<Button variant="accent" size="sm" onClick={() => openPane("add")}>Add sponsor</Button>}
+            />
           </div>
         ) : (
           <DataGrid
             rows={visible}
             columns={columns}
-            empty="No sponsors match these filters."
+            empty={<EmptyState compact icon={Search} title="No sponsors match these filters" message="Clear the search or choose another tier." action={<Button variant="outline" size="sm" onClick={() => { setSearch(""); setTierFilter("all"); }}>Clear filters</Button>} />}
             loading={loading}
             skeletonRows={4}
             onRowActivated={(sponsor) => openPane("detail", sponsor.id)}

@@ -19,49 +19,22 @@ function renderTabs() {
   document.body.append(container);
   const root: Root = createRoot(container);
   act(() => root.render(<TabsHarness />));
-  const tab = (label: string) => Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.startsWith(label))!;
   return {
     container,
-    tab,
+    trigger: () => container.querySelector<HTMLButtonElement>('button[aria-label^="Submission status:"]')!,
     cleanup: () => { act(() => root.unmount()); container.remove(); },
   };
 }
 
 describe("StatusTabs", () => {
-  it("keeps tabs in a single scrollable row and changes the active tab", () => {
+  it("uses a compact filter menu instead of a horizontal status strip", () => {
     const view = renderTabs();
-    const all = view.tab("All");
-    const accepted = view.tab("Accepted");
+    const trigger = view.trigger();
 
-    expect(view.container.querySelector("[data-status-tabs-scroll]")).toHaveClass("overflow-x-auto");
-    expect(view.container.querySelector('[role="tablist"]')).toHaveClass("flex-nowrap");
-    expect(all).toHaveAttribute("aria-selected", "true");
+    expect(view.container.querySelector('[role="tablist"]')).toBeNull();
+    expect(trigger).toHaveTextContent(/Filter\s*All/);
 
-    act(() => accepted.click());
-
-    expect(accepted).toHaveAttribute("aria-selected", "true");
-    expect(all).toHaveAttribute("aria-selected", "false");
-    view.cleanup();
-  });
-
-  it("supports arrow, Home, and End keyboard navigation", () => {
-    const view = renderTabs();
-    const all = view.tab("All");
-    const accepted = view.tab("Accepted");
-    const pending = view.tab("Pending");
-
-    all.focus();
-    act(() => all.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })));
-    expect(accepted).toHaveFocus();
-    expect(accepted).toHaveAttribute("aria-selected", "true");
-
-    act(() => accepted.dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true })));
-    expect(pending).toHaveFocus();
-    expect(pending).toHaveAttribute("aria-selected", "true");
-
-    act(() => pending.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true })));
-    expect(all).toHaveFocus();
-    expect(all).toHaveAttribute("aria-selected", "true");
+    expect(trigger).toHaveAttribute("aria-label", "Submission status: All");
     view.cleanup();
   });
 });

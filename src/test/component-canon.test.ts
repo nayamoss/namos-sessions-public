@@ -73,12 +73,25 @@ describe("shared component canon", () => {
     expect(violations).toEqual([]);
   });
 
+  it("does not render redundant CFP availability or count summaries beneath card titles", () => {
+    const violations = sourceFiles(join(sourceRoot, "pages")).flatMap((file) => {
+      const source = readFileSync(file, "utf8");
+      return /(?:Open|Closed)[\s\S]{0,120}[·•][\s\S]{0,120}submissions[\s\S]{0,120}[·•][\s\S]{0,120}drafts|Open for submissions/.test(source)
+        ? [relative(sourceRoot, file).replaceAll("\\", "/")]
+        : [];
+    });
+    expect(violations).toEqual([]);
+  });
+
   it("keeps raw buttons outside reusable UI components explicitly classified", () => {
     const allowed = new Set([
       "components/AccountMenu.tsx",
       "components/AppLayout.tsx",
       "components/EventSwitcher.tsx",
       "components/NotificationBell.tsx",
+      // Same popover surface as the bell above: notification rows are
+      // hand-rolled buttons so the whole row is the hit target.
+      "components/NotificationPanel.tsx",
       "components/OrgMenu.tsx",
       "components/ThemeMenuItems.tsx",
       "components/availability/AvailabilityEditor.tsx",
@@ -103,6 +116,11 @@ describe("shared component canon", () => {
       "pages/onboarding/steps/ImportDataStep.tsx",
       "pages/portal/PortalForms.tsx",
       "pages/portal/PortalPages.tsx",
+      // Public embed feeds (agenda/sessions/itinerary/speakers/gallery): hand-rolled
+      // buttons for session cards, day tabs, speaker tiles, and the photo gallery so
+      // the whole card/tile is the click target and opens the inline detail panel.
+      // Same rationale as the other hand-rolled-row entries above.
+      "pages/public/EmbedPage.tsx",
       "pages/program/Agenda.tsx",
       "pages/program/Evaluation.tsx",
       "pages/program/ScorecardForm.tsx",

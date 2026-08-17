@@ -9,6 +9,7 @@ describe("speaker submission editability", () => {
   it.each([
     ["draft", true, "draft"],
     ["pending", true, "submitted"],
+    ["maybe", true, "submitted"],
     ["withdrawn", true, "submitted"],
     ["accept_queue", false, "under_review"],
     ["decline_queue", false, "under_review"],

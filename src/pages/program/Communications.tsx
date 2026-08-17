@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   FileText,
   Mail,
-  Plus,
   Send,
   TriangleAlert,
 } from "lucide-react";
@@ -14,7 +13,7 @@ import { useCurrentEvent } from "@/components/EventContext";
 import { DataGrid, type DataGridColumn } from "@/components/shared/DataGrid";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { StatCard } from "@/components/shared/StatCard";
-import { StatusTabs } from "@/components/shared/StatusTabs";
+import { FilterMenu } from "@/components/shared/StatusTabs";
 import { Button } from "@/components/ui/button";
 import { cardSurfaceClasses } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -22,7 +21,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useRepo } from "@/data/repo";
-import type { Comm, CommTemplate } from "@/data/types";
+import type { Comm, CommTemplate, Event } from "@/data/types";
 import { calendarInvite } from "@/lib/calendar-invite";
 import { submissionConfirmationEmail } from "@/lib/confirmation-email";
 import { templateKinds } from "./CommTemplateEditor";
@@ -88,20 +87,23 @@ function relativeTime(value: number) {
   return minutes < 60 ? `${minutes}m ago` : `${Math.round(minutes / 60)}h ago`;
 }
 
-function downloadInvite() {
-  const now = Date.now();
+/** Sample invite for the active event, so organizers see their own branding and times. */
+function downloadInvite(event: Pick<Event, "name" | "slug" | "location" | "startDate"> | undefined) {
+  const startTime = event?.startDate ?? Date.now() + 86_400_000;
   const content = calendarInvite({
-    uid: `sessionboard-preview-${now}`,
-    title: "Schedule invitation preview",
-    startTime: now + 86_400_000,
-    endTime: now + 90_000_000,
+    uid: `namos-sessions-preview-${event?.slug ?? "event"}`,
+    title: event ? `${event.name} — schedule invitation preview` : "Schedule invitation preview",
+    startTime,
+    endTime: startTime + 45 * 60_000,
+    location: event?.location,
+    description: "Sample invite. Real invites carry each speaker's own session times, room and portal link.",
   });
   const url = URL.createObjectURL(
     new Blob([content], { type: "text/calendar;charset=utf-8" }),
   );
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = "takumi-talks-invitation.ics";
+  anchor.download = `${event?.slug ?? "event"}-invitation-preview.ics`;
   anchor.click();
   URL.revokeObjectURL(url);
 }
@@ -317,7 +319,6 @@ export default function Communications() {
                         : "#"
                     }
                   >
-                    <Plus className="h-4 w-4" />
                     New template
                   </Link>
                 </Button>
@@ -349,12 +350,14 @@ export default function Communications() {
                   ))}
                 </div>
               ) : (
-                <div className="rounded-lg bg-background p-8 text-center">
-                  <p className="font-medium">No templates yet</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Create one to reuse for confirmations, decisions, and
-                    reminders.
-                  </p>
+                <div className="rounded-lg bg-background">
+                  <EmptyState
+                    compact
+                    icon={FileText}
+                    title="Create your first message template"
+                    message="Reuse consistent copy for confirmations, decisions, reminders, and calendar delivery."
+                    action={<Button type="button" variant="accent" size="sm" asChild><Link to={activeEvent ? `/events/${activeEvent.slug}/program/communications/templates/new/edit` : "#"}>New template</Link></Button>}
+                  />
                 </div>
               )}
             </section>
@@ -405,7 +408,7 @@ export default function Communications() {
                   <Send />
                   Preview confirmation
                 </Button>
-                <Button variant="outline" onClick={downloadInvite}>
+                <Button variant="outline" onClick={() => downloadInvite(activeEvent)}>
                   <CalendarDays />
                   Download .ics preview
                 </Button>
@@ -426,7 +429,7 @@ export default function Communications() {
                   An auditable history of delivery attempts for this event.
                 </p>
               </div>
-              <StatusTabs
+              <FilterMenu
                 tabs={tabs}
                 value={status}
                 onValueChange={(value) =>
@@ -459,7 +462,12 @@ export default function Communications() {
               />
             ) : (
               <div className={cardSurfaceClasses()}>
-                <EmptyState message="No delivery attempts match this view." />
+                <EmptyState
+                  icon={status === "all" ? Send : TriangleAlert}
+                  title={deliveries.length ? "No deliveries match this status" : "No delivery activity yet"}
+                  message={deliveries.length ? "Show all delivery attempts or choose another status." : "Confirmation, decision, reminder, and calendar deliveries will appear here after they run."}
+                  action={deliveries.length ? <Button variant="outline" size="sm" onClick={() => setStatus("all")}>Show all activity</Button> : undefined}
+                />
               </div>
             )}
           </TabsContent>

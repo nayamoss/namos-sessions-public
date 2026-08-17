@@ -93,21 +93,33 @@ export const get = query({
   },
 });
 
-export const submit = mutation({
+const choiceFieldTypes = new Set(["dropdown", "multiselect", "select", "radio", "checkbox"]);
+
+const publicFormSubmissionInput = v.object({
+  eventSlug: v.string(),
+  formId: v.id("submission_forms"),
+  idempotencyKey: v.string(),
+  // firstName/lastName are what the submission form now collects. `name` stays accepted
+  // for the public HTTP API, which predates the split — but it is no longer how the
+  // browser client submits.
+  firstName: v.optional(v.string()),
+  lastName: v.optional(v.string()),
+  name: v.optional(v.string()),
+  email: v.string(),
+  title: v.string(),
+  answers: v.record(v.string(), v.string()),
+  abstractFieldKey: v.optional(v.string()),
+  participants: v.optional(v.array(v.object({ role: v.string(), answers: v.record(v.string(), v.string()), availability: v.optional(v.object({ unavailable: v.array(v.object({ date: v.number(), hour: v.optional(v.number()), part: v.optional(v.union(v.literal("morning"), v.literal("afternoon"), v.literal("evening"))) })), notes: v.optional(v.string()) })) }))),
+});
+
+// Only the secret-authenticated Convex HTTP handoff may reach this write. Browser clients submit
+// through the same-origin Cloudflare Worker, which verifies Turnstile and distributed limits first.
+export const submit = internalMutation({
   args: {
-    input: v.object({
-      eventSlug: v.string(),
-      formId: v.id("submission_forms"),
-      idempotencyKey: v.string(),
-      name: v.string(),
-      email: v.string(),
-      title: v.string(),
-      answers: v.record(v.string(), v.string()),
-      abstractFieldKey: v.optional(v.string()),
-      participants: v.optional(v.array(v.object({ role: v.string(), answers: v.record(v.string(), v.string()), availability: v.optional(v.object({ unavailable: v.array(v.object({ date: v.number(), hour: v.optional(v.number()), part: v.optional(v.union(v.literal("morning"), v.literal("afternoon"), v.literal("evening"))) })), notes: v.optional(v.string()) })) }))),
-    }),
+    input: publicFormSubmissionInput,
+    verifiedIdentityEmail: v.optional(v.string()),
   },
-  handler: async (ctx, { input }) => {
+  handler: async (ctx, { input, verifiedIdentityEmail }) => {
     const event = await ctx.db.query("events").withIndex("by_slug", (q) => q.eq("slug", input.eventSlug)).first();
     if (!event || event.status !== "published") throw new Error("This call for proposals is not available.");
 
@@ -142,7 +154,13 @@ export const submit = mutation({
       for (const entry of entries) {
         const value = answers[entry.key] ?? "";
         const visible = !entry.field.showIf || fieldKeyById.get(entry.field.showIf.fieldId) === undefined || answers[fieldKeyById.get(entry.field.showIf.fieldId)!] === entry.field.showIf.equals;
-        if (visible && entry.field.required && !value.trim()) throw new Error(`${entry.field.label} is required.`);
+        // A choice field draws its options from event config (Track from the event's tracks).
+        // When none exist the field renders as an empty dropdown, so requiring an answer
+        // makes the form permanently unsubmittable. Mirrors the client-side rule in
+        // src/lib/field-answerable.ts — the two must agree or the client lets a submission
+        // through that the server then rejects.
+        const answerable = !choiceFieldTypes.has(entry.field.type) || (entry.field.options?.length ?? 0) > 0;
+        if (visible && entry.field.required && answerable && !value.trim()) throw new Error(`${entry.field.label} is required.`);
         if (entry.field.maxChars !== undefined && value.length > entry.field.maxChars) throw new Error(`${entry.field.label} exceeds its character limit.`);
       }
     };
@@ -173,24 +191,30 @@ export const submit = mutation({
     }
 
     const email = input.email.trim().toLowerCase();
-    const name = input.name.trim();
-    if (!name || !/^\S+@\S+\.\S+$/.test(email)) throw new Error("A name and valid email address are required.");
+    const name = (input.name ?? "").trim();
+    const givenFirstName = (input.firstName ?? "").trim();
+    const givenLastName = (input.lastName ?? "").trim();
+    if ((!givenFirstName && !name) || !/^\S+@\S+\.\S+$/.test(email)) throw new Error("A name and valid email address are required.");
     if (!input.title.trim()) throw new Error("A submission title is required.");
     // The CFP's Account step verifies the submitter's email via Clerk before this call. If a
     // Clerk session is present (the normal case), it must be the same email — a signed-in
     // caller cannot claim to be a different, unverified address. Submissions without any Clerk
     // session are still accepted (e.g. embedded/API callers, or a form with verification
     // skipped), just without this extra check; findOrCreateSpeaker's own validation still applies.
-    const identity = await ctx.auth.getUserIdentity();
-    if (identity?.email && identity.email.toLowerCase() !== email) throw new Error("The submitted email must match your verified email address.");
+    if (verifiedIdentityEmail && verifiedIdentityEmail.toLowerCase() !== email) throw new Error("The submitted email must match your verified email address.");
 
     const existingSubmissions = await ctx.db.query("submissions").withIndex("by_form", (q) => q.eq("formId", form._id)).collect();
     const submittedByEmail = existingSubmissions.filter((submission) => submission.status !== "draft" && (submission.answers as { email?: string }).email?.toLowerCase() === email);
     if (form.submissionLimit && submittedByEmail.length >= form.submissionLimit) throw new Error("You have reached this form's submission limit.");
 
     const now = Date.now();
-    const [firstName, ...lastName] = name.split(/\s+/);
-    const speakerId = await findOrCreateSpeaker(ctx, { eventId: event._id, email, firstName, lastName: lastName.join(" ") || "Speaker" });
+    // Splitting a single free-text name is only a fallback for the legacy `name` API field.
+    // It never invents a surname: a one-word name yields an empty last name rather than the
+    // literal "Speaker", which used to be written into real speaker records.
+    const [splitFirstName, ...splitRest] = name.split(/\s+/);
+    const firstName = givenFirstName || splitFirstName;
+    const lastName = givenFirstName ? givenLastName : splitRest.join(" ");
+    const speakerId = await findOrCreateSpeaker(ctx, { eventId: event._id, email, firstName, lastName });
 
     const fieldValues = Object.fromEntries(submissionEntries.map((entry) => [entry.id, submittedAnswers[entry.key] ?? ""]));
     const fieldLabels = Object.fromEntries(submissionEntries.map((entry) => [entry.id, entry.field.label]));

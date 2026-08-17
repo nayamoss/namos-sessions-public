@@ -1,4 +1,4 @@
-export const API_KEY_PATTERN = /^Bearer\s+(sk_live_[A-Fa-f0-9]{48})$/;
+export const API_KEY_PATTERN = /^Bearer\s+((?:ns|sk)_live_[A-Fa-f0-9]{48})$/;
 
 export function parseBearerApiKey(authorization: string | null): string | null {
   return authorization?.match(API_KEY_PATTERN)?.[1] ?? null;

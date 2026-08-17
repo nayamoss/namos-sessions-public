@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components -- Pure grouping helpers are exported for focused agenda-view tests. */
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import Papa from "papaparse";
 import { jsPDF } from "jspdf";
 import {
@@ -13,7 +13,6 @@ import {
   Filter,
   Info,
   MoreHorizontal,
-  Plus,
   Printer,
   Search,
 } from "lucide-react";
@@ -22,12 +21,23 @@ import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
 import { DataGrid, type DataGridColumn } from "@/components/shared/DataGrid";
 import { DetailPane } from "@/components/shared/DetailPane";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { SkeletonList } from "@/components/shared/SkeletonList";
-import { StatusTabs } from "@/components/shared/StatusTabs";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -69,7 +79,28 @@ export type AgendaItem = {
   isPublished: boolean;
   submissionId?: string;
 };
-type AgendaView = "list" | "day" | "week" | "track" | "rooms" | "conflicts";
+type AgendaView =
+  | "list"
+  | "day"
+  | "week"
+  | "month"
+  | "track"
+  | "rooms"
+  | "conflicts";
+const agendaViews: { value: AgendaView; label: string }[] = [
+  { value: "list", label: "List" },
+  { value: "day", label: "Day" },
+  { value: "week", label: "Week" },
+  { value: "month", label: "Month" },
+  { value: "track", label: "Tracks" },
+  { value: "rooms", label: "Rooms" },
+  { value: "conflicts", label: "Conflicts" },
+];
+function parseAgendaView(value: string | null): AgendaView {
+  return agendaViews.some((view) => view.value === value)
+    ? (value as AgendaView)
+    : "list";
+}
 type SortKey = "time" | "title" | "room";
 type DetailMode = "create" | "duplicate" | undefined;
 const fallbackTimezone = "America/New_York";
@@ -220,6 +251,7 @@ function conflictSummary(
   if (conflict.reason === "room_overlap")
     return {
       id: `room-${conflict.itemA}-${conflict.itemB}`,
+      blocking: true,
       title: "Room overlap",
       description: `${first.title} and ${second.title} are both scheduled in ${first.room}.`,
       first,
@@ -228,6 +260,7 @@ function conflictSummary(
   if (conflict.reason === "speaker_overlap")
     return {
       id: `speaker-${conflict.itemA}-${conflict.itemB}`,
+      blocking: true,
       title: "Speaker double-booked",
       description: `${first.title} and ${second.title} share a speaker at the same time.`,
       first,
@@ -236,6 +269,7 @@ function conflictSummary(
   if (conflict.reason === "track_overlap")
     return {
       id: `track-${conflict.itemA}-${conflict.itemB}`,
+      blocking: false,
       title: "Track overlap · Informational",
       description: `${first.title} and ${second.title} are both in ${first.track}. This does not block publishing.`,
       first,
@@ -243,6 +277,7 @@ function conflictSummary(
     };
   return {
     id: `availability-${conflict.itemA}-${conflict.speakerId ?? "speaker"}`,
+    blocking: false,
     title: "Speaker unavailable",
     description: `${first.speaker} is marked unavailable during ${first.title}.`,
     first,
@@ -261,7 +296,20 @@ export default function Agenda() {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [items, setItems] = useState<AgendaItem[]>([]);
   const [conflictRecords, setConflictRecords] = useState<AgendaConflict[]>([]);
-  const [view, setView] = useState<AgendaView>("list");
+  // The active view lives in the URL so a room grid or a conflict list can be
+  // linked to and survives a reload.
+  const view = parseAgendaView(params.get("view"));
+  const setView = useCallback(
+    (next: AgendaView) => {
+      setParams((current) => {
+        const nextParams = new URLSearchParams(current);
+        if (next === "list") nextParams.delete("view");
+        else nextParams.set("view", next);
+        return nextParams;
+      });
+    },
+    [setParams],
+  );
   const [activeDay, setActiveDay] = useState("");
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("time");
@@ -275,9 +323,10 @@ export default function Agenda() {
   const [showPublishConfirmation, setShowPublishConfirmation] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string>();
+  const [pendingDelete, setPendingDelete] = useState<AgendaItem>();
+  const [deleting, setDeleting] = useState(false);
   const selectSession = useCallback(
     (id: string) => {
-      setView("list");
       setParams((current) => {
         const next = new URLSearchParams(current);
         next.set("selected", id);
@@ -390,6 +439,17 @@ export default function Agenda() {
         ),
     [conflictRecords, itemById],
   );
+  const blockingConflicts = useMemo(
+    () => conflicts.filter((conflict) => conflict.blocking),
+    [conflicts],
+  );
+  const blockingByItem = useMemo(() => {
+    const byItem = new Map<string, string[]>();
+    for (const conflict of blockingConflicts)
+      for (const item of [conflict.first, conflict.second])
+        byItem.set(item.id, [...(byItem.get(item.id) ?? []), conflict.title]);
+    return byItem;
+  }, [blockingConflicts]);
   const selectedItem = params.get("selected") ? itemById.get(params.get("selected")!) : undefined;
   const closeDetail = () => {
     setDetailMode(undefined);
@@ -543,6 +603,26 @@ export default function Agenda() {
       throw cause;
     }
   };
+  const deleteSession = async () => {
+    if (!event || !pendingDelete) return;
+    setDeleting(true);
+    try {
+      await repo.agenda.remove({ eventId: event.id, id: pendingDelete.id });
+      setPendingDelete(undefined);
+      closeDetail();
+      await load();
+      toast.success("Session deleted");
+    } catch (cause) {
+      const message =
+        cause instanceof Error
+          ? cause.message
+          : "Could not delete the session.";
+      setError(message);
+      toast.error("Delete failed", { description: message });
+    } finally {
+      setDeleting(false);
+    }
+  };
   const publishSchedule = async () => {
     if (!event) return;
     setPublishing(true);
@@ -586,7 +666,7 @@ export default function Agenda() {
   const exportPdf = () => {
     const pdf = new jsPDF();
     pdf.setFontSize(16);
-    pdf.text(event?.name ? `${event.name} agenda` : "Agenda", 14, 18);
+    pdf.text(event?.name ? `${event.name} schedule` : "Schedule", 14, 18);
     pdf.setFontSize(9);
     let y = 28;
     for (const row of exportRows) {
@@ -637,12 +717,21 @@ export default function Agenda() {
     {
       key: "title",
       header: "Session",
-      cell: (item) => (
-        <div>
-          <p className="font-medium">{item.title}</p>
-          <p className="text-xs text-muted-foreground">{item.track}</p>
-        </div>
-      ),
+      cell: (item) => {
+        const itemConflicts = blockingByItem.get(item.id) ?? [];
+        return (
+          <div>
+            <p className="font-medium">{item.title}</p>
+            <p className="text-xs text-muted-foreground">{item.track}</p>
+            {itemConflicts.length > 0 && (
+              <p className="mt-1 inline-flex items-center gap-1.5 rounded-md bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200">
+                <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden="true" />
+                {[...new Set(itemConflicts)].join(" · ")}
+              </p>
+            )}
+          </div>
+        );
+      },
     },
     { key: "speaker", header: "Speaker", cell: (item) => item.speaker },
     {
@@ -683,18 +772,41 @@ export default function Agenda() {
     </DetailPane>
   ) : event && selectedItem ? (
     <DetailPane title="Edit session" onClose={closeDetail}>
-      <AgendaSessionForm event={event} rooms={rooms} tracks={tracks} speakers={speakers} submissions={submissions} initial={{ id: selectedItem.id, title: selectedItem.title, submissionId: selectedItem.submissionId, speakerIds: selectedItem.speakerIds, trackId: selectedItem.trackId, roomId: selectedItem.roomId, startTime: selectedItem.startTime, endTime: selectedItem.endTime, isPublished: selectedItem.isPublished }} onSave={saveSession} onCancel={closeDetail} />
+      <AgendaSessionForm event={event} rooms={rooms} tracks={tracks} speakers={speakers} submissions={submissions} initial={{ id: selectedItem.id, title: selectedItem.title, submissionId: selectedItem.submissionId, speakerIds: selectedItem.speakerIds, trackId: selectedItem.trackId, roomId: selectedItem.roomId, startTime: selectedItem.startTime, endTime: selectedItem.endTime, isPublished: selectedItem.isPublished }} onSave={saveSession} onCancel={closeDetail} onDelete={() => setPendingDelete(selectedItem)} />
     </DetailPane>
   ) : undefined;
   return (
-    <AppLayout title="Agenda" detail={detail}>
-      <div className="space-y-3">
+    <AppLayout title="Schedule" detail={detail}>
+      <div className="space-y-5">
         <p className="sr-only" aria-live="polite">{announcement}</p>
         {error && (
           <p role="alert" className="text-sm text-destructive">
             {error}
           </p>
         )}
+        <ToggleGroup
+          type="single"
+          value={view}
+          onValueChange={(value) => value && setView(value as AgendaView)}
+          aria-label="Schedule view"
+          className="flex-wrap justify-start gap-2"
+        >
+          {agendaViews.map((option) => (
+            <ToggleGroupItem
+              key={option.value}
+              value={option.value}
+              size="sm"
+              className="h-8 gap-1.5 px-3.5"
+            >
+              {option.label}
+              {option.value === "conflicts" && blockingConflicts.length > 0 && (
+                <span className="rounded-full bg-amber-500/20 px-1.5 text-xs font-semibold tabular-nums text-amber-800 dark:text-amber-200">
+                  {blockingConflicts.length}
+                </span>
+              )}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
         <ContentToolbar
           ariaLabel="Agenda controls"
           search={
@@ -714,19 +826,6 @@ export default function Agenda() {
           }
           utilities={
             <>
-              <StatusTabs
-                ariaLabel="Agenda views"
-                value={view}
-                onValueChange={(value) => setView(value as typeof view)}
-                tabs={[
-                  { value: "list", label: "List", count: items.length },
-                  { value: "day", label: "Day", count: dayGroups.length },
-                  { value: "week", label: "Week", count: items.length },
-                  { value: "track", label: "Track", count: trackGroups.length },
-                  { value: "rooms", label: "Rooms", count: rooms.length },
-                  { value: "conflicts", label: "Conflicts", count: conflicts.length },
-                ]}
-              />
               <Button
                 type="button"
                 variant="outline"
@@ -745,31 +844,75 @@ export default function Agenda() {
             </>
           }
           primaryAction={
-            <Button type="button" variant="accent" size="sm" onClick={() => { setDetailMode("create"); setParams((current) => { const next = new URLSearchParams(current); next.delete("selected"); return next; }); }} disabled={!event || !rooms.length}>
-              <Plus className="mr-1 h-4 w-4" />Add Session
+            <Button type="button" variant="accent" size="sm" title={event && !rooms.length ? "Add a room in Event settings before scheduling sessions." : undefined} onClick={() => { setDetailMode("create"); setParams((current) => { const next = new URLSearchParams(current); next.delete("selected"); return next; }); }} disabled={!event || !rooms.length}>
+              Add Session
             </Button>
           }
         />
+        {event && !rooms.length && (
+          <section className={cardSurfaceClasses("default", "flex flex-wrap items-center gap-x-2 gap-y-1 bg-muted p-4 text-sm")}>
+            <Info className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <span>Sessions need somewhere to happen. Add at least one room before scheduling.</span>
+            <Link to={`/events/${event.slug}/settings/event`} className="font-medium underline underline-offset-4">
+              Add rooms in Event settings
+            </Link>
+          </section>
+        )}
+        {view !== "conflicts" && blockingConflicts.length > 0 && (
+          <section
+            aria-label="Scheduling conflicts"
+            className={cardSurfaceClasses("default", "flex flex-wrap items-center gap-x-3 gap-y-2 bg-amber-500/10 p-4 text-sm")}
+          >
+            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300" aria-hidden="true" />
+            <span>
+              {blockingConflicts.length}{" "}
+              {blockingConflicts.length === 1 ? "session conflict" : "session conflicts"} —
+              two sessions share a room or a speaker at the same time. This blocks publishing.
+            </span>
+            <Button type="button" variant="outline" size="sm" className="ml-auto" onClick={() => setView("conflicts")}>
+              Review conflicts
+            </Button>
+          </section>
+        )}
         {showPublishConfirmation && (
           <section
             aria-label="Publish schedule confirmation"
             className={cardSurfaceClasses("default", "bg-muted p-4")}
           >
-            <p className="font-medium">Publish the current schedule?</p>
+            <p className="font-medium">
+              {blockingConflicts.length > 0
+                ? "Resolve the scheduling conflicts first"
+                : "Publish the current schedule?"}
+            </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Every scheduled session will become visible to its assigned
-              speakers.
+              {blockingConflicts.length > 0
+                ? `${blockingConflicts.length} ${blockingConflicts.length === 1 ? "session shares" : "sessions share"} a room or a speaker with another session at the same time. Fix those before speakers see the schedule.`
+                : "Every scheduled session will become visible on the attendee site and in assigned speaker schedules."}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={publishing}
-                onClick={() => void publishSchedule()}
-              >
-                {publishing ? "Publishing…" : "Confirm publish"}
-              </Button>
+              {blockingConflicts.length > 0 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setShowPublishConfirmation(false);
+                    setView("conflicts");
+                  }}
+                >
+                  Review conflicts
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={publishing}
+                  onClick={() => void publishSchedule()}
+                >
+                  {publishing ? "Publishing…" : "Confirm publish"}
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="ghost"
@@ -793,7 +936,7 @@ export default function Agenda() {
         {loading ? (
           <SkeletonList rows={4} label="Loading agenda…" />
         ) : view === "list" ? (
-          <section className="space-y-3">
+          <section className="space-y-4">
             <p className="text-sm text-muted-foreground">
               <CalendarDays className="mr-1 inline h-4 w-4" />
               Times shown in the event timezone
@@ -825,6 +968,16 @@ export default function Agenda() {
           />
         ) : view === "week" && event ? (
           <WeekView items={visibleItems} event={event} timeZone={timeZone} />
+        ) : view === "month" && event ? (
+          <MonthView
+            items={visibleItems}
+            event={event}
+            timeZone={timeZone}
+            onSelectDay={(date) => {
+              setActiveDay(date);
+              setView("day");
+            }}
+          />
         ) : view === "track" ? (
           <TrackView items={visibleItems} timeZone={timeZone} />
         ) : (
@@ -834,6 +987,35 @@ export default function Agenda() {
             onSelectSession={selectSession}
           />
         )}
+        <AlertDialog
+          open={pendingDelete !== undefined}
+          onOpenChange={(open) => !open && setPendingDelete(undefined)}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete “{pendingDelete?.title}”?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This removes the session from the schedule. Its submission and
+                speakers are not affected, and it can be scheduled again later.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel className={buttonVariants({ variant: "ghost" })} disabled={deleting}>
+                Keep session
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className={buttonVariants({ variant: "destructive" })}
+                disabled={deleting}
+                onClick={(clickEvent) => {
+                  clickEvent.preventDefault();
+                  void deleteSession();
+                }}
+              >
+                {deleting ? "Deleting…" : "Delete session"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </AppLayout>
   );
@@ -859,8 +1041,8 @@ function DayView({
     return <EmptyAgenda message="No scheduled session days yet." />;
   }
   return (
-    <section className="space-y-3">
-      <div className={cardSurfaceClasses("default", "flex items-center gap-3 bg-muted/40 p-3")}>
+    <section className="space-y-4">
+      <div className={cardSurfaceClasses("default", "flex items-center gap-4 bg-muted/40 p-4")}>
         <Label htmlFor="agenda-day" className="text-sm font-medium">
           Event day
         </Label>
@@ -880,7 +1062,7 @@ function DayView({
       {activeItems.length === 0 ? (
         <EmptyAgenda message="No sessions match this day and search." />
       ) : (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {activeItems.map((item) => (
             <AgendaSessionCard key={item.id} item={item} timeZone={timeZone} />
           ))}
@@ -958,6 +1140,136 @@ function WeekView({
   );
 }
 
+/** Sunday-anchored grid of whole weeks covering `monthKey` ("YYYY-MM"). */
+export function agendaMonthGrid(monthKey: string) {
+  const firstOfMonth = Date.parse(`${monthKey}-01T00:00:00Z`);
+  if (Number.isNaN(firstOfMonth)) return [];
+  const gridStart = firstOfMonth - new Date(firstOfMonth).getUTCDay() * 86_400_000;
+  const cells: { date: string; inMonth: boolean }[] = [];
+  for (let index = 0; index < 42; index += 1) {
+    const date = new Date(gridStart + index * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    cells.push({ date, inMonth: date.slice(0, 7) === monthKey });
+    // Stop at the end of the week that contains the last day of the month.
+    if (index % 7 === 6 && date.slice(0, 7) > monthKey) break;
+  }
+  return cells;
+}
+
+function MonthView({
+  items,
+  event,
+  timeZone,
+  onSelectDay,
+}: {
+  items: AgendaItem[];
+  event: Event;
+  timeZone: string;
+  onSelectDay: (date: string) => void;
+}) {
+  const eventDays = agendaEventDays(event.startDate, event.endDate);
+  const months = useMemo(
+    () => [...new Set(eventDays.map((date) => date.slice(0, 7)))],
+    [eventDays],
+  );
+  const [month, setMonth] = useState(months[0] ?? "");
+  useEffect(() => {
+    if (months.length && !months.includes(month)) setMonth(months[0]);
+  }, [month, months]);
+  const countsByDate = useMemo(() => {
+    const counts = new Map<string, AgendaItem[]>();
+    for (const group of agendaDayGroups(items, timeZone))
+      counts.set(group.date, group.items);
+    return counts;
+  }, [items, timeZone]);
+  const eventDaySet = useMemo(() => new Set(eventDays), [eventDays]);
+  const cells = agendaMonthGrid(month);
+  if (cells.length === 0)
+    return <EmptyAgenda message="The event does not have a valid date range." />;
+  const monthLabel = new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
+    month: "long",
+    year: "numeric",
+  }).format(Date.parse(`${month}-01T00:00:00Z`));
+  return (
+    <section className="space-y-3">
+      <div className={cardSurfaceClasses("default", "flex flex-wrap items-center gap-3 bg-muted/40 p-3")}>
+        <Label htmlFor="agenda-month" className="text-sm font-medium">
+          Month
+        </Label>
+        {months.length > 1 ? (
+          <Select value={month} onValueChange={setMonth}>
+            <SelectTrigger id="agenda-month" className="h-8 w-52">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {months.map((value) => (
+                <SelectItem key={value} value={value}>
+                  {new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "long", year: "numeric" }).format(Date.parse(`${value}-01T00:00:00Z`))}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <span className="text-sm">{monthLabel}</span>
+        )}
+        <p className="text-xs text-muted-foreground">
+          Select a day to open it in day view.
+        </p>
+      </div>
+      <div className={cardSurfaceClasses("default", "overflow-x-auto p-3")}>
+        <div className="grid min-w-[640px] grid-cols-7 gap-1">
+          {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((weekday) => (
+            <div key={weekday} className="px-2 py-1 text-xs font-medium text-muted-foreground">
+              {weekday}
+            </div>
+          ))}
+          {cells.map((cell) => {
+            const dayItems = countsByDate.get(cell.date) ?? [];
+            const isEventDay = eventDaySet.has(cell.date);
+            return (
+              <button
+                key={cell.date}
+                type="button"
+                disabled={!isEventDay}
+                onClick={() => onSelectDay(cell.date)}
+                aria-label={`${formatDay(cell.date, timeZone, "long")}, ${dayItems.length} ${dayItems.length === 1 ? "session" : "sessions"}`}
+                className={`min-h-24 rounded-md p-2 text-left align-top transition-colors ${
+                  isEventDay
+                    ? "bg-muted/40 hover:bg-muted/70"
+                    : "bg-muted/10 text-muted-foreground/50"
+                } ${cell.inMonth ? "" : "opacity-50"} disabled:cursor-default disabled:hover:bg-muted/10`}
+              >
+                <span className="text-xs font-medium tabular-nums">
+                  {Number(cell.date.slice(8, 10))}
+                </span>
+                {dayItems.length > 0 && (
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    {dayItems.length} {dayItems.length === 1 ? "session" : "sessions"}
+                  </span>
+                )}
+                <span className="mt-1 block space-y-0.5">
+                  {dayItems.slice(0, 2).map((item) => (
+                    <span key={item.id} className="block truncate rounded-sm bg-primary/10 px-1.5 py-0.5 text-xs">
+                      {formatTime(item.startTime, timeZone)} {item.title}
+                    </span>
+                  ))}
+                  {dayItems.length > 2 && (
+                    <span className="block px-1.5 text-xs text-muted-foreground">
+                      +{dayItems.length - 2} more
+                    </span>
+                  )}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function TrackView({
   items,
   timeZone,
@@ -1024,7 +1336,7 @@ function RoomsView({
   if (rooms.length === 0 || days.length === 0) return <EmptyAgenda message="Add rooms and an event date range to build the room grid." />;
   return (
     <section className="space-y-4">
-      <div className="flex flex-col items-start gap-2 px-1 sm:flex-row sm:items-center sm:gap-3">
+      <div className="flex flex-col items-start gap-3 px-1 sm:flex-row sm:items-center sm:gap-4">
         <Label className="text-sm text-muted-foreground">Event day</Label>
         <Select value={roomDay} onValueChange={setRoomDay}>
           <SelectTrigger className="h-8 w-full bg-muted/50 sm:w-52">
@@ -1043,9 +1355,9 @@ function RoomsView({
         </p>
       </div>
       <div className={cardSurfaceClasses("default", "overflow-x-auto")}>
-        <div className="min-w-[760px] p-1">
+        <div className="min-w-[760px] p-3">
         <div
-          className="grid auto-rows-[24px] gap-x-px overflow-hidden rounded-md bg-muted/40 text-sm"
+          className="grid auto-rows-[28px] gap-x-px overflow-hidden rounded-md bg-muted/60 text-sm"
           style={{
             gridTemplateColumns: `96px repeat(${Math.max(rooms.length, 1)}, minmax(190px, 1fr))`,
           }}
@@ -1067,7 +1379,7 @@ function RoomsView({
             return (
               <Fragment key={slot}>
                 <div
-                  className={isHour ? "flex items-start gap-1.5 bg-card px-3 pt-1 text-xs font-medium text-muted-foreground" : "bg-card"}
+                  className={isHour ? "flex items-start gap-1.5 bg-muted/60 px-3 pt-1 text-sm font-semibold text-foreground" : "bg-card"}
                   style={{ gridColumn: 1, gridRow: slotIndex + 2 }}
                 >
                   {isHour && (
@@ -1084,10 +1396,10 @@ function RoomsView({
                     <div
                       key={targetId}
                       className={isActiveTarget
-                        ? "min-h-6 bg-accent/70 transition-colors"
+                        ? "min-h-7 bg-accent/70 transition-colors"
                         : isHour
-                          ? "min-h-6 bg-muted/30 transition-colors hover:bg-muted/50"
-                          : "min-h-6 bg-muted/15 transition-colors hover:bg-muted/50"}
+                          ? "min-h-7 bg-muted/60 transition-colors hover:bg-muted/80"
+                          : "min-h-7 bg-card transition-colors hover:bg-muted/40"}
                       style={{ gridColumn: roomIndex + 2, gridRow: slotIndex + 2 }}
                       aria-label={`${room.name} at ${formatDay(roomDay, timeZone)} ${formatTime(slot, timeZone)}`}
                       onDragEnter={() => setDragTarget(targetId)}
@@ -1190,8 +1502,8 @@ function AgendaSessionCard({
 
 function EmptyAgenda({ message }: { message: string }) {
   return (
-    <div className={cardSurfaceClasses("default", "p-8 text-center text-sm text-muted-foreground")}>
-      {message}
+    <div className={cardSurfaceClasses("default")}>
+      <EmptyState compact icon={CalendarDays} title="No sessions to show" message={message} />
     </div>
   );
 }

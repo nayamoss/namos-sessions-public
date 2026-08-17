@@ -247,14 +247,14 @@ describe.each(repositoryWrappers)("%s in-memory contract", (_name, createRepo) =
     const backend = memoryTransport();
     const repo = createRepo(backend.transport);
 
-    await repo.apiKeys.list();
-    await repo.apiKeys.generate("Website integration");
-    await repo.apiKeys.revoke("key-a");
+    await repo.apiKeys.list({ eventId: eventA });
+    await repo.apiKeys.generate({ eventId: eventA, label: "Website integration" });
+    await repo.apiKeys.revoke({ eventId: eventA, id: "key-a" });
 
     expect(backend.calls).toEqual([
-      { operation: "apiKeys.list", input: {} },
-      { operation: "apiKeys.generate", input: { label: "Website integration" } },
-      { operation: "apiKeys.revoke", input: { id: "key-a" } },
+      { operation: "apiKeys.list", input: { eventId: eventA } },
+      { operation: "apiKeys.generate", input: { eventId: eventA, label: "Website integration", scopes: ["events:read"] } },
+      { operation: "apiKeys.revoke", input: { eventId: eventA, id: "key-a" } },
     ]);
   });
 
@@ -417,16 +417,18 @@ describe.each(repositoryWrappers)("%s in-memory contract", (_name, createRepo) =
       eventSlug: "demo-event",
       formId: "public-form-id",
       idempotencyKey: "test-retry",
-      name: "Ada Lovelace",
+      firstName: "Ada",
+      lastName: "Lovelace",
       email: "ada@example.test",
       title: "A reliable proposal",
       answers: { "field-1": "Value" },
+      turnstileToken: "test-turnstile-token",
     });
 
     expect(backend.calls).toContainEqual({ operation: "publicForms.listOpen", input: { eventSlug: "demo-event" } });
     expect(backend.calls).toContainEqual({ operation: "publicForms.get", input: { eventSlug: "demo-event", formId: "public-form-id" } });
     expect(backend.calls).toContainEqual({ operation: "publicForms.submit", input: { input: {
-      eventSlug: "demo-event", formId: "public-form-id", idempotencyKey: "test-retry", name: "Ada Lovelace", email: "ada@example.test", title: "A reliable proposal", answers: { "field-1": "Value" },
+      eventSlug: "demo-event", formId: "public-form-id", idempotencyKey: "test-retry", firstName: "Ada", lastName: "Lovelace", email: "ada@example.test", title: "A reliable proposal", answers: { "field-1": "Value" }, turnstileToken: "test-turnstile-token",
     } } });
   });
 

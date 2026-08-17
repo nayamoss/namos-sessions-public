@@ -16,7 +16,15 @@ type Row = Record<string, unknown> & { _id: string };
 
 function fakeCtx(identity?: UserIdentity, overrides: Partial<Record<string, Row[]>> = {}) {
   const tables: Record<string, Row[]> = {
-    organizers: [{ _id: "organizer-1", userId: "clerk|organizer", email: "organizer@example.test", role: "owner" }],
+    // Authorization is tenant-scoped: the organizer and both events must resolve to the same
+    // organization, or the guards deny. event-2 is deliberately in the same org so the
+    // "plan belongs to another event" case still tests event scoping, not tenant scoping.
+    organizations: [{ _id: "org-1", name: "Test org", createdByUserId: "clerk|organizer" }],
+    organizers: [{ _id: "organizer-1", organizationId: "org-1", userId: "clerk|organizer", email: "organizer@example.test", role: "owner" }],
+    events: [
+      { _id: "event-1", organizationId: "org-1", name: "Test event", slug: "test-event", status: "published" },
+      { _id: "event-2", organizationId: "org-1", name: "Other event", slug: "other-event", status: "published" },
+    ],
     speakers: [{ _id: "speaker-1", eventId: "event-1", email: "speaker@example.test", firstName: "Ada", lastName: "Lovelace" }],
     evaluation_plans: [{ _id: "plan-1", eventId: "event-1", name: "Program committee", rounds: 1, scoringScaleMax: 5 }, { _id: "plan-2", eventId: "event-2", name: "Other event plan", rounds: 1, scoringScaleMax: 5 }],
     evaluation_assignments: [
@@ -166,7 +174,7 @@ describe("ReviewerProgressPanel", () => {
     const panel = renderPanel({ reviewerProgress: (async () => []) as never });
     await panel.render();
 
-    expect(panel.container.textContent).toContain("No reviewers assigned to this plan yet.");
+    expect(panel.container.textContent).toContain("No CFPs are assigned to reviewers for this plan yet.");
     expect(panel.container.querySelector("#reminder-threshold")).toBeNull();
     expect(buttonsNamed(panel.container, "Remind all below")).toHaveLength(0);
   });

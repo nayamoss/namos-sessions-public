@@ -15,7 +15,7 @@ export type SubmissionEditability =
   | { editable: true; mode: "draft" | "submitted" }
   | { editable: false; reason: SubmissionEditLockReason; closedAt?: number };
 
-const SPEAKER_EDITABLE = new Set(["draft", "pending", "withdrawn"]);
+const SPEAKER_EDITABLE = new Set(["draft", "pending", "maybe", "withdrawn"]);
 const NOT_AVAILABLE = "That submission is not available on your portal.";
 
 export async function requireOwnSubmission(

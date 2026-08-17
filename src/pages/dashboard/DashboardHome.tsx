@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { AlignLeft, ArrowRight, ArrowUp, AudioLines, CalendarDays, ChevronDown, ClipboardList, Layers3, Mail, Mic, PanelRight, PenLine, Plus, Puzzle, Square, Users } from "lucide-react";
+import { AlignLeft, ArrowRight, ArrowUp, CalendarDays, ChevronDown, ClipboardCheck, ClipboardList, Layers3, Loader2, Mail, Megaphone, Mic, PanelRight, PenLine, Puzzle, Square, UserRoundX, Users } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { AgentHistoryPopover } from "@/components/agent/AgentHistoryPopover";
@@ -12,9 +12,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useRepo } from "@/data/repo";
 import { cn } from "@/lib/utils";
-import { SHORTCUTS, formatShortcut, matchesPrimaryShortcut } from "@/lib/shortcuts";
+import { SHORTCUTS, VOICE_TOGGLE_EVENT, formatShortcut, matchesPrimaryShortcut } from "@/lib/shortcuts";
 import { useRepoQuery } from "@/data/reactive";
-import type { AgendaItem, AgentRun, AgentRunDetail, AgentRunId, Comm, OnboardingTask, Speaker, Submission } from "@/data/types";
+import { useDictation } from "@/lib/voice/use-dictation";
+import { VoiceChatButton } from "@/components/voice/VoiceChatButton";
+import { VoiceSessionPanel } from "@/components/voice/VoiceSessionPanel";
+import type { AgendaItem, AgentRun, AgentRunDetail, AgentRunId, Comm, OnboardingTask, Speaker, Submission, SubmissionForm } from "@/data/types";
 import { projectSpeakerOperationsRows, summarizeSpeakerOperations } from "@/lib/speaker-operations";
 
 const suggestions = ["Check whether this event is ready to publish", "Find accepted speakers who still need attention", "Review failed communications and overdue tasks"];
@@ -105,11 +108,8 @@ function RailSection({ title, storageKey, children }: { title: string; storageKe
   );
 }
 
-// Imori's composer row carries writing-product controls (sources, skills, voice
-// guide, dictation, voice chat) that have no equivalent in this app yet. They
-// are rendered here as inert placeholders so the row matches Imori visually;
-// each is disabled and announces itself as unavailable rather than pretending
-// to work. Wire them up as the underlying features land.
+// These writing-product controls have no equivalent in this app yet. Keep their
+// unavailable state honest while dictation and voice chat are wired separately.
 function ComposerStub({ icon: Icon, label }: { icon: typeof Puzzle; label: string }) {
   return (
     <Tooltip>
@@ -139,12 +139,27 @@ export default function DashboardHome() {
   const [value, setValue] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>();
+  const [voiceOpen, setVoiceOpen] = useState(false);
   const selected = detail.data;
   const replyMode = selected?.run.status === "needs_input";
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [depth, setDepth] = useState<Depth>("balanced");
   const running = Boolean(selected && ["queued", "running"].includes(selected.run.status));
   const busy = submitting || (running && !replyMode);
+  // Alt+V (GlobalKeyboardShortcuts, mounted in AppLayout) fans this event out
+  // to every page hosting a composer. Toggle rather than always-open so the
+  // same shortcut also closes the panel — matches VoiceChatButton's own
+  // busy-guard so the shortcut can't open voice chat mid-run either.
+  useEffect(() => {
+    const handleToggle = () => { if (!busy) setVoiceOpen((open) => !open); };
+    window.addEventListener(VOICE_TOGGLE_EVENT, handleToggle);
+    return () => window.removeEventListener(VOICE_TOGGLE_EVENT, handleToggle);
+  }, [busy]);
+  const dictation = useDictation({
+    eventId: event.id,
+    onTranscript: (text) => setValue((current) => `${current}${current && text ? " " : ""}${text}`),
+    onError: (message) => setError(message),
+  });
 
   useEffect(() => { setError(undefined); setValue(""); }, [selectedRunId]);
 
@@ -154,13 +169,19 @@ export default function DashboardHome() {
   const [railCollapsed, setRailCollapsed] = useState(false);
   useEffect(() => {
     const query = window.matchMedia("(max-width: 1024px)");
-    const apply = (isTablet: boolean) => setRailCollapsed(isTablet ? true : localStorage.getItem(RAIL_STORAGE_KEY) === "true");
+    const storedPreference = () => {
+      try {
+        const stored = localStorage.getItem(RAIL_STORAGE_KEY);
+        return stored === "true" ? true : stored === "false" ? false : false;
+      } catch { return false; }
+    };
+    const apply = (isTablet: boolean) => setRailCollapsed(isTablet ? true : storedPreference());
     apply(query.matches);
     const onChange = (e: MediaQueryListEvent) => apply(e.matches);
     query.addEventListener("change", onChange);
     return () => query.removeEventListener("change", onChange);
   }, []);
-  useEffect(() => { localStorage.setItem(RAIL_STORAGE_KEY, String(railCollapsed)); }, [railCollapsed]);
+  useEffect(() => { try { localStorage.setItem(RAIL_STORAGE_KEY, String(railCollapsed)); } catch { /* preference is optional */ } }, [railCollapsed]);
 
   // Owned here rather than in GlobalKeyboardShortcuts because the rail is this
   // page's state — the same way DesktopSidebar owns its own toggle. Deliberately
@@ -190,25 +211,79 @@ export default function DashboardHome() {
   const speakers = useRepoQuery<Speaker[]>("speakers.list", { eventId: event.id }).data ?? (EMPTY as unknown as Speaker[]);
   const tasks = useRepoQuery<OnboardingTask[]>("tasks.list", { eventId: event.id }).data ?? (EMPTY as unknown as OnboardingTask[]);
   const comms = useRepoQuery<Comm[]>("comms.list", { eventId: event.id }).data ?? (EMPTY as unknown as Comm[]);
+  const forms = useRepoQuery<SubmissionForm[]>("forms.list", { eventId: event.id }).data ?? (EMPTY as unknown as SubmissionForm[]);
+  const cfpCount = forms.length;
 
   const speakerSummary = useMemo(() => summarizeSpeakerOperations(projectSpeakerOperationsRows({ speakers, submissions, tasks, comms, now: Date.now() })), [comms, speakers, submissions, tasks]);
   const unscheduledAccepted = useMemo(() => {
     const scheduledSubmissionIds = new Set(agenda.flatMap((item) => item.submissionId ? [item.submissionId] : []));
     return submissions.filter((submission) => submission.status === "accepted" && !scheduledSubmissionIds.has(submission.id)).length;
   }, [agenda, submissions]);
-  const awaitingDecision = submissions.filter((submission) => ["pending", "accept_queue", "decline_queue"].includes(submission.status)).length;
+  const awaitingDecision = submissions.filter((submission) => ["pending", "accept_queue", "maybe", "decline_queue"].includes(submission.status)).length;
 
+  const openTasks = tasks.filter((task) => task.status !== "completed");
+  const latestTask = [...openTasks].sort((left, right) => (left.dueDate ?? Number.MAX_SAFE_INTEGER) - (right.dueDate ?? Number.MAX_SAFE_INTEGER))[0];
+  const latestSubmission = [...submissions].sort((left, right) => (right.updatedAt ?? 0) - (left.updatedAt ?? 0))[0];
+  const attentionItems = [
+    {
+      icon: ClipboardList,
+      label: latestTask?.title ?? "No open tasks",
+      detail: latestTask ? `${openTasks.length} open task${openTasks.length === 1 ? "" : "s"} · Open task queue` : "Open the task queue",
+      to: `/events/${event.slug}/portals/tasks`,
+    },
+    {
+      icon: ClipboardList,
+      label: latestSubmission?.title || "No submissions yet",
+      detail: latestSubmission ? `${submissions.length} submission${submissions.length === 1 ? "" : "s"} · Review submissions` : "Open the submission queue",
+      to: `/events/${event.slug}/program/abstracts`,
+    },
+    // Incomplete speaker profiles get their own row rather than competing with the
+    // other signals for one slot: a missing bio or headshot blocks the printed
+    // program and the public site, and it is the one thing an organizer can chase
+    // down long before decisions or scheduling are settled.
+    ...(speakerSummary.profileIncomplete > 0
+      ? [{
+          icon: UserRoundX,
+          label: `${speakerSummary.profileIncomplete} incomplete profile${speakerSummary.profileIncomplete === 1 ? "" : "s"}`,
+          detail: "Missing a bio or headshot · Review speakers",
+          to: `/events/${event.slug}/program/speakers?view=profile-incomplete`,
+        }]
+      : []),
+    awaitingDecision > 0
+      ? { icon: ClipboardList, label: `${awaitingDecision} awaiting decision`, detail: "Review submissions", to: `/events/${event.slug}/program/abstracts` }
+      : unscheduledAccepted > 0
+        ? { icon: CalendarDays, label: `${unscheduledAccepted} need a time slot`, detail: "Schedule on the agenda", to: `/events/${event.slug}/program/agenda` }
+        : speakerSummary.needsAttention > 0
+          ? { icon: Users, label: `${speakerSummary.needsAttention} need onboarding`, detail: "Review speakers", to: `/events/${event.slug}/program/speakers?view=needs-attention` }
+          : { icon: CalendarDays, label: "Keep the program ready", detail: "Open readiness", to: `/events/${event.slug}/program/readiness` },
+  ];
+
+  // Feeds the rail's "Action items" section (#174): only the signals that are
+  // actually outstanding, so an all-clear event shows an empty state instead of
+  // a list of zeroes.
   const actionItems = [
-    awaitingDecision > 0 ? { icon: ClipboardList, label: `${awaitingDecision} awaiting decision`, detail: "Review abstracts", to: `/events/${event.slug}/program/abstracts` } : null,
+    speakerSummary.profileIncomplete > 0 ? { icon: UserRoundX, label: `${speakerSummary.profileIncomplete} incomplete profile${speakerSummary.profileIncomplete === 1 ? "" : "s"}`, detail: "Missing a bio or headshot · Review speakers", to: `/events/${event.slug}/program/speakers?view=profile-incomplete` } : null,
+    awaitingDecision > 0 ? { icon: ClipboardList, label: `${awaitingDecision} awaiting decision`, detail: "Review submissions", to: `/events/${event.slug}/program/abstracts` } : null,
     unscheduledAccepted > 0 ? { icon: CalendarDays, label: `${unscheduledAccepted} need a time slot`, detail: "Schedule on the agenda", to: `/events/${event.slug}/program/agenda` } : null,
     speakerSummary.needsAttention > 0 ? { icon: Users, label: `${speakerSummary.needsAttention} need onboarding`, detail: "Review speakers", to: `/events/${event.slug}/program/speakers?view=needs-attention` } : null,
   ].filter((item): item is { icon: typeof ClipboardList; label: string; detail: string; to: string } => item !== null);
 
   const quickAccess = [
-    { icon: ClipboardList, label: "Abstracts", to: `/events/${event.slug}/program/abstracts` },
+    { icon: Megaphone, label: "Calls for papers", to: `/events/${event.slug}/program/forms` },
+    { icon: ClipboardList, label: "Submissions", to: `/events/${event.slug}/program/abstracts` },
+    { icon: ClipboardCheck, label: "Judge", to: `/events/${event.slug}/program/evaluation` },
     { icon: Users, label: "Speakers", to: `/events/${event.slug}/program/speakers` },
-    { icon: CalendarDays, label: "Agenda", to: `/events/${event.slug}/program/agenda` },
+    { icon: CalendarDays, label: "Schedule", to: `/events/${event.slug}/program/agenda` },
     { icon: Mail, label: "Communications", to: `/events/${event.slug}/program/communications` },
+  ];
+
+  // First-run path. Until a CFP exists there is nothing to review or judge, so
+  // the rail names the three core jobs in order rather than leaving the whole
+  // CFP lifecycle to be discovered in the sidebar.
+  const setupSteps = [
+    { icon: Megaphone, label: "Create a CFP", detail: "The form speakers submit through", to: `/events/${event.slug}/program/forms?new=true` },
+    { icon: ClipboardList, label: "Manage submissions", detail: "Review and accept what comes in", to: `/events/${event.slug}/program/abstracts` },
+    { icon: ClipboardCheck, label: "Judge submissions", detail: "Assign reviewers and score", to: `/events/${event.slug}/program/evaluation` },
   ];
 
   if (access.error?.message.includes("Convex backend")) return <AppLayout title="Dashboard"><p className="text-sm text-muted-foreground">Dashboard currently requires the Convex backend.</p></AppLayout>;
@@ -228,7 +303,6 @@ export default function DashboardHome() {
               className={cn("inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium text-muted-foreground transition-colors", "hover:bg-muted hover:text-foreground")}
               title="New chat"
             >
-              <Plus className="h-3.5 w-3.5" />
               New
             </button>
           </div>
@@ -258,7 +332,23 @@ export default function DashboardHome() {
                 <h2 className="text-xl font-semibold tracking-normal text-foreground">{greeting()}</h2>
                 <p className="text-base text-muted-foreground">What should we work on?</p>
               </div>
-              {access.data && (
+              {/* Before a CFP exists the agent suggestions are dead ends —
+                  there is no program to check yet. Point at the three jobs
+                  that actually have to happen first. */}
+              {cfpCount === 0 ? (
+                <div className="flex flex-wrap justify-center gap-2">
+                  {setupSteps.map((step) => (
+                    <Link
+                      key={step.to}
+                      to={step.to}
+                      className={cn("group inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors", "bg-muted/40 hover:bg-muted")}
+                    >
+                      <step.icon className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium text-foreground/80 group-hover:text-foreground">{step.label}</span>
+                    </Link>
+                  ))}
+                </div>
+              ) : access.data && (
                 <div className="flex flex-wrap justify-center gap-2">
                   {suggestions.map((suggestion) => (
                     <button
@@ -305,8 +395,21 @@ export default function DashboardHome() {
                     <DepthSelect value={depth} onChange={setDepth} />
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
-                    <ComposerStub icon={Mic} label="Dictation" />
-                    <ComposerStub icon={AudioLines} label="Voice chat" />
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => void (dictation.isRecording ? dictation.stop() : dictation.start())}
+                          disabled={busy || !dictation.isSupported || dictation.isProcessing}
+                          aria-label={dictation.isRecording ? "Stop dictation" : "Dictation"}
+                          className={cn("compact-hit-target inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors", "hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40", dictation.isRecording && "bg-destructive/10 text-destructive animate-pulse")}
+                        >
+                          {dictation.isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : dictation.isRecording ? <Square className="h-3 w-3 fill-current" /> : <Mic className="h-4 w-4" />}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent><p className="text-xs">{!dictation.isSupported ? "Dictation requires microphone access in this browser" : dictation.isRecording ? "Stop dictation" : "Dictate"}</p></TooltipContent>
+                    </Tooltip>
+                    <VoiceChatButton eventId={event.id} disabled={busy} onOpen={() => setVoiceOpen(true)} />
                     {running ? (
                       <button
                         type="button"
@@ -338,10 +441,43 @@ export default function DashboardHome() {
         )}
       </Card>
 
+      {voiceOpen && <VoiceSessionPanel eventId={event.id} onClose={() => setVoiceOpen(false)} />}
+
       {/* Right: compact action rail. Toggle lives in the chat top bar, so this
           hides fully instead of leaving a floating icon column behind. */}
       {!railCollapsed && (
       <div className="w-72 shrink-0 h-full min-h-0 overflow-y-auto px-1 py-1 space-y-1.5">
+        {cfpCount === 0 && (
+          <RailSection title="Start here" storageKey="namos-dashboard-rail-setup">
+            <div className="space-y-0.5">
+              {setupSteps.map((step, index) => (
+                <Link key={step.to} to={step.to} className={cn(RAIL_ROW, "gap-2")}>
+                  <span className="flex h-4 w-4 shrink-0 items-center justify-center text-[10px] font-medium text-muted-foreground">{index + 1}</span>
+                  <step.icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-medium">{step.label}</p>
+                    <p className="truncate text-[10px] text-muted-foreground">{step.detail}</p>
+                  </div>
+                  <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                </Link>
+              ))}
+            </div>
+          </RailSection>
+        )}
+        <RailSection title="Needs attention" storageKey="namos-dashboard-rail-attention">
+          <div className="space-y-0.5">
+            {attentionItems.map((item, index) => (
+              <Link key={`${item.to}-${index}`} to={item.to} className={cn(RAIL_ROW, "gap-2")}>
+                <item.icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-medium">{item.label}</p>
+                  <p className="truncate text-[10px] text-muted-foreground">{item.detail}</p>
+                </div>
+                <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              </Link>
+            ))}
+          </div>
+        </RailSection>
         <RailSection title="Quick access" storageKey="namos-dashboard-rail-quick-access">
           <div className="grid grid-cols-2 gap-1">
             {quickAccess.map(({ icon: Icon, label, to }) => (
@@ -353,8 +489,8 @@ export default function DashboardHome() {
           </div>
         </RailSection>
 
-        {actionItems.length > 0 && (
-          <RailSection title="Action items" storageKey="namos-dashboard-rail-action-items">
+        <RailSection title="Action items" storageKey="namos-dashboard-rail-action-items">
+          {actionItems.length > 0 ? (
             <div className="space-y-0.5">
               {actionItems.map((item) => (
                 <Link key={item.to} to={item.to} className={cn(RAIL_ROW, "gap-2")}>
@@ -367,8 +503,8 @@ export default function DashboardHome() {
                 </Link>
               ))}
             </div>
-          </RailSection>
-        )}
+          ) : <p className="px-2 py-3 text-xs text-muted-foreground">Nothing needs your attention right now.</p>}
+        </RailSection>
       </div>
       )}
     </div>

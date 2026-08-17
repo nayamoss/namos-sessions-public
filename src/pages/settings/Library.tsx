@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { Plus, Save, Trash2 } from "lucide-react";
+import { Save, Trash2 } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { SkeletonList } from "@/components/shared/SkeletonList";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -120,7 +121,6 @@ export default function Library() {
               onClick={() => document.getElementById("new-tag-name")?.focus()}
               disabled={!event || loading}
             >
-              <Plus className="mr-1.5 h-4 w-4" />
               Add tag
             </Button>
           }
@@ -134,7 +134,7 @@ export default function Library() {
           <SkeletonList rows={4} label="Loading tag library…" />
         ) : !event ? (
           <Card className="p-6">
-            <p className="text-sm text-muted-foreground">
+            <p className="text-base text-muted-foreground">
               Create an event before adding tags.
             </p>
           </Card>
@@ -142,7 +142,7 @@ export default function Library() {
           <Card className="space-y-6 p-6">
             <div>
               <h2 className="text-base font-semibold">Tags</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
+              <p className="mt-1 text-base text-muted-foreground">
                 Organize submissions with a reusable event-level library.
               </p>
             </div>
@@ -256,9 +256,7 @@ export default function Library() {
                 </div>
               ))}
               {!tags.length && (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  No tags yet. Add the first tag for this event.
-                </p>
+                <EmptyState compact title="Create your first tag" message="Tags make submissions easier to group, route, filter, and assign to reviewers." action={<Button type="button" variant="outline" size="sm" onClick={() => document.getElementById("new-tag-name")?.focus()}>Add a tag</Button>} />
               )}
             </div>
           </Card>

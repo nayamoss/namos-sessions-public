@@ -1,4 +1,4 @@
-import { Plus, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -12,6 +12,7 @@ const statusOptions = [
   { value: "pending", label: "Pending" },
   { value: "accept_queue", label: "Accept queue" },
   { value: "accepted", label: "Accepted" },
+  { value: "maybe", label: "Maybe" },
 ] as const;
 
 function toggle<Value>(values: Value[] | undefined, value: Value, checked: boolean) {
@@ -51,7 +52,7 @@ export function RoutingRulesEditor({
         <h2 className="text-base font-semibold">Routing</h2>
         <p className="mt-1 text-sm text-muted-foreground">Route submissions by a configured category. Matching rules run in order; later status and track choices take precedence.</p>
       </div>
-      <Button type="button" variant="outline" size="sm" onClick={add} disabled={!fields.length}><Plus /> Add rule</Button>
+      <Button type="button" variant="outline" size="sm" onClick={add} disabled={!fields.length}>Add rule</Button>
     </div>
     {!fields.length && <p className="rounded-md bg-background p-4 text-sm text-muted-foreground">Add options to a proposal dropdown or multiselect field before creating routing rules.</p>}
     {fields.length > 0 && rules.length === 0 && <p className="rounded-md bg-background p-4 text-sm text-muted-foreground">No routing rules yet. Submissions will remain pending until a rule matches.</p>}

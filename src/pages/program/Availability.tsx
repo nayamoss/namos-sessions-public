@@ -4,7 +4,9 @@ import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { AvailabilityEditor } from "@/components/availability/AvailabilityEditor";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { SkeletonList } from "@/components/shared/SkeletonList";
+import { AddSpeakerPane } from "@/pages/program/Speakers";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -62,6 +64,7 @@ export default function Availability() {
   const [draftUnavailable, setDraftUnavailable] = useState<AvailabilitySlot[]>([]);
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  const [addingSpeaker, setAddingSpeaker] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -147,10 +150,36 @@ export default function Availability() {
   };
 
   return (
-    <AppLayout title="Speaker Availability">
-      <div className="space-y-4">
+    <AppLayout
+      title="Speaker Availability"
+      detail={
+        addingSpeaker && event ? (
+          <AddSpeakerPane
+            event={event}
+            onClose={() => setAddingSpeaker(false)}
+            onCreated={(speaker) => {
+              setSpeakers((current) => [...current, speaker]);
+              setSpeakerId(speaker.id);
+              setAddingSpeaker(false);
+            }}
+          />
+        ) : undefined
+      }
+    >
+      <div className="space-y-5">
         <ContentToolbar
           ariaLabel="Speaker availability actions"
+          utilities={
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!event}
+              onClick={() => setAddingSpeaker(true)}
+            >
+              Add speaker
+            </Button>
+          }
           primaryAction={
             <Button
               variant="accent"
@@ -171,27 +200,21 @@ export default function Availability() {
         {loading ? (
           <SkeletonList rows={3} label="Loading speakers and availability…" />
         ) : !event ? (
-          <section className={cardSurfaceClasses("default", "p-6")}>
-            <h2 className="font-semibold">No event available</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Create an event before reviewing speaker availability.
-            </p>
-          </section>
+          <EmptyState icon={CalendarDays} title="No event available" message="Create an event before reviewing speaker availability." />
         ) : speakers.length === 0 ? (
-          <section className={cardSurfaceClasses("default", "p-6")}>
-            <h2 className="font-semibold">No speakers yet</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Accepted speakers for {event.name} will appear here when they are
-              added.
-            </p>
-          </section>
+          <EmptyState
+            icon={UserRound}
+            title="No speakers yet"
+            message={`Add a speaker to ${event.name} to record availability.`}
+            action={<Button type="button" variant="accent" size="sm" onClick={() => setAddingSpeaker(true)}>Add speaker</Button>}
+          />
         ) : (
           <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
             <div className={cardSurfaceClasses("default", "p-6")}>
               <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                 <div className="space-y-1">
                   <h2 className="font-semibold">Unavailable times</h2>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-base text-muted-foreground">
                     Select the exact hours when this speaker cannot take a session.
                   </p>
                 </div>
@@ -233,13 +256,13 @@ export default function Availability() {
                 <p className="mt-3 text-base font-semibold">
                   {selectedSpeaker?.name}
                 </p>
-                <div className="mt-5 flex items-center gap-2 text-sm text-muted-foreground">
+                <div className="mt-5 flex items-center gap-2 text-base text-muted-foreground">
                   <CalendarDays className="h-4 w-4" />
                   {dates.length
                     ? `${dayLabel(dates[0])}–${dayLabel(dates[dates.length - 1])}`
                     : "Event dates unavailable"}
                 </div>
-                <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+                <div className="mt-2 flex items-center gap-2 text-base text-muted-foreground">
                   <Clock3 className="h-4 w-4" />
                   {event.timezone}
                 </div>
@@ -249,7 +272,7 @@ export default function Availability() {
                   <UserRound className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
                   <div>
                     <p className="font-medium">Availability record</p>
-                    <p className="mt-1 text-sm text-muted-foreground">
+                    <p className="mt-1 text-base text-muted-foreground">
                       {selectedAvailability
                         ? `${selectedAvailability.unavailable.length} unavailable time${selectedAvailability.unavailable.length === 1 ? "" : "s"} recorded.`
                         : "No unavailable times recorded."}

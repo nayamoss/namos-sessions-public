@@ -12,6 +12,7 @@ import { components, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { canonicalProposalPayload } from "./agentProposal";
 import { decryptAgentApiKey } from "./agentProviderSecrets";
+import { resolveManagedAllowance } from "./agentBillingResolver";
 
 type RunToolCtx = ToolCtx & { runId: Id<"agent_runs">; eventId: Id<"events"> };
 
@@ -138,6 +139,12 @@ export const executeSegment = internalAction({
     try {
       const state = await ctx.runQuery(internal.agentState.executionContext, args);
       if (!state.runnable) return;
+      if ((state.run.providerMode ?? "managed") === "managed" && !state.run.managedAllowanceId) {
+        const billingOwnerUserId = state.event.billingOwnerUserId;
+        if (!billingOwnerUserId) throw new Error("This event needs a billing owner before Namos-managed AI can run.");
+        const allowance = await resolveManagedAllowance(billingOwnerUserId);
+        await ctx.runMutation(internal.agentBilling.reserve, { runId: args.runId, billingOwnerUserId, planSlug: allowance.planSlug, runLimit: allowance.runLimit, tokenLimit: allowance.tokenLimit, reserveTokens: allowance.reserveTokens });
+      }
       const apiKey = await resolveApiKey(ctx, state.run.eventId, state.run.providerMode ?? "managed");
       const agent = operationsAgent(apiKey, state.run.model);
       if (!(await ctx.runMutation(internal.agentState.begin, args))) return;
@@ -160,16 +167,19 @@ export const executeSegment = internalAction({
       steps = result.steps.length;
       const inputTokens = result.usage.inputTokens ?? 0;
       const outputTokens = result.usage.outputTokens ?? 0;
-      await ctx.runMutation(internal.agentProviderSettings.recordUsage, { runId: args.runId, inputTokens, outputTokens });
+      const usage = await ctx.runMutation(internal.agentProviderSettings.recordUsage, { runId: args.runId, inputTokens, outputTokens });
       const after = await ctx.runQuery(internal.agentState.executionContext, args);
       if (!after.runnable || after.run.status !== "running") {
         await ctx.runMutation(internal.agentState.recordSegmentSteps, { runId: args.runId, stepCount: steps, inputTokens, outputTokens });
+        if (after.run.status === "needs_approval") await ctx.runMutation(internal.agentBilling.settle, { runId: args.runId, ...usage });
         return;
       }
       const remainingSteps = state.run.maxSteps - state.run.stepCount;
       if (steps >= remainingSteps && !result.text.trim()) throw new Error("The run reached its 12-step limit before producing a final brief.");
       await ctx.runMutation(internal.agentState.finish, { runId: args.runId, summary: result.text, stepCount: steps, inputTokens, outputTokens });
+      await ctx.runMutation(internal.agentBilling.settle, { runId: args.runId, ...usage });
     } catch (error) {
+      await ctx.runMutation(internal.agentBilling.release, { runId: args.runId });
       await ctx.runMutation(internal.agentState.fail, { runId: args.runId, message: safeProviderError(error), stepCount: steps });
     }
   },

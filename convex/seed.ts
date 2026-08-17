@@ -1,12 +1,13 @@
-import { mutation } from "./functions";
+import { internalMutation } from "./_generated/server";
 import { recordAgendaItemAudit } from "./agendaAudit";
 
 const eventSlug = "ai-engineer-sandbox-event";
 const seededAt = Date.UTC(2026, 8, 1, 12, 0);
 
 // Re-runnable demo fixture. It fills in missing fixture records without duplicating a
-// previously seeded event. Run with: npx convex run seed:demo
-export const demo = mutation({
+// previously seeded event. This is intentionally internal-only; operators can run it from
+// an authenticated Convex CLI with: npm run seed:demo
+export const demo = internalMutation({
   args: {},
   handler: async (ctx) => {
     const now = Date.now();
@@ -125,7 +126,7 @@ export const demo = mutation({
       return ctx.db.insert("speakers", { eventId, email, firstName: "Speaker", lastName: String(index + 1), bio: index % 5 === 0 ? undefined : `Demo speaker ${index + 1} with a practical perspective on AI.`, confirmationStatus, status: "active", createdAt: seededAt, updatedAt: now });
     }));
 
-    const statuses = ["accepted", "pending", "accept_queue", "decline_queue", "declined", "withdrawn", "draft"] as const;
+    const statuses = ["accepted", "pending", "accept_queue", "maybe", "decline_queue", "declined", "withdrawn", "draft"] as const;
     const currentSubmissions = await ctx.db.query("submissions").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect();
     const submissionIds = await Promise.all(Array.from({ length: 500 }, async (_, index) => {
       const title = `Demo session ${index + 1}: practical AI`;

@@ -1,4 +1,4 @@
-import { Mail, Plus } from "lucide-react";
+import { ClipboardCheck, Mail, Megaphone, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
   CommandDialog,
@@ -13,7 +13,11 @@ import { COMMAND_ROUTES, GO_TO_SEQUENCES } from "@/lib/shortcuts";
 import { useOptionalCurrentEvent } from "@/components/EventContext";
 
 const QUICK_ACTIONS = [
-  { label: "New abstract", value: "create new", to: "/program/abstracts?new=true", icon: Plus },
+  // `value` is what cmdk matches against, so it carries the synonyms people
+  // actually type ("cfp", "call for papers") for the label they see.
+  { label: "Create a CFP", value: "create cfp call for papers new form", to: "/program/forms?new=true", icon: Megaphone },
+  { label: "Add a submission", value: "create new abstract submission", to: "/program/abstracts?new=true", icon: Plus },
+  { label: "Judge submissions", value: "review score judge evaluation", to: "/program/evaluation", icon: ClipboardCheck },
   { label: "Email speakers", value: "compose email", to: "/program/communications?new=true", icon: Mail },
 ] as const;
 

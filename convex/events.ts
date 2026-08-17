@@ -1,12 +1,14 @@
 import { v } from "convex/values";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
+import type { QueryCtx } from "./_generated/server";
+import type { UserIdentity } from "convex/server";
 import { internalQuery } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
 import {
+  assertAnyOrganizer,
   assertEventAccess,
   assertEventOrganizerAccess,
-  assertOrganizer,
-  isOrganizer,
+  organizationIdsForUser,
   requireIdentity,
 } from "./functions";
 import { assertEventSchedule } from "./eventValidation";
@@ -38,11 +40,61 @@ const eventFields = {
   ),
 };
 
+// Events of the organizations this caller organizes. Never the whole table — an organizers row
+// is scoped to one tenant and grants nothing outside it.
+async function organizationEvents(
+  ctx: QueryCtx,
+  organizationIds: Id<"organizations">[],
+) {
+  const perOrg = await Promise.all(
+    organizationIds.map((organizationId) =>
+      ctx.db
+        .query("events")
+        .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
+        .collect(),
+    ),
+  );
+  return perOrg.flat();
+}
+
+async function eventMembershipEvents(ctx: QueryCtx, identity: UserIdentity) {
+  const email =
+    typeof identity.email === "string"
+      ? identity.email.trim().toLowerCase()
+      : undefined;
+  const [byUser, byEmail] = await Promise.all([
+    ctx.db
+      .query("event_members")
+      .withIndex("by_userId", (q) => q.eq("userId", identity.subject))
+      .collect(),
+    email
+      ? ctx.db
+          .query("event_members")
+          .withIndex("by_email", (q) => q.eq("email", email))
+          .collect()
+      : Promise.resolve([]),
+  ]);
+  const ids = [
+    ...new Set([...byUser, ...byEmail].map((member) => member.eventId)),
+  ];
+  const docs = await Promise.all(ids.map((id) => ctx.db.get(id)));
+  return docs.filter((event): event is Doc<"events"> => event !== null);
+}
+
+function dedupeEvents(events: Doc<"events">[]) {
+  const seen = new Set<string>();
+  return events.filter((event) => {
+    if (seen.has(event._id)) return false;
+    seen.add(event._id);
+    return true;
+  });
+}
+
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    await assertOrganizer(ctx);
-    return ctx.db.query("events").collect();
+    const { organizationIds } = await assertAnyOrganizer(ctx);
+    return organizationEvents(ctx, organizationIds);
   },
 });
 
@@ -50,39 +102,30 @@ export const listMine = query({
   args: {},
   handler: async (ctx) => {
     const identity = await requireIdentity(ctx);
-    if (await isOrganizer(ctx, identity))
-      return ctx.db.query("events").collect();
-    const email =
-      typeof identity.email === "string"
-        ? identity.email.trim().toLowerCase()
-        : undefined;
-    const [byUser, byEmail] = await Promise.all([
-      ctx.db
-        .query("event_members")
-        .withIndex("by_userId", (q) => q.eq("userId", identity.subject))
-        .collect(),
-      email
-        ? ctx.db
-            .query("event_members")
-            .withIndex("by_email", (q) => q.eq("email", email))
-            .collect()
-        : Promise.resolve([]),
+    const organizationIds = await organizationIdsForUser(ctx, identity);
+    const [orgEvents, memberEvents] = await Promise.all([
+      organizationEvents(ctx, organizationIds),
+      eventMembershipEvents(ctx, identity),
     ]);
-    const ids = [
-      ...new Set([...byUser, ...byEmail].map((member) => member.eventId)),
-    ];
-    return (await Promise.all(ids.map((id) => ctx.db.get(id)))).filter(
-      (event) => event !== null,
-    );
+    return dedupeEvents([...orgEvents, ...memberEvents]);
   },
 });
 
+// The speaker/reviewer portal. Previously this returned every published event in the database
+// to anyone signed in, which is how a stranger's signup could see another tenant's conferences.
+// A portal user only ever belongs to events via event_members, so scope it the same way.
 export const listForPortal = query({
   args: {},
   handler: async (ctx) => {
-    await requireIdentity(ctx);
-    const events = await ctx.db.query("events").collect();
-    return events.filter((event) => event.status === "published");
+    const identity = await requireIdentity(ctx);
+    const organizationIds = await organizationIdsForUser(ctx, identity);
+    const [orgEvents, memberEvents] = await Promise.all([
+      organizationEvents(ctx, organizationIds),
+      eventMembershipEvents(ctx, identity),
+    ]);
+    return dedupeEvents([...orgEvents, ...memberEvents]).filter(
+      (event) => event.status === "published",
+    );
   },
 });
 export const get = query({
@@ -103,9 +146,22 @@ export const getBySlug = query({
     return event;
   },
 });
+// API keys are issued per-event (convex/apiKeys.ts). This used to ignore that entirely and
+// return every event in the database to any valid key; it now returns only the key's own
+// event. The caller in convex/http.ts passes the eventId off the authenticated key, never off
+// the request.
 export const listForApi = internalQuery({
-  args: {},
-  handler: async (ctx) => ctx.db.query("events").collect(),
+  args: { eventId: v.id("events") },
+  handler: async (ctx, args) => {
+    const event = await ctx.db.get(args.eventId);
+    return event ? [event] : [];
+  },
+});
+// Scoped for the public REST API: a token is minted for exactly one event, so the API must
+// never hand back every event in the deployment (see convex/http.ts's #178 security note).
+export const getForApi = internalQuery({
+  args: { eventId: v.id("events") },
+  handler: (ctx, args) => ctx.db.get(args.eventId),
 });
 
 export const save = mutation({
@@ -134,13 +190,20 @@ export const save = mutation({
       await ctx.db.patch(eventId, { ...fields, updatedAt: now });
       return eventId;
     }
+    const creatorEmail = typeof creator?.email === "string" ? normalizeEventTeamEmail(creator.email) : "";
+    if (!creator || !creatorEmail) throw new Error("Your account needs an email address before it can create an event.");
+    // An event must belong to a tenant from the moment it exists — an unstamped event would be
+    // invisible to its own creator, since every guard treats a missing organizationId as deny.
+    const [organizationId] = await organizationIdsForUser(ctx, creator);
+    if (!organizationId)
+      throw new Error("You need an organization before you can create an event.");
     const newEventId = await ctx.db.insert("events", {
       ...fields,
+      billingOwnerUserId: creator?.subject,
+      organizationId,
       createdAt: now,
       updatedAt: now,
     });
-    const creatorEmail = typeof creator?.email === "string" ? normalizeEventTeamEmail(creator.email) : "";
-    if (!creator || !creatorEmail) throw new Error("Your account needs an email address before it can create an event.");
     await ctx.db.insert("event_members", {
       eventId: newEventId,
       userId: creator.subject,
@@ -212,6 +275,7 @@ export const duplicate = mutation({
     } = source;
     const eventId = await ctx.db.insert("events", {
       ...sourceFields,
+      billingOwnerUserId: creator.subject,
       name: args.name.trim(),
       slug: args.slug.trim(),
       startDate: args.startDate,
@@ -304,6 +368,72 @@ export const duplicate = mutation({
     }
     await copy("comms_templates", templates);
     return eventId;
+  },
+});
+
+/**
+ * Permanently delete an event. This is intentionally limited to drafts: published
+ * programs should be archived so their operational record remains available.
+ */
+export const remove = mutation({
+  args: { eventId: v.id("events") },
+  handler: async (ctx, args) => {
+    await assertEventOrganizerAccess(ctx, args.eventId);
+    const event = await ctx.db.get(args.eventId);
+    if (!event) throw new Error("Event not found.");
+    if (event.status !== "draft")
+      throw new Error("Only draft events can be deleted. Archive this event instead.");
+
+    const [
+      forms, formResponses, speakers, submissions, evaluations, evaluationPlans,
+      evaluationAssignments, sponsorTiers, sponsors, sponsorContacts, tasks,
+      taskTemplates, availability, embeds, agendaItems, agendaAudit, commsTemplates,
+      commsLog, emailIntegrations, eventMembers, rooms, tracks, tags, agentRuns,
+      agentUsage, agentRunEvents, agentSettings,
+    ] = await Promise.all([
+      ctx.db.query("submission_forms").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("form_responses").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("speakers").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("submissions").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("evaluations").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("evaluation_plans").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("evaluation_assignments").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("sponsor_tiers").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("sponsors").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("sponsor_contacts").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("onboarding_tasks").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("task_templates").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("speaker_availability").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("embeds").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("agenda_items").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("agenda_items_audit").withIndex("by_event_createdAt", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("comms_templates").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("comms_log").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("email_integrations").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("event_members").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("rooms").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("tracks").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("tags").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("agent_runs").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("agent_usage_records").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("agent_run_events").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("agent_provider_settings").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+    ]);
+    const [confirmationRequests, proposals] = await Promise.all([
+      ctx.db.query("submission_confirmation_requests").filter((q) => q.eq(q.field("eventId"), args.eventId)).collect(),
+      ctx.db.query("agent_action_proposals").filter((q) => q.eq(q.field("eventId"), args.eventId)).collect(),
+    ]);
+    const documents = (await Promise.all(submissions.map((submission) => ctx.db.query("speaker_documents").withIndex("by_submission", (q) => q.eq("submissionId", submission._id)).collect()))).flat();
+
+    await Promise.all([
+      ...documents.map(async (document) => {
+        await ctx.db.delete(document._id);
+        await ctx.storage.delete(document.fileUrl as Id<"_storage">);
+      }),
+      ...speakers.flatMap((speaker) => speaker.headshotStorageKey ? [ctx.storage.delete(speaker.headshotStorageKey as Id<"_storage">)] : []),
+      ...[formResponses, evaluations, evaluationAssignments, evaluationPlans, sponsorContacts, sponsors, sponsorTiers, tasks, taskTemplates, availability, embeds, agendaItems, agendaAudit, commsTemplates, commsLog, emailIntegrations, confirmationRequests, proposals, agentUsage, agentRunEvents, agentSettings, agentRuns, forms, submissions, speakers, eventMembers, rooms, tracks, tags].flat().map((row) => ctx.db.delete(row._id)),
+    ]);
+    await ctx.db.delete(args.eventId);
   },
 });
 
