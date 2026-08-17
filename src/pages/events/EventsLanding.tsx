@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, Copy, MoreHorizontal, Trash2 } from "lucide-react";
+import { CalendarDays, Copy, Trash2 } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
@@ -22,12 +22,6 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -337,7 +331,7 @@ export default function EventsLanding() {
       key: "actions",
       header: "",
       headerLabel: "Actions",
-      width: "9rem",
+      width: "11rem",
       align: "right",
       cell: (event) => (
         <div className="flex items-center justify-end gap-1.5">
@@ -345,23 +339,29 @@ export default function EventsLanding() {
             Open
           </Button>
           {manageableEventIds.has(event.id) && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="icon" variant="ghost" aria-label={`More actions for ${event.name}`}>
-                  <MoreHorizontal />
+            <>
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-label={`Duplicate ${event.name}`}
+                title={`Duplicate ${event.name}`}
+                onClick={() => setEditor({ mode: "duplicate", source: event })}
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+              {event.status === "draft" && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="text-destructive hover:text-destructive"
+                  aria-label={`Delete ${event.name}`}
+                  title={`Delete ${event.name}`}
+                  onClick={() => setDeleteCandidate(event)}
+                >
+                  <Trash2 className="h-4 w-4" />
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => setEditor({ mode: "duplicate", source: event })}>
-                  <Copy className="mr-2 h-4 w-4" /> Duplicate
-                </DropdownMenuItem>
-                {event.status === "draft" && (
-                  <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => setDeleteCandidate(event)}>
-                    <Trash2 className="mr-2 h-4 w-4" /> Delete draft
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
+              )}
+            </>
           )}
         </div>
       ),
