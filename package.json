@@ -18,7 +18,7 @@
     "build": "vite build",
     "build:hosted": "convex deploy --cmd 'npm run build' --cmd-url-env-var-name VITE_CONVEX_URL",
     "build:dev": "vite build --mode development",
-    "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc -p convex/tsconfig.json --noEmit",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc -p convex/tsconfig.json --noEmit && tsc --noEmit -p tsconfig.worker.json",
     "lint": "eslint .",
     "start:railway": "serve --single --listen tcp://0.0.0.0:$PORT dist",
     "deploy": "node scripts/deploy-cloudflare.mjs",
