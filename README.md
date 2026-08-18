@@ -15,12 +15,64 @@ review, scheduling, and communications.
 
 ## What it includes
 
-- Configurable CFP and speaker-portal forms
-- Submission review, scoring, assignments, and decision queues
-- Speaker profiles, documents, availability, tasks, and readiness tracking
-- Agenda scheduling with room, speaker, and track conflict detection
-- Email templates, reminders, delivery history, and calendar invitations
-- Sponsor workflows, public embeds, and an event API foundation
+**Event setup**
+- Onboarding wizard, event details, dates, timezones, branding, dashboard summaries, CSV import
+- Organizer/team access, API keys, reusable form templates, and shared field libraries
+- Responsive, accessible UI with dark mode, keyboard shortcuts, and a command palette — fully
+  usable from a phone or tablet browser, no separate app required
+
+**CFP and submissions**
+- Configurable CFP form builder — sections, reusable fields, rich text, validation, required
+  fields, character limits, templates, duplication, and publishing controls
+- Category and track routing rules
+- Public submission pages with email verification, confirmation, and validation
+- Submission statuses, tags, filtering, search, pagination, exports, bulk actions, and
+  speaker-controlled edits
+
+**Review and selection**
+- Evaluation plans, criteria, scorecards, scoring scales, comments, rounds, and reviewer
+  assignment (including assignment by filter)
+- Blinded/anonymized review, reviewer progress tracking, reminder workflows, and decision queues
+
+**Speaker operations and portal**
+- Speaker profiles, bios, proposals, documents, and file collection
+- Speaker portal with custom forms, submission editing, and schedule access
+- Availability collection with date/time-part blocking and travel notes
+- Speaker tasks, due dates, and readiness tracking
+
+**Agenda and scheduling**
+- Session, room, track, speaker, date, and time management
+- Drag-and-drop agenda moves, multiple calendar views, and calendar invitation generation
+- Conflict detection for speakers, rooms, tracks, and overlapping sessions
+
+**Communications and public program tools**
+- Communication templates with tokens and rich text; submission, decision, reminder, and
+  calendar-invite email workflows, with delivery history
+- Public CFP/program embeds (agenda, schedule grid, speaker gallery) with an editor and preview
+- Public events API and API-key management
+
+**Sponsorship**
+- Sponsor records, tiers, contacts, and sponsor workflow support
+
+**Content sync (bring your own account)**
+- Notion and Airtable CFP/portal content sync via OAuth — connect your own workspace or base,
+  scope access to one database or table, and import speakers or submissions directly
+
+## Coming soon
+
+- **Sanity CMS sync** — publish confirmed sessions and speakers to a Sanity dataset. Scaffolding
+  exists; not yet verified end-to-end against a real Sanity project.
+- **Native iOS and Android apps** — a native companion is in development; the web app already
+  works fully on mobile browsers today.
+- **Organizer-owned, multi-page form builder** — CFP and portal forms move from a fixed section
+  layout to organizer-defined, reorderable pages, with a live preview that renders through the
+  exact same component the real public page uses.
+- **AI-assisted review scoring** — a non-binding AI first-pass score and rationale alongside
+  human review; human review and decisions remain fully authoritative either way.
+- **Live-refreshing readiness dashboard** — currently loads once per visit rather than updating
+  in real time.
+- **Portal resource/wiki pages** — a shared knowledge-base area in the speaker portal, separate
+  from per-speaker tasks and files.
 
 ## Related repositories
 
