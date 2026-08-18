@@ -27,6 +27,8 @@ dist-ssr
 .env.production
 .env.*.local
 .env.*
+.dev.vars*
+wrangler.security-preview.jsonc
 
 
 # Local agent/tooling scratch output
@@ -37,4 +39,6 @@ test-artifacts/
 
 # Isolated Codex agent worktrees (kept separate from .claude/worktrees, which the Claude Code harness manages)
 .worktrees/
+.claude/worktrees/
 .wrangler/
+.netlify/

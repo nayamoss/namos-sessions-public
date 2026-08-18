@@ -208,7 +208,7 @@ function Navigation({
               </h2>
             )}
             <div id={sectionId} hidden={!collapsed && !expanded} className={cn("space-y-1", !collapsed && "mt-1")}>
-              {section.items.map((item) => {
+              {(collapsed ? section.items.slice(0, 1) : section.items).map((item) => {
                 const settingsTab = settingsTabFromPath(item.to);
                 const active = item.end
                   ? location.pathname === item.to
@@ -378,6 +378,7 @@ function DashboardLayoutInner({
   accountContext,
   children,
   detail,
+  utility,
   headerEnd,
   homeHref,
   navSections,
@@ -386,6 +387,8 @@ function DashboardLayoutInner({
   accountContext: "admin" | "portal";
   children: ReactNode;
   detail?: ReactNode;
+  /** A page-level utility rail, rendered beside—not inside—the content surface. */
+  utility?: ReactNode;
   headerEnd?: ReactNode;
   homeHref: string;
   navSections: DashboardNavSection[];
@@ -401,6 +404,7 @@ function DashboardLayoutInner({
         className={cn(
           "flex h-full min-w-0 flex-col overflow-hidden",
           collapsed ? "lg:pl-[4.75rem]" : "lg:pl-[15.25rem]",
+          utility && "lg:pr-[23.75rem] xl:pr-[25.75rem]",
         )}
       >
         <header className="flex h-14 shrink-0 items-center justify-between gap-4 pl-14 pr-4 md:pl-16 md:pr-4 lg:px-3">
@@ -412,7 +416,7 @@ function DashboardLayoutInner({
           )}
         </header>
         <div className="flex min-h-0 min-w-0 flex-1 px-3 pb-3 md:px-4 md:pb-4">
-          <PageContentSurface>
+          <PageContentSurface className="min-w-0">
             <div className="min-w-0 flex-1 p-4 md:p-5 lg:overflow-y-auto">
               {children}
             </div>
@@ -424,6 +428,17 @@ function DashboardLayoutInner({
           </PageContentSurface>
         </div>
       </main>
+      {utility && (
+        <aside
+          aria-label="Page utilities"
+          className={cardSurfaceClasses(
+            "default",
+            "fixed right-2.5 top-2.5 z-30 hidden h-[calc(100dvh-20px)] w-[22rem] flex-col overflow-y-auto p-4 sm:p-6 lg:flex xl:w-[24rem]",
+          )}
+        >
+          {utility}
+        </aside>
+      )}
     </div>
   );
 }
@@ -432,6 +447,7 @@ export function DashboardLayout({
   accountContext,
   children,
   detail,
+  utility,
   headerEnd,
   homeHref,
   navSections,
@@ -440,6 +456,7 @@ export function DashboardLayout({
   accountContext: "admin" | "portal";
   children: ReactNode;
   detail?: ReactNode;
+  utility?: ReactNode;
   headerEnd?: ReactNode;
   homeHref: string;
   navSections: DashboardNavSection[];
@@ -447,7 +464,7 @@ export function DashboardLayout({
 }) {
   return (
     <SidebarProvider>
-      <DashboardLayoutInner accountContext={accountContext} detail={detail} headerEnd={headerEnd} homeHref={homeHref} navSections={navSections} title={title}>
+      <DashboardLayoutInner accountContext={accountContext} detail={detail} utility={utility} headerEnd={headerEnd} homeHref={homeHref} navSections={navSections} title={title}>
         {children}
       </DashboardLayoutInner>
     </SidebarProvider>
@@ -457,10 +474,12 @@ export function DashboardLayout({
 export function AppLayout({
   children,
   detail,
+  utility,
   title,
 }: {
   children: ReactNode;
   detail?: ReactNode;
+  utility?: ReactNode;
   title: string;
 }) {
   const current = useOptionalCurrentEvent()?.event;
@@ -482,6 +501,7 @@ export function AppLayout({
     <DashboardLayout
       accountContext="admin"
       detail={detail}
+      utility={utility}
       headerEnd={(
         <>
           <button

@@ -123,6 +123,76 @@ describe("AppLayout", () => {
     container.remove();
   });
 
+  it("shows one representative destination per section in the collapsed sidebar", () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const previousCollapsed = localStorage.getItem("sessionboard.sidebarCollapsed");
+    localStorage.setItem("sessionboard.sidebarCollapsed", "true");
+
+    act(() => root.render(
+      <ClerkProvider publishableKey={TEST_CLERK_PUBLISHABLE_KEY}>
+        <MemoryRouter>
+          <DashboardLayout
+            accountContext="portal"
+            homeHref="/portal"
+            navSections={[
+              { label: "Program", items: [{ to: "/portal", label: "Home", icon: Home, end: true }, { to: "/portal/submissions", label: "Submissions", icon: FileText }] },
+              { label: "Resources", items: [{ to: "/portal/resources", label: "Resources", icon: FileText }, { to: "/portal/help", label: "Help", icon: Home }] },
+            ]}
+            title="My submissions"
+          >
+            <p>Speaker content</p>
+          </DashboardLayout>
+        </MemoryRouter>
+      </ClerkProvider>,
+    ));
+
+    const links = container.querySelectorAll("aside nav a");
+    expect(links).toHaveLength(2);
+    expect(links[0]).toHaveAttribute("aria-label", "Home");
+    expect(links[1]).toHaveAttribute("aria-label", "Resources");
+
+    act(() => root.unmount());
+    if (previousCollapsed === null) localStorage.removeItem("sessionboard.sidebarCollapsed");
+    else localStorage.setItem("sessionboard.sidebarCollapsed", previousCollapsed);
+    container.remove();
+  });
+
+  it("renders a page utility rail beside the content surface", () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    act(() => root.render(
+      <ClerkProvider publishableKey={TEST_CLERK_PUBLISHABLE_KEY}>
+        <MemoryRouter>
+          <DashboardLayout
+            accountContext="portal"
+            homeHref="/portal"
+            navSections={[]}
+            title="Workspace"
+            utility={<p>Page utilities</p>}
+          >
+            <p>Primary content</p>
+          </DashboardLayout>
+        </MemoryRouter>
+      </ClerkProvider>,
+    ));
+
+    const content = container.querySelector<HTMLElement>('section[aria-label="Page content"]')!;
+    const utility = container.querySelector<HTMLElement>('aside[aria-label="Page utilities"]')!;
+    const shell = container.querySelector<HTMLElement>(".mobile-safe-shell")!;
+    const main = container.querySelector<HTMLElement>("main")!;
+    expect(utility).toHaveTextContent("Page utilities");
+    expect(content).not.toContainElement(utility);
+    expect(utility.parentElement).toBe(shell);
+    expect(main).not.toContainElement(utility);
+    expect(content.closest("main")).toBe(main);
+
+    act(() => root.unmount());
+    container.remove();
+  });
+
   it("keeps collapsible nav sections auto-collapsed and lets only one stay open", () => {
     const container = document.createElement("div");
     document.body.append(container);

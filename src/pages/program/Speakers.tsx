@@ -790,6 +790,7 @@ export default function Speakers() {
 
   const query = params.get("q") ?? "";
   const view = parseSpeakerOperationsView(params.get("view"));
+  const shouldFocusSearch = params.get("focus") === "search";
   const selectedId = params.get("selected");
   const addingSpeaker = params.get("mode") === "add";
   const requestedSort = params.get("sort");
@@ -938,6 +939,16 @@ export default function Speakers() {
     });
     return () => cancelAnimationFrame(frame);
   }, [selectedId]);
+
+  useEffect(() => {
+    if (!shouldFocusSearch || loading) return;
+    searchRef.current?.focus();
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete("focus");
+      return next;
+    }, { replace: true });
+  }, [loading, setParams, shouldFocusSearch]);
 
   const setParam = (key: string, value?: string) => {
     setParams(

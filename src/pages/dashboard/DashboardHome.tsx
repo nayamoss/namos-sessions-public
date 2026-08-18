@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useRepo } from "@/data/repo";
 import { cn } from "@/lib/utils";
@@ -30,6 +31,7 @@ const EMPTY: readonly unknown[] = [];
 // so the hover fill is a state, not a card surface.
 const RAIL_ROW = cn("flex items-center rounded-lg p-2 transition-colors", "hover:bg-muted");
 const RAIL_STORAGE_KEY = "namos-dashboard-right-collapsed";
+type SidebarTab = "action-items" | "voice-agent";
 const newKey = () => typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
 
 function greeting() {
@@ -140,21 +142,13 @@ export default function DashboardHome() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>();
   const [voiceOpen, setVoiceOpen] = useState(false);
+  const [sidebarTab, setSidebarTab] = useState<SidebarTab>("action-items");
   const selected = detail.data;
   const replyMode = selected?.run.status === "needs_input";
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [depth, setDepth] = useState<Depth>("balanced");
   const running = Boolean(selected && ["queued", "running"].includes(selected.run.status));
   const busy = submitting || (running && !replyMode);
-  // Alt+V (GlobalKeyboardShortcuts, mounted in AppLayout) fans this event out
-  // to every page hosting a composer. Toggle rather than always-open so the
-  // same shortcut also closes the panel — matches VoiceChatButton's own
-  // busy-guard so the shortcut can't open voice chat mid-run either.
-  useEffect(() => {
-    const handleToggle = () => { if (!busy) setVoiceOpen((open) => !open); };
-    window.addEventListener(VOICE_TOGGLE_EVENT, handleToggle);
-    return () => window.removeEventListener(VOICE_TOGGLE_EVENT, handleToggle);
-  }, [busy]);
   const dictation = useDictation({
     eventId: event.id,
     onTranscript: (text) => setValue((current) => `${current}${current && text ? " " : ""}${text}`),
@@ -183,6 +177,43 @@ export default function DashboardHome() {
   }, []);
   useEffect(() => { try { localStorage.setItem(RAIL_STORAGE_KEY, String(railCollapsed)); } catch { /* preference is optional */ } }, [railCollapsed]);
 
+  const closeSidebar = () => {
+    setRailCollapsed(true);
+    setVoiceOpen(false);
+  };
+  const toggleActionItems = () => {
+    if (railCollapsed) {
+      setSidebarTab("action-items");
+      setRailCollapsed(false);
+    } else if (sidebarTab === "action-items") {
+      closeSidebar();
+    } else {
+      setSidebarTab("action-items");
+    }
+  };
+  const toggleVoiceAgent = () => {
+    if (busy) return;
+    if (railCollapsed) {
+      setSidebarTab("voice-agent");
+      setVoiceOpen(true);
+      setRailCollapsed(false);
+    } else if (sidebarTab === "voice-agent") {
+      closeSidebar();
+    } else {
+      setSidebarTab("voice-agent");
+      setVoiceOpen(true);
+    }
+  };
+
+  // Alt+V (GlobalKeyboardShortcuts, mounted in AppLayout) fans this event out
+  // to every page hosting a composer. It cooperates with the rail shortcut:
+  // switching away from voice keeps its mounted session alive, while closing
+  // the sidebar tears that session down just as the old standalone panel did.
+  useEffect(() => {
+    window.addEventListener(VOICE_TOGGLE_EVENT, toggleVoiceAgent);
+    return () => window.removeEventListener(VOICE_TOGGLE_EVENT, toggleVoiceAgent);
+  }, [busy, railCollapsed, sidebarTab]);
+
   // Owned here rather than in GlobalKeyboardShortcuts because the rail is this
   // page's state — the same way DesktopSidebar owns its own toggle. Deliberately
   // not gated on isKeyboardShortcutBlocked: toggling chrome should still work
@@ -191,11 +222,11 @@ export default function DashboardHome() {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!matchesPrimaryShortcut(e, SHORTCUTS.rightPanel)) return;
       e.preventDefault();
-      setRailCollapsed((prev) => !prev);
+      toggleActionItems();
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [railCollapsed, sidebarTab]);
 
   const submit = async () => {
     setSubmitting(true); setError(undefined);
@@ -306,9 +337,82 @@ export default function DashboardHome() {
     { icon: ClipboardCheck, label: "Judge submissions", detail: "Assign reviewers and score", to: `/events/${event.slug}/program/evaluation` },
   ];
 
+  const sidebarDetail = (
+    <Tabs value={sidebarTab} onValueChange={(tab) => {
+      if (tab === "voice-agent") {
+        if (busy) return;
+        setVoiceOpen(true);
+      }
+      setSidebarTab(tab as SidebarTab);
+    }} className="flex h-full min-h-0 flex-col">
+      <TabsList aria-label="Dashboard sidebar">
+        <TabsTrigger value="action-items">Action items</TabsTrigger>
+        <TabsTrigger value="voice-agent">Voice agent</TabsTrigger>
+      </TabsList>
+      <TabsContent value="action-items" className="mt-3 space-y-1.5">
+        {cfpCount === 0 && !dataPending && (
+          <RailSection title="Start here" storageKey="namos-dashboard-rail-setup">
+            <div className="space-y-0.5">
+              {setupSteps.map((step) => (
+                <Link key={step.to} to={step.to} className={cn(RAIL_ROW, "gap-2")}>
+                  <step.icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <p className="min-w-0 flex-1 truncate text-xs font-medium">{step.label}</p>
+                  <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                </Link>
+              ))}
+            </div>
+          </RailSection>
+        )}
+        <RailSection title="Needs attention" storageKey="namos-dashboard-rail-attention">
+          <div className="space-y-0.5">
+            {attentionItems.map((item, index) => (
+              <Link key={`${item.to}-${index}`} to={item.to} className={cn(RAIL_ROW, "gap-2")}>
+                <item.icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <p className="min-w-0 flex-1 truncate text-xs font-medium">{item.label}</p>
+                <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              </Link>
+            ))}
+          </div>
+        </RailSection>
+        <RailSection title="Quick access" storageKey="namos-dashboard-rail-quick-access">
+          <div className="grid grid-cols-2 gap-1">
+            {quickAccess.map(({ icon: Icon, label, to }) => (
+              <Link key={to} to={to} className={cn(RAIL_ROW, "gap-1.5 text-xs")}>
+                <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+                <span>{label}</span>
+              </Link>
+            ))}
+          </div>
+        </RailSection>
+        <RailSection title="Action items" storageKey="namos-dashboard-rail-action-items">
+          {actionItems.length > 0 ? (
+            <div className="space-y-0.5">
+              {actionItems.map((item) => (
+                <Link key={item.to} to={item.to} className={cn(RAIL_ROW, "gap-2")}>
+                  <item.icon className="h-4 w-4 text-muted-foreground" />
+                  <p className="min-w-0 flex-1 truncate text-xs font-medium">{item.label}</p>
+                  <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+                </Link>
+              ))}
+            </div>
+          ) : <p className="px-2 py-3 text-xs text-muted-foreground">{dataPending ? "Checking…" : "Nothing outstanding."}</p>}
+        </RailSection>
+      </TabsContent>
+      {voiceOpen && (
+        <TabsContent
+          value="voice-agent"
+          forceMount
+          className={cn("mt-3 min-h-0 flex-1", sidebarTab !== "voice-agent" && "hidden")}
+        >
+          <VoiceSessionPanel eventId={event.id} onClose={closeSidebar} />
+        </TabsContent>
+      )}
+    </Tabs>
+  );
+
   if (access.error?.message.includes("Convex backend")) return <AppLayout title="Dashboard"><p className="text-sm text-muted-foreground">Dashboard currently requires the Convex backend.</p></AppLayout>;
 
-  return <AppLayout title="Dashboard"><div className="h-full min-h-0 flex flex-col gap-1.5 overflow-hidden">
+  return <AppLayout title="Dashboard" utility={railCollapsed ? undefined : sidebarDetail}><div className="h-full min-h-0 flex flex-col gap-1.5 overflow-hidden">
     <div className="min-h-0 flex-1 flex gap-2 overflow-hidden">
 
       {/* Center: agent chat — the page's card surface, on the page background.
@@ -330,7 +434,7 @@ export default function DashboardHome() {
             <TooltipTrigger asChild>
               <button
                 type="button"
-                onClick={() => setRailCollapsed((prev) => !prev)}
+                onClick={toggleActionItems}
                 aria-label={railCollapsed ? "Show quick access" : "Hide quick access"}
                 aria-pressed={!railCollapsed}
                 className={cn("compact-hit-target inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors", "hover:bg-muted hover:text-foreground")}
@@ -439,7 +543,7 @@ export default function DashboardHome() {
                       </TooltipTrigger>
                       <TooltipContent><p className="text-xs">{!dictation.isSupported ? "Dictation requires microphone access in this browser" : dictation.isRecording ? "Stop dictation" : "Dictate"}</p></TooltipContent>
                     </Tooltip>
-                    <VoiceChatButton eventId={event.id} disabled={busy} onOpen={() => setVoiceOpen(true)} />
+                    <VoiceChatButton eventId={event.id} disabled={busy} onOpen={toggleVoiceAgent} />
                     {running ? (
                       <button
                         type="button"
@@ -471,64 +575,6 @@ export default function DashboardHome() {
         )}
       </Card>
 
-      {voiceOpen && <VoiceSessionPanel eventId={event.id} onClose={() => setVoiceOpen(false)} />}
-
-      {/* Right: compact action rail. Toggle lives in the chat top bar, so this
-          hides fully instead of leaving a floating icon column behind. */}
-      {!railCollapsed && (
-      <div className="w-72 shrink-0 h-full min-h-0 overflow-y-auto px-1 py-1 space-y-1.5">
-        {cfpCount === 0 && !dataPending && (
-          <RailSection title="Start here" storageKey="namos-dashboard-rail-setup">
-            <div className="space-y-0.5">
-              {/* Label only. No step numbers, no explanatory sub-line — the rail is a list of
-                  places to go, and "Create CFP" already says what it does. */}
-              {setupSteps.map((step) => (
-                <Link key={step.to} to={step.to} className={cn(RAIL_ROW, "gap-2")}>
-                  <step.icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <p className="min-w-0 flex-1 truncate text-xs font-medium">{step.label}</p>
-                  <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                </Link>
-              ))}
-            </div>
-          </RailSection>
-        )}
-        <RailSection title="Needs attention" storageKey="namos-dashboard-rail-attention">
-          <div className="space-y-0.5">
-            {attentionItems.map((item, index) => (
-              <Link key={`${item.to}-${index}`} to={item.to} className={cn(RAIL_ROW, "gap-2")}>
-                <item.icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <p className="min-w-0 flex-1 truncate text-xs font-medium">{item.label}</p>
-                <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              </Link>
-            ))}
-          </div>
-        </RailSection>
-        <RailSection title="Quick access" storageKey="namos-dashboard-rail-quick-access">
-          <div className="grid grid-cols-2 gap-1">
-            {quickAccess.map(({ icon: Icon, label, to }) => (
-              <Link key={to} to={to} className={cn(RAIL_ROW, "gap-1.5 text-xs")}>
-                <Icon className="h-3.5 w-3.5 text-muted-foreground" />
-                <span>{label}</span>
-              </Link>
-            ))}
-          </div>
-        </RailSection>
-
-        <RailSection title="Action items" storageKey="namos-dashboard-rail-action-items">
-          {actionItems.length > 0 ? (
-            <div className="space-y-0.5">
-              {actionItems.map((item) => (
-                <Link key={item.to} to={item.to} className={cn(RAIL_ROW, "gap-2")}>
-                  <item.icon className="h-4 w-4 text-muted-foreground" />
-                  <p className="min-w-0 flex-1 truncate text-xs font-medium">{item.label}</p>
-                  <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
-                </Link>
-              ))}
-            </div>
-          ) : <p className="px-2 py-3 text-xs text-muted-foreground">{dataPending ? "Checking…" : "Nothing outstanding."}</p>}
-        </RailSection>
-      </div>
-      )}
     </div>
   </div></AppLayout>;
 }

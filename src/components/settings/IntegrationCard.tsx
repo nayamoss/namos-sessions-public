@@ -1,6 +1,8 @@
-import type { LucideIcon } from "lucide-react";
 import { ArrowRight } from "lucide-react";
-import { Card } from "@/components/ui/card";
+import {
+  IntegrationBrandIcon,
+  type IntegrationProvider,
+} from "@/components/settings/IntegrationBrandIcon";
 import { cardSurfaceClasses } from "@/components/ui/card";
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge";
 import { cn } from "@/lib/utils";
@@ -19,7 +21,7 @@ const badgeConfig: Record<IntegrationCardStatus, { label: string; tone: StatusTo
  * connection logic, it only renders whatever status the caller already resolved.
  */
 export function IntegrationCard({
-  icon: Icon,
+  provider,
   name,
   description,
   status,
@@ -27,7 +29,7 @@ export function IntegrationCard({
   onOpen,
   comingSoon = false,
 }: {
-  icon: LucideIcon;
+  provider: IntegrationProvider;
   name: string;
   description: string;
   status: IntegrationCardStatus;
@@ -48,9 +50,7 @@ export function IntegrationCard({
         comingSoon ? "cursor-default opacity-60" : "hover:bg-muted",
       )}
     >
-      <Card className="mb-4 flex h-11 w-11 items-center justify-center bg-background p-0">
-        <Icon className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
-      </Card>
+      <IntegrationBrandIcon provider={provider} className="mb-4" />
       <h3 className="mb-1 font-medium text-foreground">{name}</h3>
       <p className="mb-4 flex-1 text-sm text-muted-foreground">{description}</p>
       <div className="flex items-center gap-2">
