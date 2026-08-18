@@ -97,7 +97,7 @@
 
 ## Production verification — 2026-08-17 (closes the T018 gap)
 
-Clicked through as the signed-in owner on `app.your-project.example`, event *AI.Engineer Sandbox
+Clicked through as the signed-in owner on `app.namos-sessions.xyz`, event *AI.Engineer Sandbox
 Event — NYC*, plan *Program committee review* — the gap T018 recorded honestly and left open.
 
 Observed in the reviewer queue:

@@ -2,7 +2,7 @@
 
 ## Phase 1: Prerequisites (human, not code — blocks everything else)
 
-- [ ] T001: Generate a Convex deploy key against **`your-project`** with scope
+- [ ] T001: Generate a Convex deploy key against **`pastel-mosquito-479`** with scope
       `deployment:deploy` (Convex dashboard → deployment settings). Confirm the deployment name
       before generating — this is the dev deployment production actually serves, not the
       project's prod deployment.
@@ -103,7 +103,7 @@
 
 ## Phase 5: Verification (do not skip — this touches production)
 
-- [ ] T024: **Snapshot first.** `npx convex export --deployment your-project --path
+- [ ] T024: **Snapshot first.** `npx convex export --deployment pastel-mosquito-479 --path
       backup.zip` before any run that names a migration. The 2026-08-16 export was 107 KB; there
       is no reason to skip it.
 - [ ] T025: Dry run — dispatch with `migration` blank against a commit already in production.

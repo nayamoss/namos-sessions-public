@@ -8,8 +8,8 @@ endpoints" — treating the whole directory as unsafe to publish. Actually readi
 source (2026-08-17) shows that assumption was too conservative:
 
 - `worker/index.ts` (62 lines): the only literal domain values are inside a
-  Content-Security-Policy header string — `clerk.your-project.example`,
-  `your-project.convex.cloud`, a placeholder Sentry ingest URL. These are sent to every
+  Content-Security-Policy header string — `clerk.namos-sessions.xyz`,
+  `pastel-mosquito-479.convex.cloud`, a Sentry ingest URL. These are sent to every
   visitor's browser on every page load already; they are not secret, they're public
   by construction (a CSP header is inherently client-visible).
 - `worker/public-cfp.ts` (282 lines): all sensitive values — `CFP_EDGE_SECRET`,
@@ -66,7 +66,7 @@ review. It's closer to a few hours of careful, verifiable work.
    copying anything — API keys, JWTs, anything matching common secret patterns
    (`sk_`, `whsec_`, hex strings 32+ chars in a suspicious context) — don't rely
    solely on this doc's "already verified clean" claim, which could be stale.
-2. **Never copy `routes`/`custom_domain` or any literal `app.your-project.example`
+2. **Never copy `routes`/`custom_domain` or any literal `app.namos-sessions.xyz`
    reference** — that identifies the live production instance and stays private,
    same as the existing wrangler.jsonc precedent.
 3. **Run gitleaks against the staged diff** before pushing, same as both prior sync

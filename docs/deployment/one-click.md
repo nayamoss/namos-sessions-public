@@ -37,6 +37,15 @@ not used for the build, so the Convex deploy key is intentionally never attached
 The checked-in configuration provides the SPA fallback. Add a custom domain after the first
 deployment if desired.
 
+> **Why `wrangler.jsonc` also ships `app.namos-sessions.xyz` as a committed route:** a
+> `custom_domain: true` route only binds if the deployer owns that DNS zone in their own
+> Cloudflare account — Cloudflare's zone-ownership check means a fork can't "claim" this
+> domain by having it in the config, it's simply inert for anyone who doesn't own the zone.
+> Given that, keeping the checked-in config matching what's actually live in production is
+> the safer default: it avoids a routine maintainer deploy silently dropping the real domain
+> binding. If you're touching this again, verify `app.namos-sessions.xyz` is still live
+> before removing the route.
+
 ### DigitalOcean App Platform
 
 [![Deploy to DO](https://www.deploytodo.com/do-btn-blue.svg)](https://cloud.digitalocean.com/apps/new?repo=https://github.com/nayamoss/namos-sessions-public/tree/main)
@@ -61,9 +70,10 @@ Vercel reads `vercel.json`, builds the Vite application, and rewrites applicatio
 ### Railway
 
 Railway requires a published template ID before its button can be embedded. Maintainers create the
-template from this repository using `railway.json`, require the two variables above, enable a public
-domain, publish it, and then add the generated `https://railway.com/new/template/<template-id>`
-button here and in the README.
+template from `namos-sessions-public` (the public repo — `namos-sessions-webapp` stays private, so
+external Railway accounts can't connect to it) using `railway.json`, require the two variables
+above, enable a public domain, publish it, and then add the generated
+`https://railway.com/new/template/<template-id>` button here and in the README.
 
 ## After the first deployment
 
@@ -73,7 +83,10 @@ button here and in the README.
 3. In the Convex production deployment, set `PUBLIC_APP_ORIGIN` to that exact origin. Confirmation,
    reminder, and decision links use this value.
 4. Configure optional server-side integrations in Convex. Common values include
-   `EMAIL_INTEGRATION_ENCRYPTION_KEY`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, and `OPENAI_API_KEY`.
+   `EMAIL_INTEGRATION_ENCRYPTION_KEY`, `AI_INTEGRATION_ENCRYPTION_KEY`, `RESEND_API_KEY`,
+   `RESEND_FROM_EMAIL`, and `OPENAI_API_KEY`. Namos-managed Operations Agent usage additionally
+   requires `CLERK_SECRET_KEY`, `CLERK_AGENT_REQUIRED_FEATURE`, and
+   `CLERK_AGENT_PLAN_ALLOWANCES`; set all of these as server-side Convex environment variables.
 5. Redeploy after changing build-time variables. Convex runtime environment changes do not require
    rebuilding the static frontend.
 
@@ -89,7 +102,13 @@ For every provider, verify:
 - `/embed/*` can be framed by the intended external site before adding restrictive frame headers.
 - A push to the production branch triggers a new frontend and Convex deployment.
 
-## Local development
+## Maintainer deployment
+
+`wrangler.jsonc` ships with `app.namos-sessions.xyz` committed as a `custom_domain` route (see the
+Cloudflare section above for why that's safe for forks). For every other provider, configure the
+official custom domain in the provider dashboard or a private production override — don't add it
+to `netlify.toml`/`vercel.json`/`railway.json`/`.do/deploy.template.yaml`, since those aren't
+scoped to a single DNS zone the way a Cloudflare custom domain route is.
 
 Local development continues to use `npx convex dev`. Do not run an unscoped `npx convex deploy`
 from a locally selected project; hosted builds must always receive the intended deployment's

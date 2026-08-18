@@ -1,0 +1,10 @@
+{
+  "name": "@namos-sessions/cli",
+  "version": "0.1.0",
+  "description": "Command-line client for Namos Sessions.",
+  "type": "module",
+  "bin": { "namos-sessions": "./dist/bin.js" },
+  "files": ["dist", "README.md"],
+  "scripts": { "build": "tsc -p tsconfig.build.json", "test": "vitest run --configLoader runner --config vitest.config.ts", "prepublishOnly": "npm run build" },
+  "dependencies": { "@namos-sessions/sdk": "^0.1.0" }
+}

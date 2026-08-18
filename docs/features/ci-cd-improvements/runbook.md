@@ -4,7 +4,7 @@ Use this runbook when the `deploy` job triggered by a push to `main` fails after
 the Convex deploy step. Do not merge another speculative fix while recovering:
 each merge starts another production deploy.
 
-The production target is `your-project`. It is intentionally named here
+The production target is `pastel-mosquito-479`. It is intentionally named here
 rather than derived from `CONVEX_DEPLOY_KEY`, so no credential is exposed in a
 command, log, or run summary.
 
@@ -14,7 +14,7 @@ Take and retain a snapshot before merging any change that needs
 `MIGRATION_TO_RUN`:
 
 ```sh
-npx convex export --deployment your-project --path backup.zip
+npx convex export --deployment pastel-mosquito-479 --path backup.zip
 ```
 
 Store `backup.zip` somewhere access-controlled and outside the repository. If
@@ -70,8 +70,8 @@ export first if there is any chance data changed after the incident, and get a
 second operator to confirm the target deployment and snapshot file.
 
 ```sh
-npx convex export --deployment your-project --path pre-restore-backup.zip
-npx convex import --deployment your-project --replace backup.zip
+npx convex export --deployment pastel-mosquito-479 --path pre-restore-backup.zip
+npx convex import --deployment pastel-mosquito-479 --replace backup.zip
 ```
 
 The restore changes data only; it does not restore Convex functions, schema, or

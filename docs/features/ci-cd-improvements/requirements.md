@@ -76,8 +76,8 @@ reach `main` and surface later as a broken deploy.
 ## Out of Scope
 
 - **Moving production onto the project's real prod Convex deployment.** Production currently
-  serves off `your-project`, which is the app's *dev* deployment; the
-  project's production deployment (`your-project-prod`) is not what the live app uses. That
+  serves off `pastel-mosquito-479`, which is `sessionboard-clone`'s *dev* deployment; the
+  project's production deployment (`calculating-loris-761`) is not what the live app uses. That
   is a genuine problem, but fixing it means moving live data and it is its own project. This
   workflow targets what production actually serves today.
 - **Branch protection / GitHub Pro.** Required to make CI enforcing rather than advisory, but

@@ -121,7 +121,7 @@
 
 ## Production verification — 2026-08-17
 
-Done against the live deployment (`app.your-project.example`, Convex `your-project`) as the
+Done against the live deployment (`app.namos-sessions.xyz`, Convex `pastel-mosquito-479`) as the
 signed-in owner, by calling `evaluations:myQueue` directly over the Convex HTTP query API with a
 Clerk `convex` template token — i.e. reading the **server's actual response**, which is a stronger
 check than the devtools network tab because it bypasses the UI entirely.
