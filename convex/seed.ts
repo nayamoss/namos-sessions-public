@@ -1,5 +1,6 @@
 import { internalMutation } from "./_generated/server";
 import { recordAgendaItemAudit } from "./agendaAudit";
+import { derivePages } from "./formPages";
 
 const eventSlug = "ai-engineer-sandbox-event";
 const seededAt = Date.UTC(2026, 8, 1, 12, 0);
@@ -74,7 +75,7 @@ export const demo = internalMutation({
     const portalSlidesField = await ensureField("Slides URL", "text", false, { maxChars: 500 });
 
     const forms = await ctx.db.query("submission_forms").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect();
-    const cfpPatch = {
+    const cfpPatchBase = {
       externalTitle: "Speak at AI.Engineer", pageHeading: "Submit", version: 1, kind: "abstract" as const, collectParticipants: true,
       showWelcomeMessage: true, welcomeMessage: "Share your best practical AI session idea.",
       sections: [
@@ -85,6 +86,10 @@ export const demo = internalMutation({
       crossFieldLimits: [{ id: "seed-program-copy", label: "Program copy", fieldIds: [String(titleField), String(abstractField), String(audienceField)], maxCombinedChars: 2_000, perParticipant: false }],
       routingRules: [{ id: "seed-sponsor-fast-track", fieldId: String(formatField), equals: "Workshop", assignSponsorId: sponsorIds[0], setStatus: "accept_queue" as const }],
       closeDate: Date.UTC(2026, 8, 14, 23, 59), allowMultipleDrafts: true, autoRedirectToPortal: true, reminderEmailEnabled: true, adminUserIds: [], notifyAdminsOnNew: [], notifyAdminsOnUpdate: [], sendSubmitterConfirmation: true, status: "open" as const, updatedAt: now,
+    };
+    const cfpPatch = {
+      ...cfpPatchBase,
+      pages: derivePages({ _id: "seed-cfp", kind: cfpPatchBase.kind, collectParticipants: cfpPatchBase.collectParticipants, sections: cfpPatchBase.sections }),
     };
     let cfpForm = forms.find((form) => form.internalName === "AI.Engineer CFP");
     if (cfpForm) { await ctx.db.patch(cfpForm._id, cfpPatch); cfpForm = { ...cfpForm, ...cfpPatch }; }

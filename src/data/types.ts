@@ -42,11 +42,12 @@ export interface SponsorContact { id: string; eventId: EventId; sponsorId: Spons
 export type SponsorStatus = "prospect" | "confirmed" | "declined";
 export interface Sponsor { id: SponsorId; eventId: EventId; name: string; tierId?: SponsorTierId; tier?: SponsorTier; status: SponsorStatus; website?: string; notes?: string; primaryContact?: SponsorContact; openTaskCount: number; }
 export interface SponsorDetail extends Sponsor { contacts: SponsorContact[]; tasks: OnboardingTask[]; submissions: Submission[]; }
-export interface SubmissionForm { id: FormId; eventId: EventId; name: string; isOpen: boolean; sections?: SubmissionFormSection[]; }
+export interface SubmissionForm { id: FormId; eventId: EventId; name: string; isOpen: boolean; sections?: SubmissionFormSection[]; pages?: FormPage[]; }
 export interface FieldDefinition { id: string; label: string; type: string; required: boolean; maxChars?: number; options?: string[]; showIf?: { fieldId: string; equals: string }; }
 export type SubmissionFormKind = "abstract" | "session" | "contact" | "group" | "submission_task";
 export type SubmissionFormStatus = "draft" | "open" | "closed";
 export type SubmissionFormSection = { id: string; key: "abstract" | "participant" | "portal"; title: string; pageHeading: string; description?: string; fieldIds: string[] };
+export type FormPage = { id: string; kind: "system" | "custom"; systemRole?: "account" | "participant" | "review"; label: string; pageHeading: string; description?: string; fieldIds: string[] };
 export type ParticipantRole = { role: string; min?: number; max?: number };
 export type CrossFieldLimit = { id: string; label: string; fieldIds: string[]; maxCombinedChars: number; perParticipant: boolean };
 export type SubmissionRoutingRule = {
@@ -70,7 +71,8 @@ export interface SubmissionFormWrite {
   collectParticipants: boolean;
   welcomeMessage?: string;
   showWelcomeMessage: boolean;
-  sections: SubmissionFormSection[];
+  sections?: SubmissionFormSection[];
+  pages?: FormPage[];
   participantRoles: ParticipantRole[];
   crossFieldLimits: CrossFieldLimit[];
   routingRules?: SubmissionRoutingRule[];
@@ -322,6 +324,8 @@ export interface PublicSubmissionFormConfig {
   form: {
     externalTitle: string; pageHeading: string; kind: SubmissionFormKind; collectParticipants: boolean;
     welcomeMessage?: string; showWelcomeMessage: boolean;
+    pages: { id: string; kind: "system" | "custom"; systemRole?: "account" | "participant" | "review"; label: string; pageHeading: string; description?: string; fieldKeys: string[] }[];
+    /** @deprecated Compatibility projection for clients not yet on the page renderer. */
     sections: { key: "abstract" | "participant"; title: string; pageHeading: string; description?: string; fieldKeys: string[] }[];
     participantRoles: ParticipantRole[];
     crossFieldLimits: { key: string; label: string; fieldKeys: string[]; maxCombinedChars: number; perParticipant: boolean }[];

@@ -34,7 +34,7 @@ body,
     --text-3xl: 2.03125rem; /* 26px */
     --text-4xl: 2.34375rem; /* 30px */
 
-    /* Takumi palette — near-black primary with soft, warm neutrals.
+    /* Namos product palette — electric-blue primary actions with soft neutrals.
        --muted/--secondary/--surface-sunken must stay a visible step darker than
        --background: they fill search, badges, switch tracks and input surfaces,
        which sit directly on the page background and vanish if the two match. */
@@ -47,7 +47,8 @@ body,
     --popover: 0 0% 100%;
     --popover-foreground: 222 24% 14%;
 
-    --primary: 0 0% 14%;
+    --primary: 216 100% 50%;
+    --primary-hover: 216 100% 40%;
     --primary-foreground: 0 0% 98%;
 
     --secondary: 220 13% 93%;
@@ -108,8 +109,9 @@ body,
     --card-foreground: 220 24% 94%;
     --popover: 222 18% 11%;
     --popover-foreground: 220 24% 94%;
-    --primary: 0 0% 85%;
-    --primary-foreground: 0 0% 9%;
+    --primary: 216 100% 65%;
+    --primary-hover: 216 100% 70%;
+    --primary-foreground: 222 24% 10%;
     --secondary: 222 14% 17%;
     --secondary-foreground: 220 24% 94%;
     --muted: 222 14% 17%;

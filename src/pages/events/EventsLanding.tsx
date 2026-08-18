@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, Copy, MoreHorizontal, Trash2 } from "lucide-react";
+import { CalendarDays, Copy, Trash2 } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
 import { DetailPane } from "@/components/shared/DetailPane";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { DataGrid, type DataGridColumn } from "@/components/shared/DataGrid";
-import { SegmentedControl } from "@/components/shared/SegmentedControl";
 import { SkeletonList } from "@/components/shared/SkeletonList";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,12 +18,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -310,6 +303,7 @@ export default function EventsLanding() {
       key: "event",
       header: "Event",
       kind: "row-header",
+      sortValue: (event) => event.name,
       cell: (event) => (
         <p className="truncate font-semibold text-foreground">{event.name}</p>
       ),
@@ -318,12 +312,14 @@ export default function EventsLanding() {
       key: "dates",
       header: "Dates",
       width: "13rem",
+      sortValue: (event) => event.startDate,
       cell: (event) => <span className="text-muted-foreground">{formatDates(event)}</span>,
     },
     {
       key: "status",
       header: "Status",
       width: "8rem",
+      sortValue: (event) => event.status,
       cell: (event) => (
         <span className="inline-flex rounded-full bg-muted px-2.5 py-1 text-xs font-medium capitalize text-foreground">
           {event.status}
@@ -332,36 +328,35 @@ export default function EventsLanding() {
     },
     {
       key: "actions",
-      header: "",
+      header: <span className="sr-only">Actions</span>,
       headerLabel: "Actions",
-      width: "3rem",
+      width: "7rem",
       align: "right",
       cell: (event) =>
         manageableEventIds.has(event.id) ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+          <div className="flex items-center justify-end gap-1">
+            <Button
+              size="icon"
+              variant="ghost"
+              aria-label={`Duplicate ${event.name}`}
+              title={`Duplicate ${event.name}`}
+              onClick={() => setEditor({ mode: "duplicate", source: event })}
+            >
+              <Copy className="h-4 w-4" />
+            </Button>
+            {event.status === "draft" && (
               <Button
                 size="icon"
                 variant="ghost"
-                aria-label={`Actions for ${event.name}`}
-                onClick={(clickEvent) => clickEvent.stopPropagation()}
+                className="text-destructive hover:text-destructive"
+                aria-label={`Delete ${event.name}`}
+                title={`Delete ${event.name}`}
+                onClick={() => setDeleteCandidate(event)}
               >
-                <MoreHorizontal className="h-4 w-4" />
+                <Trash2 className="h-4 w-4" />
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => setEditor({ mode: "duplicate", source: event })}>
-                <Copy className="mr-2 h-4 w-4" />
-                Duplicate
-              </DropdownMenuItem>
-              {event.status === "draft" && (
-                <DropdownMenuItem className="text-destructive" onSelect={() => setDeleteCandidate(event)}>
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+            )}
+          </div>
         ) : null,
     },
   ];
@@ -378,17 +373,29 @@ export default function EventsLanding() {
         <ContentToolbar
           ariaLabel="Event controls"
           utilities={
-            <SegmentedControl<"all" | EventStatus>
-              label="Event status"
-              value={filter}
-              options={[
-                { value: "all", label: "All" },
-                { value: "draft", label: "Draft" },
-                { value: "published", label: "Published" },
-                { value: "archived", label: "Archived" },
-              ]}
-              onChange={setFilter}
-            />
+            <div className="flex items-center gap-2.5">
+              <Label htmlFor="event-status-filter" className="text-sm text-muted-foreground">
+                Status
+              </Label>
+              <Select
+                value={filter}
+                onValueChange={(value) => setFilter(value as "all" | EventStatus)}
+              >
+                <SelectTrigger
+                  id="event-status-filter"
+                  className="w-40 bg-card"
+                  aria-label="Filter events by status"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent align="end">
+                  <SelectItem value="all">All events</SelectItem>
+                  <SelectItem value="draft">Draft</SelectItem>
+                  <SelectItem value="published">Published</SelectItem>
+                  <SelectItem value="archived">Archived</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           }
           primaryAction={
             <Button onClick={() => setEditor({ mode: "new" })}>
@@ -417,6 +424,7 @@ export default function EventsLanding() {
             getRowLabel={(event) => event.name}
             onRowActivated={(event) => navigate(`/events/${event.slug}/dashboard`)}
             minWidth={680}
+            defaultSort={{ key: "dates", direction: "desc" }}
           />
         ) : (
           <div className={cardSurfaceClasses("default")}>

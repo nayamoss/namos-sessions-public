@@ -96,7 +96,7 @@ Edit `README.md`:
 - Reconcile the "Data backends" section with Step 2's changes (no more admin-allowlist language).
 - Add the missing env vars found in the audit: `VITE_CONVEX_SITE_URL`, `CLERK_JWT_ISSUER_DOMAIN`.
 - If the README links to a live/demo instance, point it at the real deploy domains —
-  `namos-sessions.xyz` (marketing) and `app.namos-sessions.xyz` (app login) — not a provider
+  `namos-sessions.xyz` (marketing) and `app.your-project.example` (app login) — not a provider
   preview URL. Only add these links once those domains are actually live; don't reference a URL
   that 404s.
 

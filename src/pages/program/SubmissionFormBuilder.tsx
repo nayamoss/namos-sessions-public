@@ -958,6 +958,27 @@ export default function SubmissionFormBuilder() {
         collectParticipants,
         welcomeMessage: showWelcomeMessage ? welcomeMessage : undefined,
         showWelcomeMessage,
+        pages: [
+          { id: "account", kind: "system" as const, systemRole: "account" as const, label: "Account", pageHeading: "Your details", fieldIds: [] },
+          {
+            id: "abstract",
+            kind: "custom" as const,
+            label: abstractSection.title.trim() || defaultAbstractSection.title,
+            pageHeading: abstractSection.pageHeading.trim() || defaultAbstractSection.pageHeading,
+            description: abstractSection.description || undefined,
+            fieldIds: nextAbstractFields.map((field) => field.recordId!),
+          },
+          ...(collectParticipants ? [{
+            id: "participants",
+            kind: "system" as const,
+            systemRole: "participant" as const,
+            label: participantSection.title.trim() || defaultParticipantSection.title,
+            pageHeading: participantSection.pageHeading.trim() || defaultParticipantSection.pageHeading,
+            description: participantSection.description || undefined,
+            fieldIds: nextParticipantFields.map((field) => field.recordId!),
+          }] : []),
+          { id: "review", kind: "system" as const, systemRole: "review" as const, label: "Review", pageHeading: "Review", fieldIds: [] },
+        ],
         sections: [
           {
             id: "abstract",

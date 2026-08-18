@@ -208,7 +208,18 @@ export default defineSchema({
   submission_forms: defineTable({
     eventId: v.id("events"), internalName: v.string(), externalTitle: v.string(), pageHeading: v.string(), version: v.number(),
     kind: v.union(v.literal("abstract"), v.literal("session"), v.literal("contact"), v.literal("group"), v.literal("submission_task")), collectParticipants: v.boolean(), welcomeMessage: v.optional(v.string()), showWelcomeMessage: v.boolean(),
-    sections: v.array(v.object({ id: v.string(), key: v.union(v.literal("abstract"), v.literal("participant"), v.literal("portal")), title: v.string(), pageHeading: v.string(), description: v.optional(v.string()), fieldIds: v.array(v.string()) })),
+    // `sections` remains optional during the page-model rollout so rows written by the
+    // rebuilt builders can coexist with older readers and existing live forms.
+    sections: v.optional(v.array(v.object({ id: v.string(), key: v.union(v.literal("abstract"), v.literal("participant"), v.literal("portal")), title: v.string(), pageHeading: v.string(), description: v.optional(v.string()), fieldIds: v.array(v.string()) }))),
+    pages: v.optional(v.array(v.object({
+      id: v.string(),
+      kind: v.union(v.literal("system"), v.literal("custom")),
+      systemRole: v.optional(v.union(v.literal("account"), v.literal("participant"), v.literal("review"))),
+      label: v.string(),
+      pageHeading: v.string(),
+      description: v.optional(v.string()),
+      fieldIds: v.array(v.string()),
+    }))),
     participantRoles: v.array(v.object({ role: v.string(), min: v.optional(v.number()), max: v.optional(v.number()) })),
     crossFieldLimits: v.array(v.object({ id: v.string(), label: v.string(), fieldIds: v.array(v.string()), maxCombinedChars: v.number(), perParticipant: v.boolean() })),
     routingRules: v.optional(v.array(v.object({
@@ -225,8 +236,50 @@ export default defineSchema({
   }).index("by_event", ["eventId"]),
   field_definitions: defineTable({ label: v.string(), type: v.union(v.literal("text"), v.literal("wysiwyg"), v.literal("dropdown"), v.literal("multiselect"), v.literal("email"), v.literal("phone"), v.literal("file"), v.literal("date"), v.literal("number")), maxChars: v.optional(v.number()), options: v.optional(v.array(v.string())), locked: v.boolean(), required: v.boolean(), showIf: v.optional(v.object({ fieldId: v.string(), equals: v.string() })), createdAt: v.number(), updatedAt: v.number() }),
   form_responses: defineTable({ eventId: v.id("events"), formId: v.id("submission_forms"), speakerId: v.id("speakers"), submissionId: v.optional(v.id("submissions")), answers: v.record(v.string(), v.string()), createdAt: v.number(), updatedAt: v.number() }).index("by_form_speaker", ["formId", "speakerId"]).index("by_event", ["eventId"]),
+  // The organization directory is deliberately separate from the legacy event-scoped speaker
+  // record. The optional contactId on speakers below permits a zero-downtime backfill and keeps
+  // portal identity, agenda, and task links stable while one person appears in many events.
+  crm_contacts: defineTable({
+    organizationId: v.id("organizations"),
+    email: v.string(),
+    firstName: v.string(),
+    lastName: v.string(),
+    stage: v.union(v.literal("prospect"), v.literal("contacted"), v.literal("qualified"), v.literal("invited"), v.literal("negotiating"), v.literal("confirmed"), v.literal("declined"), v.literal("archived")),
+    score: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_organization", ["organizationId"]).index("by_org_email", ["organizationId", "email"]),
+  crm_event_contacts: defineTable({
+    eventId: v.id("events"),
+    contactId: v.id("crm_contacts"),
+    speakerId: v.optional(v.id("speakers")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_event", ["eventId"]).index("by_contact", ["contactId"]).index("by_event_contact", ["eventId", "contactId"]),
+  crm_stage_history: defineTable({
+    organizationId: v.id("organizations"),
+    contactId: v.id("crm_contacts"),
+    stage: v.union(v.literal("prospect"), v.literal("contacted"), v.literal("qualified"), v.literal("invited"), v.literal("negotiating"), v.literal("confirmed"), v.literal("declined"), v.literal("archived")),
+    score: v.number(),
+    changedByUserId: v.string(),
+    createdAt: v.number(),
+  }).index("by_contact_createdAt", ["contactId", "createdAt"]),
+  crm_segments: defineTable({
+    organizationId: v.id("organizations"),
+    name: v.string(),
+    stage: v.optional(v.union(v.literal("prospect"), v.literal("contacted"), v.literal("qualified"), v.literal("invited"), v.literal("negotiating"), v.literal("confirmed"), v.literal("declined"), v.literal("archived"))),
+    minScore: v.optional(v.number()),
+    maxScore: v.optional(v.number()),
+    eventId: v.optional(v.id("events")),
+    confirmationStatus: v.optional(v.union(v.literal("awaiting"), v.literal("confirmed"), v.literal("declined"))),
+    profileComplete: v.optional(v.boolean()),
+    outstandingTasks: v.optional(v.boolean()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_organization", ["organizationId"]),
   speakers: defineTable({
     eventId: v.id("events"),
+    contactId: v.optional(v.id("crm_contacts")),
     email: v.string(),
     firstName: v.string(),
     lastName: v.string(),
@@ -249,7 +302,7 @@ export default defineSchema({
     status: v.union(v.literal("invited"), v.literal("active"), v.literal("inactive")),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_event", ["eventId"]).index("by_event_email", ["eventId", "email"]).index("by_event_sourceRef", ["eventId", "sourceRef"]).index("by_event_checkedIn", ["eventId", "checkedInAt"]),
+  }).index("by_event", ["eventId"]).index("by_event_email", ["eventId", "email"]).index("by_event_contact", ["eventId", "contactId"]).index("by_event_sourceRef", ["eventId", "sourceRef"]).index("by_event_checkedIn", ["eventId", "checkedInAt"]),
   speaker_documents: defineTable({
     submissionId: v.id("submissions"),
     speakerId: v.id("speakers"),
@@ -305,6 +358,22 @@ export default defineSchema({
     .index("by_submission", ["submissionId"])
     .index("by_assignment", ["assignmentId"])
     .index("by_submission_reviewer", ["submissionId", "reviewerName"]),
+  ai_assessments: defineTable({
+    eventId: v.id("events"),
+    submissionId: v.id("submissions"),
+    evaluationPlanId: v.id("evaluation_plans"),
+    status: v.union(v.literal("queued"), v.literal("completed"), v.literal("failed")),
+    score: v.optional(v.number()),
+    rationale: v.optional(v.string()),
+    criteria: v.optional(v.array(v.object({ criterionId: v.string(), score: v.optional(v.number()), rationale: v.string() }))),
+    model: v.string(),
+    promptVersion: v.string(),
+    inputHash: v.string(),
+    requestedByUserId: v.string(),
+    error: v.optional(v.string()),
+    requestedAt: v.number(),
+    completedAt: v.optional(v.number()),
+  }).index("by_submission_plan", ["submissionId", "evaluationPlanId"]).index("by_event", ["eventId"]),
   evaluation_plans: defineTable({
     eventId: v.id("events"),
     name: v.string(),
@@ -529,6 +598,17 @@ export default defineSchema({
       speaker: v.object({ name: v.boolean(), headshot: v.boolean(), bio: v.boolean(), links: v.boolean(), sessions: v.boolean() }),
     }), createdAt: v.number(), updatedAt: v.number(),
   }).index("by_event", ["eventId"]).index("by_event_enabled", ["eventId", "enabled"]),
+  // A feed delegates filtering and public-field selection to an existing embed configuration.
+  // This keeps HTML, JSON, XML, and iCal projections on exactly the same safe-public boundary.
+  public_feeds: defineTable({
+    eventId: v.id("events"),
+    embedId: v.id("embeds"),
+    name: v.string(),
+    format: v.union(v.literal("html"), v.literal("json"), v.literal("xml"), v.literal("ical")),
+    enabled: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_event", ["eventId"]).index("by_event_enabled", ["eventId", "enabled"]),
   // Conflicts are derived by agenda.detectConflicts rather than stored here. A session can
   // deliberately be unpublished while organizers resolve its room or speaker assignment.
   agenda_items: defineTable({
@@ -593,6 +673,8 @@ export default defineSchema({
     status: v.union(v.literal("queued"), v.literal("sent"), v.literal("failed")),
     toEmail: v.string(),
     subject: v.string(),
+    // Provider message ids enable inbound replies to be joined to this immutable delivery row.
+    outboundMessageId: v.optional(v.string()),
     sentAt: v.optional(v.number()),
     error: v.optional(v.string()),
     createdAt: v.number(),
@@ -600,6 +682,32 @@ export default defineSchema({
     .index("by_event", ["eventId"])
     .index("by_speaker", ["speakerId"])
     .index("by_submission", ["submissionId"]),
+  inbound_email_domains: defineTable({
+    eventId: v.id("events"),
+    provider: v.union(v.literal("resend"), v.literal("ses")),
+    domain: v.string(),
+    aliasLocalPart: v.string(),
+    mode: v.union(v.literal("managed"), v.literal("custom")),
+    verifiedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_event", ["eventId"]).index("by_domain_alias", ["domain", "aliasLocalPart"]),
+  inbound_messages: defineTable({
+    eventId: v.id("events"),
+    provider: v.union(v.literal("resend"), v.literal("ses")),
+    messageId: v.string(),
+    inReplyTo: v.optional(v.string()),
+    references: v.array(v.string()),
+    fromEmail: v.string(),
+    subject: v.string(),
+    text: v.string(),
+    receivedAt: v.number(),
+    speakerId: v.optional(v.id("speakers")),
+    submissionId: v.optional(v.id("submissions")),
+    commsLogId: v.optional(v.id("comms_log")),
+    triageStatus: v.union(v.literal("matched"), v.literal("unmatched"), v.literal("resolved")),
+    createdAt: v.number(),
+  }).index("by_event_receivedAt", ["eventId", "receivedAt"]).index("by_messageId", ["messageId"]).index("by_comms_log", ["commsLogId"]),
   // Credentials are encrypted by the Convex action runtime before they reach storage. Queries used
   // by the browser never return this document; only the delivery service can resolve it.
   email_integrations: defineTable({

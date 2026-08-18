@@ -1,14 +1,17 @@
-User-agent: Googlebot
-Allow: /
-
-User-agent: Bingbot
-Allow: /
-
-User-agent: Twitterbot
-Allow: /
-
-User-agent: facebookexternalhit
-Allow: /
-
 User-agent: *
-Allow: /
+Allow: /$
+Allow: /e/
+Allow: /submit/
+Allow: /embed/
+Allow: /api-docs
+Allow: /sign-in
+Allow: /sign-up
+Allow: /updates
+Disallow: /dashboard
+Disallow: /settings
+Disallow: /program
+Disallow: /portal
+Disallow: /portals
+Disallow: /events/
+Disallow: /cms
+Disallow: /dev

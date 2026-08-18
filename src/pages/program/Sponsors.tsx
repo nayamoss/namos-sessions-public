@@ -1038,6 +1038,7 @@ export default function Sponsors() {
   useEffect(() => {
     void load();
   }, [load]);
+
   const closePane = () =>
     setParams((current) => {
       const next = new URLSearchParams(current);

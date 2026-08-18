@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { Bot, FileText, Globe, Mail, Server, Table } from "lucide-react";
 import { useCurrentEvent } from "@/components/EventContext";
+import { IntegrationBrandIcon } from "@/components/settings/IntegrationBrandIcon";
 import { IntegrationCard, type IntegrationCardStatus } from "@/components/settings/IntegrationCard";
 import { EmailIntegrationForm } from "@/components/shared/EmailIntegrationForm";
 import { AgentProviderSettingsForm } from "@/components/shared/AgentProviderSettingsForm";
@@ -141,7 +141,7 @@ export default function Integrations() {
         ) : event ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <IntegrationCard
-              icon={Mail}
+              provider="resend"
               name="Resend"
               description="Connect Resend for transactional event email with an API key."
               status={emailIntegration?.provider === "resend" ? (emailIntegration.status === "error" ? "error" : "connected") : "not_connected"}
@@ -149,14 +149,14 @@ export default function Integrations() {
               onOpen={() => setEmailProviderModal("resend")}
             />
             <IntegrationCard
-              icon={Server}
+              provider="amazon_ses"
               name="Amazon SES"
               description="Connect Amazon SES using AWS access keys or SMTP credentials."
               status={emailIntegration?.provider === "ses" ? (emailIntegration.status === "error" ? "error" : "connected") : "not_connected"}
               detail={emailIntegration?.provider === "ses" ? providerLabel.ses : undefined}
               onOpen={() => setEmailProviderModal("ses")}
             />
-            <IntegrationCard icon={Bot} name="Operations Agent AI" description="Choose Namos-managed AI or connect this event's own OpenAI key." status={agentStatus} detail={agentDetail} onOpen={() => setAgentModalOpen(true)} />
+            <IntegrationCard provider="operations_agent" name="Operations Agent AI" description="Choose Namos-managed AI or connect this event's own OpenAI key." status={agentStatus} detail={agentDetail} onOpen={() => setAgentModalOpen(true)} />
           </div>
         ) : (
           <div className={cardSurfaceClasses("default", "bg-muted/60 p-6")}>
@@ -170,7 +170,7 @@ export default function Integrations() {
             <h2 className="text-base font-semibold">Content sources</h2>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <IntegrationCard
-                icon={FileText}
+                provider="notion"
                 name="Notion"
                 description="Import speakers or submissions from a Notion database."
                 status={notionIntegration ? (notionIntegration.status === "error" ? "error" : "connected") : "not_connected"}
@@ -178,7 +178,7 @@ export default function Integrations() {
                 onOpen={() => setNotionModalOpen(true)}
               />
               <IntegrationCard
-                icon={Table}
+                provider="airtable"
                 name="Airtable"
                 description="Import speakers or submissions from an Airtable base."
                 status={airtableIntegration ? (airtableIntegration.status === "error" ? "error" : "connected") : "not_connected"}
@@ -186,7 +186,7 @@ export default function Integrations() {
                 onOpen={() => setAirtableModalOpen(true)}
               />
               <IntegrationCard
-                icon={Globe}
+                provider="sanity"
                 name="Sanity"
                 description="Publish confirmed sessions and speakers to a Sanity dataset."
                 status={sanityIntegration ? (sanityIntegration.status === "error" ? "error" : "connected") : "not_connected"}
@@ -204,7 +204,10 @@ export default function Integrations() {
       <Dialog open={emailProviderModal !== null} onOpenChange={closeEmailModal}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{emailProviderModal ? `Connect ${providerLabel[emailProviderModal]}` : "Email delivery"}</DialogTitle>
+            <DialogTitle className="flex items-center gap-3">
+              {emailProviderModal && <IntegrationBrandIcon provider={emailProviderModal === "resend" ? "resend" : "amazon_ses"} size="small" />}
+              <span>{emailProviderModal ? `Connect ${providerLabel[emailProviderModal]}` : "Email delivery"}</span>
+            </DialogTitle>
             <DialogDescription>
               Connect this provider to send confirmations, decisions, reminders, and calendar invites.
               One provider is active per event; changing it replaces the existing connection.
@@ -214,12 +217,12 @@ export default function Integrations() {
         </DialogContent>
       </Dialog>
       <Dialog open={agentModalOpen} onOpenChange={(open) => { setAgentModalOpen(open); if (!open && event) void loadAgentStatus(event.id); }}>
-        <DialogContent className="max-w-2xl"><DialogHeader><DialogTitle>Operations Agent AI</DialogTitle><DialogDescription>Choose who provides and pays for model usage on new Operations Agent runs for this event.</DialogDescription></DialogHeader>{event && <AgentProviderSettingsForm eventId={event.id} onSaved={() => void loadAgentStatus(event.id)} />}</DialogContent>
+        <DialogContent className="max-w-2xl"><DialogHeader><DialogTitle className="flex items-center gap-3"><IntegrationBrandIcon provider="operations_agent" size="small" /><span>Operations Agent AI</span></DialogTitle><DialogDescription>Choose who provides and pays for model usage on new Operations Agent runs for this event.</DialogDescription></DialogHeader>{event && <AgentProviderSettingsForm eventId={event.id} onSaved={() => void loadAgentStatus(event.id)} />}</DialogContent>
       </Dialog>
       <Dialog open={notionModalOpen} onOpenChange={(open) => { setNotionModalOpen(open); if (!open && event) void loadNotionStatus(event.id); }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Notion</DialogTitle>
+            <DialogTitle className="flex items-center gap-3"><IntegrationBrandIcon provider="notion" size="small" /><span>Notion</span></DialogTitle>
             <DialogDescription>
               Import speakers or submissions from a Notion database. Re-running "Import now"
               updates existing rows instead of duplicating them.
@@ -231,7 +234,7 @@ export default function Integrations() {
       <Dialog open={airtableModalOpen} onOpenChange={(open) => { setAirtableModalOpen(open); if (!open && event) void loadAirtableStatus(event.id); }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Airtable</DialogTitle>
+            <DialogTitle className="flex items-center gap-3"><IntegrationBrandIcon provider="airtable" size="small" /><span>Airtable</span></DialogTitle>
             <DialogDescription>
               Import speakers or submissions from an Airtable base. Re-running "Import now"
               updates existing rows instead of duplicating them.
@@ -243,7 +246,7 @@ export default function Integrations() {
       <Dialog open={sanityModalOpen} onOpenChange={(open) => { setSanityModalOpen(open); if (!open && event) void loadSanityStatus(event.id); }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Sanity</DialogTitle>
+            <DialogTitle className="flex items-center gap-3"><IntegrationBrandIcon provider="sanity" size="small" /><span>Sanity</span></DialogTitle>
             <DialogDescription>
               Publish this event&apos;s public program to Sanity. Re-running &quot;Publish now&quot;
               updates the same documents instead of duplicating them.

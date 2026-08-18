@@ -133,7 +133,7 @@ Same query, five rows, one caller:
 | Program committee review | `false` | `["Speaker 1"]` |
 | **Blind review QA plan** | **`true`** | **key absent entirely** |
 | Browser multi-round 20260812 | `false` | `["Speaker 1"]` |
-| Program committee review | `false` | `["Naya Moss"]` |
+| Program committee review | `false` | `["Project Maintainer"]` |
 
 The anonymized row's key list is exactly: `anonymized`, `assignmentId`, `eventId`, `planName`,
 `review`, `round`, `scoringScaleMax`, `submissionAnswers`, `submissionId`, `submissionTitle`.

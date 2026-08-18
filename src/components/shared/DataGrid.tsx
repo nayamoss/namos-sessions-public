@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronsUpDown, ChevronUp } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,8 +20,14 @@ export type DataGridColumn<Row> = {
   width?: string;
   align?: "left" | "center" | "right";
   kind?: "data" | "row-header";
+  sortValue?: (row: Row) => string | number | boolean | null | undefined;
   sortDirection?: "asc" | "desc";
   onSort?: () => void;
+};
+
+export type DataGridSort = {
+  key: string;
+  direction: "asc" | "desc";
 };
 
 type DataGridProps<Row extends { id: string }> = {
@@ -42,6 +48,7 @@ type DataGridProps<Row extends { id: string }> = {
   minWidth?: number;
   selectedIds?: string[];
   onSelectionChange?: (ids: string[]) => void;
+  defaultSort?: DataGridSort;
 };
 
 export function DataGrid<Row extends { id: string }>(props: DataGridProps<Row>) {
@@ -86,6 +93,7 @@ function DataGridContent<Row extends { id: string }>({
   minWidth,
   selectedIds,
   onSelectionChange,
+  defaultSort,
   selected,
   onDefaultRowActivated,
 }: DataGridProps<Row> & {
@@ -94,19 +102,42 @@ function DataGridContent<Row extends { id: string }>({
 }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(defaultPageSize);
+  const [internalSort, setInternalSort] = useState<DataGridSort | undefined>(defaultSort);
+  const sortedRows = useMemo(() => {
+    if (!internalSort) return rows;
+    const column = columns.find((candidate) => candidate.key === internalSort.key);
+    if (!column?.sortValue) return rows;
+    const direction = internalSort.direction === "asc" ? 1 : -1;
+    const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+    return rows
+      .map((row, index) => ({ row, index, value: column.sortValue?.(row) }))
+      .sort((left, right) => {
+        if (left.value == null && right.value == null) return left.index - right.index;
+        if (left.value == null) return 1;
+        if (right.value == null) return -1;
+        const comparison =
+          typeof left.value === "number" && typeof right.value === "number"
+            ? left.value - right.value
+            : typeof left.value === "boolean" && typeof right.value === "boolean"
+              ? Number(left.value) - Number(right.value)
+              : collator.compare(String(left.value), String(right.value));
+        return comparison === 0 ? left.index - right.index : comparison * direction;
+      })
+      .map(({ row }) => row);
+  }, [columns, internalSort, rows]);
   const rowSignature = useMemo(
-    () => rows.map((row) => row.id).join("\u0000"),
-    [rows],
+    () => sortedRows.map((row) => row.id).join("\u0000"),
+    [sortedRows],
   );
   useEffect(() => {
     setPage(1);
   }, [pageSize, rowSignature]);
 
-  const total = rows.length;
+  const total = sortedRows.length;
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const safePage = Math.min(page, pageCount);
   const start = (safePage - 1) * pageSize;
-  const visible = paginated ? rows.slice(start, start + pageSize) : rows;
+  const visible = paginated ? sortedRows.slice(start, start + pageSize) : sortedRows;
   const rangeStart = total === 0 ? 0 : start + 1;
   const rangeEnd = Math.min(start + pageSize, total);
   const sized = columns.some((column) => column.width);
@@ -124,12 +155,12 @@ function DataGridContent<Row extends { id: string }>({
     ? "sticky top-0 z-10 bg-muted text-xs text-foreground"
     : isMatrix
       ? "sticky top-0 z-10 bg-card text-xs text-muted-foreground"
-    : "border-b border-border/50 bg-muted/15 text-xs text-muted-foreground";
+    : "bg-muted/35 text-sm font-medium text-muted-foreground";
   const tableViewportClass = isEmbedded
     ? "max-h-[calc(100dvh-11rem)] overflow-auto"
     : isMatrix
       ? "max-h-[38rem] overflow-auto"
-      : "overflow-x-auto rounded-lg border border-border/50 bg-card";
+      : "overflow-x-auto rounded-lg bg-card shadow-sm ring-1 ring-inset ring-foreground/10";
   const alignmentClass = (column: DataGridColumn<Row>) =>
     column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left";
   const columnClass = (column: DataGridColumn<Row>) => {
@@ -149,24 +180,36 @@ function DataGridContent<Row extends { id: string }>({
     return `${sized ? "truncate " : ""}${padding} ${alignmentClass(column)}`;
   };
   const headerCell = (column: DataGridColumn<Row>) => {
-    const SortIcon = column.sortDirection === "asc" ? ChevronUp : ChevronDown;
+    const internalDirection = internalSort?.key === column.key ? internalSort.direction : undefined;
+    const direction = column.sortDirection ?? internalDirection;
+    const sortable = Boolean(column.onSort || column.sortValue);
+    const SortIcon = direction === "asc" ? ChevronUp : direction === "desc" ? ChevronDown : ChevronsUpDown;
     const label = column.headerLabel ?? (typeof column.header === "string" ? column.header : column.key);
     return (
       <th
         key={column.key}
         scope="col"
         className={columnClass(column)}
-        aria-sort={column.sortDirection === "asc" ? "ascending" : column.sortDirection === "desc" ? "descending" : undefined}
+        aria-sort={sortable ? direction === "asc" ? "ascending" : direction === "desc" ? "descending" : "none" : undefined}
       >
-        {column.onSort ? (
+        {sortable ? (
           <button
             type="button"
             className={`inline-flex w-full items-center gap-1.5 rounded-sm py-0.5 font-medium text-foreground hover:text-foreground focus-visible:outline-none ${column.align === "right" ? "justify-end" : "justify-start"}`}
-            onClick={column.onSort}
-            aria-label={`Sort by ${label}${column.sortDirection ? `, currently ${column.sortDirection === "asc" ? "ascending" : "descending"}` : ""}`}
+            onClick={() => {
+              if (column.onSort) {
+                column.onSort();
+                return;
+              }
+              setInternalSort((current) => ({
+                key: column.key,
+                direction: current?.key === column.key && current.direction === "asc" ? "desc" : "asc",
+              }));
+            }}
+            aria-label={`Sort by ${label}, currently ${direction === "asc" ? "ascending" : direction === "desc" ? "descending" : "not sorted"}`}
           >
             <span>{column.header}</span>
-            <SortIcon className={`h-3.5 w-3.5 ${column.sortDirection ? "text-foreground" : "text-muted-foreground/45"}`} aria-hidden="true" />
+            <SortIcon className={`h-3.5 w-3.5 ${direction ? "text-foreground" : "text-muted-foreground/55"}`} aria-hidden="true" />
           </button>
         ) : column.header}
       </th>
@@ -205,7 +248,7 @@ function DataGridContent<Row extends { id: string }>({
               {columns.map(headerCell)}
             </tr>
           </thead>
-          <tbody>
+          <tbody className={isEmbedded ? undefined : "[&>tr:not(:last-child)>*]:shadow-[inset_0_-1px_0_hsl(var(--foreground)/0.10)]"}>
             {Array.from({ length: skeletonRows }, (_, row) => (
               <tr key={row}>
                 {selectable && <td data-label="Select" className="w-12 px-4 py-3"><Skeleton className="h-4 w-4" /></td>}
@@ -233,7 +276,7 @@ function DataGridContent<Row extends { id: string }>({
               {columns.map(headerCell)}
             </tr>
           </thead>
-          <tbody>
+          <tbody className={isEmbedded ? undefined : "[&>tr:not(:last-child)>*]:shadow-[inset_0_-1px_0_hsl(var(--foreground)/0.10)]"}>
             {visible.length ? (
               visible.map((row) => (
                 <tr
@@ -249,16 +292,17 @@ function DataGridContent<Row extends { id: string }>({
                   }}
                   onKeyDown={(event) => {
                     if (!activatable) return;
+                    if ((event.target as HTMLElement).closest("button, a, input, select, textarea, [role='button'], [role='option']")) return;
                     if (event.key !== "Enter" && event.key !== " ") return;
                     event.preventDefault();
                     activate(row);
                   }}
                   className={
                     activatable && selected === row.id
-                      ? "cursor-pointer border-b border-border/40 bg-primary/10 outline-none ring-2 ring-inset ring-ring/20"
+                      ? "cursor-pointer border-b border-border bg-primary/10 outline-none ring-2 ring-inset ring-ring/20"
                       : activatable
-                        ? `${isEmbedded ? "even:bg-muted/20" : "border-b border-border/40 last:border-b-0"} cursor-pointer outline-none hover:bg-muted/15 focus-visible:bg-muted/15`
-                        : isEmbedded ? "even:bg-muted/20" : "border-b border-border/40 last:border-b-0"
+                        ? `${isEmbedded ? "even:bg-muted/20" : "even:bg-muted/20"} cursor-pointer outline-none hover:bg-muted/40 focus-visible:bg-muted/40`
+                        : "even:bg-muted/20"
                   }
                 >
                   {selectable && <td data-label="Select" className="w-12 px-4 py-3" onClick={(event) => event.stopPropagation()}><Checkbox aria-label={`Select ${getRowLabel(row)}`} checked={selectedIds?.includes(row.id)} onCheckedChange={(checked) => onSelectionChange?.(checked ? [...(selectedIds ?? []), row.id] : (selectedIds ?? []).filter((id) => id !== row.id))} /></td>}
