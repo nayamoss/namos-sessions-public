@@ -16,6 +16,14 @@ import type {
 
 export * from "./types.js";
 
+// Non-regex trim: avoids CodeQL's polynomial-regex-on-uncontrolled-input flag
+// for a naive `/\/+$/` pattern (e.g. https://github.com/nayamoss/namos-sessions-public/security/code-scanning/8).
+function trimTrailingSlashes(url: string): string {
+  let end = url.length;
+  while (end > 0 && url[end - 1] === "/") end--;
+  return url.slice(0, end);
+}
+
 export class NamosSessionsApiError extends Error {
   readonly status: number;
   readonly code: string;
@@ -64,7 +72,7 @@ export class NamosSessionsClient {
   private readonly transport: typeof fetch;
 
   constructor(options: NamosSessionsClientOptions) {
-    this.baseUrl = options.baseUrl.replace(/\/+$/, "");
+    this.baseUrl = trimTrailingSlashes(options.baseUrl);
     this.token = options.token;
     this.transport = options.fetch ?? globalThis.fetch;
     if (!this.transport) throw new Error("A fetch implementation is required.");
