@@ -34,8 +34,8 @@ const iconDefinitions: Partial<Record<IntegrationProvider, IconDefinition>> = {
   },
   airtable: {
     icon: siAirtable,
-    iconClassName: "text-[#0b91c9] dark:text-[#55d2ff]",
-    surfaceClassName: "bg-[#e6f8ff] dark:bg-[#07364a]",
+    iconClassName: "text-[var(--icon-airtable-fg)]",
+    surfaceClassName: "bg-[var(--icon-airtable-bg)]",
   },
 };
 
@@ -88,11 +88,11 @@ export function IntegrationBrandIcon({
   const definition = iconDefinitions[provider];
   const surfaceClassName =
     provider === "amazon_ses"
-      ? "bg-[#fff1f3] dark:bg-[#4d1820]"
+      ? "bg-[var(--icon-ses-bg)]"
       : provider === "sanity"
-        ? "bg-[#fff0ed] dark:bg-[#4a1610]"
+        ? "bg-[var(--icon-sanity-bg)]"
       : provider === "operations_agent"
-        ? "bg-[#e8f1ff] dark:bg-[#102b55]"
+        ? "bg-[var(--icon-ops-agent-bg)]"
         : definition?.surfaceClassName;
 
   return (

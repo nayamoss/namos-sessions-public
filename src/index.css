@@ -99,6 +99,15 @@ body,
     --sb-txt: oklch(56% 0 0);
     --r: 8px;
     --r-lg: 12px;
+
+    /* Third-party integration brand surfaces (Airtable, Amazon SES, Sanity, Operations
+       Agent) — kept as their own tokens rather than the app's neutral/accent palette
+       because they represent another company's brand color, not this app's UI. */
+    --icon-airtable-fg: #0b91c9;
+    --icon-airtable-bg: #e6f8ff;
+    --icon-ses-bg: #fff1f3;
+    --icon-sanity-bg: #fff0ed;
+    --icon-ops-agent-bg: #e8f1ff;
   }
 
   .dark {
@@ -140,6 +149,12 @@ body,
     --sage-bg: oklch(30% 0.075 255);
     --sb: oklch(20% 0.025 255);
     --sb-txt: oklch(72% 0.018 255);
+
+    --icon-airtable-fg: #55d2ff;
+    --icon-airtable-bg: #07364a;
+    --icon-ses-bg: #4d1820;
+    --icon-sanity-bg: #4a1610;
+    --icon-ops-agent-bg: #102b55;
   }
 
 }
