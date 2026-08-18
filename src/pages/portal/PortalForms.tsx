@@ -440,6 +440,7 @@ export default function PortalForms() {
       const portalForms = (storedForms as StoredForm[])
         .filter((form) => form.kind && kinds.includes(form.kind))
         .map((form) => {
+          const page = form.pages?.find((item) => item.kind === "custom");
           const section = form.sections?.find((item) => item.key === "portal");
           const settings = form.portalFormSettings;
           return {
@@ -447,9 +448,9 @@ export default function PortalForms() {
             name: form.internalName ?? form.name,
             title: form.externalTitle ?? form.name,
             kind: form.kind!,
-            fields: section?.fieldIds.flatMap((id) => byId.get(id) ?? []) ?? [],
-            sectionTitle: section?.title ?? "Form questions",
-            instructions: section?.description ?? "",
+            fields: (page?.fieldIds ?? section?.fieldIds ?? []).flatMap((id) => byId.get(id) ?? []),
+            sectionTitle: page?.label ?? section?.title ?? "Form questions",
+            instructions: page?.description ?? section?.description ?? "",
             sendConfirmationEmail: settings?.sendConfirmationEmail ?? true,
             confirmationBody: settings?.confirmationBody ?? "",
             version: form.version ?? 1,
@@ -501,6 +502,16 @@ export default function PortalForms() {
         kind: form.kind,
         collectParticipants: false,
         showWelcomeMessage: false,
+        pages: [
+          {
+            id: "portal",
+            kind: "custom" as const,
+            label: form.sectionTitle.trim() || "Form questions",
+            pageHeading: "Form",
+            description: form.instructions || undefined,
+            fieldIds: fields.map((field) => field.recordId!),
+          },
+        ],
         sections: [
           {
             id: "portal",

@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { validateRoutingRules } from "./categoryRouting";
 import { FORM_TEMPLATES, planTemplateFields } from "./formTemplates";
+import { assertValidPages, derivePages, deriveSections, type FormPage } from "./formPages";
 import {
   mutation,
   query,
@@ -45,10 +46,13 @@ export const save = mutation({
       throw new Error("A submission form must belong to an event.");
     if (args.form.pageHeading.length > 15)
       throw new Error("Page heading must be 15 characters or fewer.");
+    const pages = (args.form.pages ?? derivePages(args.form)) as FormPage[];
+    assertValidPages(pages, args.form.kind, args.form.collectParticipants);
+    const sections = deriveSections(pages, args.form.kind);
     const routingRules = await validateRoutingRules(
       ctx,
       args.form.eventId,
-      args.form.sections ?? [],
+      pages,
       args.form.routingRules,
     );
     const {
@@ -59,7 +63,9 @@ export const save = mutation({
       notifyAdminsOnUpdate: _clientNotifyAdminsOnUpdate,
       ...clientForm
     } = args.form;
-    const values = { ...clientForm, routingRules, updatedAt: now };
+    // Keep legacy readers safe until the cutover. `pages` is authoritative for every
+    // save from this point forward, while the synthesized sections preserve old clients.
+    const values = { ...clientForm, pages, sections, routingRules, updatedAt: now };
     if (args.id) {
       const existing = await ctx.db.get(args.id);
       if (!existing || existing.eventId !== args.form.eventId)
@@ -144,6 +150,12 @@ export const createFromTemplate = mutation({
     }));
 
     const isCfp = template.appliesTo === "cfp";
+    const pages = derivePages({
+      _id: `${template.id}-template`,
+      kind: template.kind,
+      collectParticipants: template.collectParticipants,
+      sections,
+    });
     return ctx.db.insert("submission_forms", {
       eventId: args.eventId,
       internalName: template.internalName,
@@ -154,6 +166,7 @@ export const createFromTemplate = mutation({
       collectParticipants: template.collectParticipants,
       showWelcomeMessage: false,
       sections,
+      pages,
       participantRoles: template.participantRoles,
       crossFieldLimits: [],
       routingRules: [],
