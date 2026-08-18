@@ -226,7 +226,7 @@ async function validateWrite(ctx: DatabaseCtx, input: WriteInput) {
   return { name, fields: normalizeFields(input.fields) };
 }
 
-async function project(
+export async function publicFeedProjection(
   ctx: QueryCtx,
   eventId: Id<"events">,
   config: EmbedConfig,
@@ -369,7 +369,7 @@ export const preview = query({
   args: writeArgs,
   handler: async (ctx, args) => {
     const { name, fields: safeFields } = await validateWrite(ctx, args);
-    return project(ctx, args.eventId, { ...args, name, fields: safeFields }, false);
+    return publicFeedProjection(ctx, args.eventId, { ...args, name, fields: safeFields }, false);
   },
 });
 
@@ -453,7 +453,7 @@ export const getPublic = query({
     const embedId = ctx.db.normalizeId("embeds", args.embedId);
     if (!embedId) return null;
     const embed = await ctx.db.get(embedId);
-    return !embed || !embed.enabled ? null : project(ctx, embed.eventId, embed, true);
+    return !embed || !embed.enabled ? null : publicFeedProjection(ctx, embed.eventId, embed, true);
   },
 });
 

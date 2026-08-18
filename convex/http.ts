@@ -5,11 +5,13 @@ import { internal } from "./_generated/api";
 import { api } from "./_generated/api";
 import { withApiAuth, apiError, jsonHeaders } from "./httpAuth";
 import { projectPublicEvent } from "./publicEventsApi";
+import { renderPublicFeed } from "./publicFeeds";
 
 const http = httpRouter();
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: jsonHeaders });
 const internalHeaders = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 const maxCfpPayloadBytes = 256 * 1024;
+const maxInboundPayloadBytes = 128 * 1024;
 
 async function secretsMatch(actual: string | null, expected: string | undefined) {
   if (!actual || !expected) return false;
@@ -68,6 +70,17 @@ http.route({ path: "/api/v1/events", method: "GET", handler: httpAction(withApiA
   return json({ data: event ? [projectPublicEvent(event)] : [] });
 })) });
 
+// Public feeds are opaque capability URLs. They never use a bearer token and their projection
+// is assembled server-side from the same approved fields and publication checks as embeds.
+http.route({ pathPrefix: "/public/feeds/", method: "GET", handler: httpAction(async (ctx, request) => {
+  const feedId = new URL(request.url).pathname.slice("/public/feeds/".length);
+  if (!feedId || feedId.includes("/")) return new Response("Not found", { status: 404 });
+  const payload = await ctx.runQuery(internal.publicFeeds.getPublic, { feedId });
+  if (!payload) return new Response("Not found", { status: 404, headers: { "cache-control": "no-store" } });
+  const rendered = renderPublicFeed(payload);
+  return new Response(rendered.body, { headers: { "content-type": rendered.contentType, "cache-control": "public, max-age=300" } });
+}) });
+
 // This is a server-to-server handoff from the same-origin Cloudflare Worker. It is deliberately
 // not a browser API: the Worker secret is required before parsing or invoking the internal write.
 // Unrelated to the token-authenticated /api/v1/* surface above — no withApiAuth, no api_tokens
@@ -106,6 +119,59 @@ http.route({
       }
       if (message.includes("submission limit")) return internalError(409, "submission_limit");
       return internalError(422, "submission_rejected");
+    }
+  }),
+});
+
+// Provider-specific adapters (Resend or SES/SNS) must validate their own signed webhook before
+// handing its normalized, attachment-free envelope to this endpoint. Keeping this boundary
+// separate makes the Convex deployment safe even when verification lives at the mail edge.
+http.route({
+  path: "/internal/inbound-email",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    if (!(await secretsMatch(request.headers.get("x-namos-edge-secret"), process.env.INBOUND_EMAIL_EDGE_SECRET))) {
+      return internalError(401, "unauthorized");
+    }
+    const declaredLength = Number(request.headers.get("content-length") ?? 0);
+    if (Number.isFinite(declaredLength) && declaredLength > maxInboundPayloadBytes) return internalError(413, "payload_too_large");
+    const body = await request.text();
+    if (new TextEncoder().encode(body).byteLength > maxInboundPayloadBytes) return internalError(413, "payload_too_large");
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(body);
+    } catch {
+      return internalError(400, "invalid_request");
+    }
+    if (!parsed || typeof parsed !== "object") return internalError(400, "invalid_request");
+    const input = parsed as Record<string, unknown>;
+    if (
+      typeof input.eventId !== "string" ||
+      (input.provider !== "resend" && input.provider !== "ses") ||
+      typeof input.messageId !== "string" ||
+      typeof input.fromEmail !== "string" ||
+      typeof input.subject !== "string" ||
+      typeof input.text !== "string" ||
+      !Array.isArray(input.references) ||
+      !input.references.every((value) => typeof value === "string") ||
+      typeof input.receivedAt !== "number"
+    ) return internalError(400, "invalid_request");
+    try {
+      const id = await ctx.runMutation(internal.commsInbox.ingest, {
+        eventId: input.eventId as never,
+        provider: input.provider,
+        messageId: input.messageId,
+        ...(typeof input.inReplyTo === "string" ? { inReplyTo: input.inReplyTo } : {}),
+        references: input.references,
+        fromEmail: input.fromEmail,
+        subject: input.subject,
+        text: input.text,
+        receivedAt: input.receivedAt,
+      });
+      return new Response(JSON.stringify({ id }), { status: 202, headers: internalHeaders });
+    } catch {
+      // Do not disclose event IDs or mailbox configuration to callers, even trusted adapters.
+      return internalError(422, "message_rejected");
     }
   }),
 });

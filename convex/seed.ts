@@ -1,7 +1,8 @@
 import { internalMutation } from "./_generated/server";
 import { recordAgendaItemAudit } from "./agendaAudit";
+import { derivePages } from "./formPages";
 
-const eventSlug = "ai-engineer-sandbox-event";
+const eventSlug = "example-conference-fixture";
 const seededAt = Date.UTC(2026, 8, 1, 12, 0);
 
 // Re-runnable demo fixture. It fills in missing fixture records without duplicating a
@@ -14,7 +15,7 @@ export const demo = internalMutation({
     let event = await ctx.db.query("events").withIndex("by_slug", (q) => q.eq("slug", eventSlug)).first();
     const eventWasMissing = !event;
     if (!event) {
-      const eventId = await ctx.db.insert("events", { name: "AI.Engineer Sandbox Event — NYC", slug: eventSlug, type: "conference", location: "New York, NY", timezone: "America/New_York", startDate: Date.UTC(2026, 8, 15), endDate: Date.UTC(2026, 8, 17), description: "The conference for builders shipping production AI systems.", contactEmail: "program@ai.engineer", logoFileId: "ai-engineer-mark", programPublishedAt: seededAt, exhibitorsEnabled: false, sponsorsEnabled: true, status: "published", createdAt: seededAt, updatedAt: now });
+      const eventId = await ctx.db.insert("events", { name: "Example Conference Fixture", slug: eventSlug, type: "conference", location: "Example City", timezone: "UTC", startDate: Date.UTC(2026, 8, 15), endDate: Date.UTC(2026, 8, 17), description: "Unmistakably synthetic conference data for local testing.", contactEmail: "program@example.invalid", logoFileId: "example-conference-mark", programPublishedAt: seededAt, exhibitorsEnabled: false, sponsorsEnabled: true, status: "published", createdAt: seededAt, updatedAt: now });
       event = await ctx.db.get(eventId);
     } else if (event.status !== "published" || !event.sponsorsEnabled) {
       await ctx.db.patch(event._id, { status: "published", sponsorsEnabled: true, updatedAt: now });
@@ -24,24 +25,24 @@ export const demo = internalMutation({
     const eventId = event._id;
 
     const representativeEvents = [
-      { name: "Namos Sessions Draft", slug: "namos-sessions-draft", status: "draft" as const, startDate: Date.UTC(2027, 0, 10), endDate: Date.UTC(2027, 0, 11) },
-      { name: "Namos Sessions Archive", slug: "namos-sessions-archive", status: "archived" as const, startDate: Date.UTC(2025, 0, 10), endDate: Date.UTC(2025, 0, 11) },
+      { name: "Example Draft Event", slug: "example-draft-event", status: "draft" as const, startDate: Date.UTC(2027, 0, 10), endDate: Date.UTC(2027, 0, 11) },
+      { name: "Example Archived Event", slug: "example-archived-event", status: "archived" as const, startDate: Date.UTC(2025, 0, 10), endDate: Date.UTC(2025, 0, 11) },
     ];
     for (const fixture of representativeEvents) {
       const existing = await ctx.db.query("events").withIndex("by_slug", (q) => q.eq("slug", fixture.slug)).first();
       if (!existing) {
-        await ctx.db.insert("events", { ...fixture, type: "conference", timezone: "America/New_York", description: `${fixture.name} API fixture.`, exhibitorsEnabled: false, sponsorsEnabled: false, createdAt: seededAt, updatedAt: now });
+        await ctx.db.insert("events", { ...fixture, type: "conference", timezone: "UTC", description: `${fixture.name} API fixture.`, exhibitorsEnabled: false, sponsorsEnabled: false, createdAt: seededAt, updatedAt: now });
       }
     }
 
     const rooms = await ctx.db.query("rooms").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect();
-    const roomIds = await Promise.all(["Grand Hall", "Studio 1", "Studio 2", "Workshop Room"].map(async (name, sortOrder) => {
+    const roomIds = await Promise.all(["Example Room A", "Example Room B", "Example Room C", "Example Room D"].map(async (name, sortOrder) => {
       const existing = rooms.find((room) => room.name === name);
       if (existing) return existing._id;
       return ctx.db.insert("rooms", { eventId, name, sortOrder });
     }));
     const tracks = await ctx.db.query("tracks").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect();
-    const trackIds = await Promise.all(["Engineering", "Product", "Operations", "Keynote"].map(async (name, sortOrder) => {
+    const trackIds = await Promise.all(["Example Track A", "Example Track B", "Example Track C", "Example Track D"].map(async (name, sortOrder) => {
       const existing = tracks.find((track) => track.name === name);
       if (existing) return existing._id;
       return ctx.db.insert("tracks", { eventId, name, sortOrder });
@@ -50,10 +51,10 @@ export const demo = internalMutation({
     const existingTiers = await ctx.db.query("sponsor_tiers").withIndex("by_event", q => q.eq("eventId", eventId)).collect();
     const tierIds = await Promise.all([["Platinum", "#525252"], ["Gold", "#a16207"], ["Community", "#64748b"]].map(async ([name, color], sortOrder) => existingTiers.find(tier => tier.name === name)?._id ?? ctx.db.insert("sponsor_tiers", { eventId, name, color, sortOrder, benefitsDescription: `${name} event partnership.`, createdAt: seededAt, updatedAt: now })));
     const existingSponsors = await ctx.db.query("sponsors").withIndex("by_event", q => q.eq("eventId", eventId)).collect();
-    const sponsorFixtures = [["Convex", tierIds[0], "confirmed"], ["Resend", tierIds[1], "confirmed"], ["Open Source Collective", tierIds[2], "prospect"]] as const;
+    const sponsorFixtures = [["Example Sponsor A", tierIds[0], "confirmed"], ["Example Sponsor B", tierIds[1], "confirmed"], ["Example Sponsor C", tierIds[2], "prospect"]] as const;
     const sponsorIds = await Promise.all(sponsorFixtures.map(async ([name, tierId, status]) => existingSponsors.find(sponsor => sponsor.name === name)?._id ?? ctx.db.insert("sponsors", { eventId, name, tierId, status, website: `https://${name.toLowerCase().replace(/ /g, "-")}.example`, notes: "Seeded sponsor for the demo workflow.", createdAt: seededAt, updatedAt: now })));
     const existingContacts = await ctx.db.query("sponsor_contacts").withIndex("by_event", q => q.eq("eventId", eventId)).collect();
-    await Promise.all(sponsorIds.map((sponsorId, index) => existingContacts.some(contact => contact.sponsorId === sponsorId) ? undefined : ctx.db.insert("sponsor_contacts", { eventId, sponsorId, name: ["Maya Chen", "Theo Brooks", "Sam Rivera"][index], email: `sponsor-${index + 1}@seed.invalid`, role: index === 0 ? "Partnerships" : "Event marketing", isPrimary: true, createdAt: seededAt, updatedAt: now })));
+    await Promise.all(sponsorIds.map((sponsorId, index) => existingContacts.some(contact => contact.sponsorId === sponsorId) ? undefined : ctx.db.insert("sponsor_contacts", { eventId, sponsorId, name: `Example Contact ${index + 1}`, email: `sponsor-${index + 1}@seed.invalid`, role: index === 0 ? "Partnerships" : "Event marketing", isPrimary: true, createdAt: seededAt, updatedAt: now })));
 
     const existingFields = await ctx.db.query("field_definitions").collect();
     const ensureField = async (label: string, type: "text" | "wysiwyg" | "dropdown" | "email", required: boolean, extra: { maxChars?: number; options?: string[] } = {}) => {
@@ -74,9 +75,9 @@ export const demo = internalMutation({
     const portalSlidesField = await ensureField("Slides URL", "text", false, { maxChars: 500 });
 
     const forms = await ctx.db.query("submission_forms").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect();
-    const cfpPatch = {
-      externalTitle: "Speak at AI.Engineer", pageHeading: "Submit", version: 1, kind: "abstract" as const, collectParticipants: true,
-      showWelcomeMessage: true, welcomeMessage: "Share your best practical AI session idea.",
+    const cfpPatchBase = {
+      externalTitle: "Example Conference CFP", pageHeading: "Submit", version: 1, kind: "abstract" as const, collectParticipants: true,
+      showWelcomeMessage: true, welcomeMessage: "Submit an example session proposal for local testing.",
       sections: [
         { id: "seed-abstract", key: "abstract" as const, title: "Proposal", pageHeading: "Your proposal", description: "Tell us what attendees will learn.", fieldIds: [String(titleField), String(formatField), String(abstractField), String(audienceField)] },
         { id: "seed-participant", key: "participant" as const, title: "Speaker", pageHeading: "Speaker details", description: "Tell us who will present.", fieldIds: [String(participantNameField), String(participantEmailField)] },
@@ -86,9 +87,13 @@ export const demo = internalMutation({
       routingRules: [{ id: "seed-sponsor-fast-track", fieldId: String(formatField), equals: "Workshop", assignSponsorId: sponsorIds[0], setStatus: "accept_queue" as const }],
       closeDate: Date.UTC(2026, 8, 14, 23, 59), allowMultipleDrafts: true, autoRedirectToPortal: true, reminderEmailEnabled: true, adminUserIds: [], notifyAdminsOnNew: [], notifyAdminsOnUpdate: [], sendSubmitterConfirmation: true, status: "open" as const, updatedAt: now,
     };
-    let cfpForm = forms.find((form) => form.internalName === "AI.Engineer CFP");
+    const cfpPatch = {
+      ...cfpPatchBase,
+      pages: derivePages({ _id: "seed-cfp", kind: cfpPatchBase.kind, collectParticipants: cfpPatchBase.collectParticipants, sections: cfpPatchBase.sections }),
+    };
+    let cfpForm = forms.find((form) => form.internalName === "Example Conference CFP");
     if (cfpForm) { await ctx.db.patch(cfpForm._id, cfpPatch); cfpForm = { ...cfpForm, ...cfpPatch }; }
-    else { const id = await ctx.db.insert("submission_forms", { eventId, internalName: "AI.Engineer CFP", ...cfpPatch, createdAt: seededAt }); cfpForm = await ctx.db.get(id); }
+    else { const id = await ctx.db.insert("submission_forms", { eventId, internalName: "Example Conference CFP", ...cfpPatch, createdAt: seededAt }); cfpForm = await ctx.db.get(id); }
     if (!cfpForm) throw new Error("Could not create the demo CFP form.");
 
     const closedPatch = { ...cfpPatch, externalTitle: "Closed CFP demo", pageHeading: "Closed submissions", status: "closed" as const, closeDate: Date.UTC(2026, 7, 1, 23, 59), updatedAt: now };
@@ -123,16 +128,16 @@ export const demo = internalMutation({
         await ctx.db.patch(existing._id, { confirmationStatus, ...(existing.headshotStorageKey?.startsWith("seed/") ? { headshotStorageKey: undefined } : {}), updatedAt: now });
         return existing._id;
       }
-      return ctx.db.insert("speakers", { eventId, email, firstName: "Speaker", lastName: String(index + 1), bio: index % 5 === 0 ? undefined : `Demo speaker ${index + 1} with a practical perspective on AI.`, confirmationStatus, status: "active", createdAt: seededAt, updatedAt: now });
+      return ctx.db.insert("speakers", { eventId, email, firstName: "Example", lastName: `Speaker ${index + 1}`, bio: index % 5 === 0 ? undefined : `Synthetic speaker biography ${index + 1} for local testing.`, confirmationStatus, status: "active", createdAt: seededAt, updatedAt: now });
     }));
 
     const statuses = ["accepted", "pending", "accept_queue", "maybe", "decline_queue", "declined", "withdrawn", "draft"] as const;
     const currentSubmissions = await ctx.db.query("submissions").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect();
     const submissionIds = await Promise.all(Array.from({ length: 500 }, async (_, index) => {
-      const title = `Demo session ${index + 1}: practical AI`;
+      const title = `Example session ${index + 1}`;
       const existing = currentSubmissions.find((submission) => submission.title === title);
       const email = `speaker-${index % speakers.length + 1}@seed.invalid`;
-      const fieldValues = { [String(titleField)]: title, [String(formatField)]: "Talk", [String(abstractField)]: `A seeded abstract for session ${index + 1}.`, [String(audienceField)]: "AI engineering practitioners" };
+      const fieldValues = { [String(titleField)]: title, [String(formatField)]: "Talk", [String(abstractField)]: `Synthetic abstract ${index + 1} for local testing.`, [String(audienceField)]: "Example conference attendees" };
       const answers = { email, fieldValues, fieldLabels: { [String(titleField)]: "Session title", [String(formatField)]: "Session format", [String(abstractField)]: "Abstract", [String(audienceField)]: "Audience" }, participantFieldLabels: {}, participantValues: [] };
       if (existing) {
         if (!(existing.answers && typeof existing.answers === "object" && "fieldValues" in existing.answers)) await ctx.db.patch(existing._id, { answers, updatedAt: now });
@@ -214,9 +219,9 @@ export const demo = internalMutation({
     const start = Date.UTC(2026, 8, 15, 14, 0);
     const agenda = await ctx.db.query("agenda_items").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect();
     const agendaFixtures = [
-      { title: "Opening keynote", submissionId: submissionIds[0], roomId: roomIds[0], trackId: trackIds[3], startTime: start, endTime: start + 60 * 60_000, speakerIds: [speakers[0]] },
-      { title: "Reliable AI agents", submissionId: submissionIds[1], roomId: roomIds[0], trackId: trackIds[0], startTime: start + 30 * 60_000, endTime: start + 90 * 60_000, speakerIds: [speakers[0]] },
-      { title: "Engineering systems clinic", submissionId: submissionIds[2], roomId: roomIds[1], trackId: trackIds[0], startTime: start + 45 * 60_000, endTime: start + 105 * 60_000, speakerIds: [speakers[2]] },
+      { title: "Example agenda item A", submissionId: submissionIds[0], roomId: roomIds[0], trackId: trackIds[3], startTime: start, endTime: start + 60 * 60_000, speakerIds: [speakers[0]] },
+      { title: "Example agenda item B", submissionId: submissionIds[1], roomId: roomIds[0], trackId: trackIds[0], startTime: start + 30 * 60_000, endTime: start + 90 * 60_000, speakerIds: [speakers[0]] },
+      { title: "Example agenda item C", submissionId: submissionIds[2], roomId: roomIds[1], trackId: trackIds[0], startTime: start + 45 * 60_000, endTime: start + 105 * 60_000, speakerIds: [speakers[2]] },
     ];
     await Promise.all(agendaFixtures.map(async (item) => {
       if (agenda.some((entry) => entry.title === item.title)) return;
@@ -233,7 +238,7 @@ export const demo = internalMutation({
 
     const comms = await ctx.db.query("comms_log").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect();
     await Promise.all((["sent", "queued", "failed"] as const).map(async (status, index) => {
-      const subject = "Your AI.Engineer submission";
+      const subject = "Your example conference submission";
       const toEmail = `speaker-${index + 1}@seed.invalid`;
       if (comms.some((entry) => entry.toEmail === toEmail && entry.subject === subject && entry.status === status)) return;
       await ctx.db.insert("comms_log", { eventId, speakerId: speakers[index], submissionId: submissionIds[index], channel: "email", status, toEmail, subject, sentAt: status === "sent" ? seededAt : undefined, error: status === "failed" ? "Seeded provider failure" : undefined, createdAt: seededAt });

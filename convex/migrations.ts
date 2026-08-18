@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation } from "./_generated/server";
+import { derivePages } from "./formPages";
 
 // One-time migration from the pre-multi-tenancy data model, where a single global `organizers`
 // table acted as a deployment-wide ACL and every organizer implicitly owned every event.
@@ -81,5 +82,21 @@ export const auditTenancy = internalMutation({
       organizersMissingOrg: organizers.filter((row) => !row.organizationId).length,
       eventsMissingOrg: events.filter((row) => !row.organizationId).length,
     };
+  },
+});
+
+// Additive, repeatable migration for #234. It only fills missing pages, so later
+// organizer changes always remain authoritative when this is rerun.
+export const backfillSubmissionFormPages = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const forms = await ctx.db.query("submission_forms").collect();
+    let patched = 0;
+    for (const form of forms) {
+      if (form.pages?.length) continue;
+      await ctx.db.patch(form._id, { pages: derivePages(form) });
+      patched += 1;
+    }
+    return { patched, total: forms.length };
   },
 });

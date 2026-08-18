@@ -7,6 +7,7 @@ import { createRoutingAssignments, resolveSubmissionRouting } from "./categoryRo
 import { mutation, query } from "./functions";
 import { findOrCreateSpeaker, validateForm } from "./submissions";
 import { assertCrossFieldLimits, assertParticipantRoleBounds } from "./publicFormValidation";
+import { derivePages, type FormPage } from "./formPages";
 
 async function safeLogoUrl(
   ctx: QueryCtx,
@@ -55,7 +56,8 @@ export const get = query({
     const form = await ctx.db.get(args.formId);
     if (!form || form.eventId !== event._id || (form.kind !== "abstract" && form.kind !== "session") || form.status !== "open" || (form.closeDate !== undefined && form.closeDate <= Date.now())) return null;
 
-    const fieldIds = [...new Set(form.sections.flatMap((section: { fieldIds: string[] }) => section.fieldIds))] as string[];
+    const pages = derivePages(form);
+    const fieldIds = [...new Set(pages.flatMap((page) => page.fieldIds))] as string[];
     const fieldsById = new Map((await ctx.db.query("field_definitions").collect()).map((field) => [field._id as string, field]));
     const fieldKeyById = new Map(fieldIds.filter((id) => fieldsById.has(id)).map((id, index) => [id, `field-${index + 1}`]));
 
@@ -82,13 +84,26 @@ export const get = query({
         collectParticipants: form.collectParticipants,
         ...(form.welcomeMessage ? { welcomeMessage: form.welcomeMessage } : {}),
         showWelcomeMessage: form.showWelcomeMessage,
-        sections: form.sections.map((section) => ({
-          key: section.key,
-          title: section.title,
-          pageHeading: section.pageHeading,
-          ...(section.description ? { description: section.description } : {}),
-          fieldKeys: section.fieldIds.flatMap((id) => fieldKeyById.get(id) ?? []),
+        pages: pages.map((page) => ({
+          id: page.id,
+          kind: page.kind,
+          ...(page.systemRole ? { systemRole: page.systemRole } : {}),
+          label: page.label,
+          pageHeading: page.pageHeading,
+          ...(page.description ? { description: page.description } : {}),
+          fieldKeys: page.fieldIds.flatMap((id) => fieldKeyById.get(id) ?? []),
         })),
+        // Kept briefly so older public clients can still render a migrated form.
+        sections: pages.flatMap((page) => {
+          const key = page.systemRole === "participant" ? "participant" : page.kind === "custom" ? "abstract" : undefined;
+          return key ? [{
+          key,
+          title: page.label,
+          pageHeading: page.pageHeading,
+          ...(page.description ? { description: page.description } : {}),
+          fieldKeys: page.fieldIds.flatMap((id) => fieldKeyById.get(id) ?? []),
+          }] : [];
+        }),
         participantRoles: form.participantRoles.map((role) => ({ role: role.role, ...(role.min !== undefined ? { min: role.min } : {}), ...(role.max !== undefined ? { max: role.max } : {}) })),
         crossFieldLimits: form.crossFieldLimits.flatMap((limit, index) => {
           const fieldKeys = limit.fieldIds.flatMap((id) => fieldKeyById.get(id) ?? []);
@@ -147,9 +162,9 @@ export const submit = internalMutation({
     // first call, and reissuing it would mail the speaker twice.
     if (existingSubmission) return { speakerId: existingSubmission.speakerId };
 
-    const sections = form.sections as Array<{ key: string; fieldIds: string[] }>;
-    const fieldIds: string[] = Array.from(new Set(sections.flatMap((section) => section.fieldIds)));
-    const participantFieldIds = new Set(sections.filter((section) => section.key === "participant").flatMap((section) => section.fieldIds));
+    const pages = derivePages(form) as FormPage[];
+    const fieldIds: string[] = Array.from(new Set(pages.flatMap((page) => page.fieldIds)));
+    const participantFieldIds = new Set(pages.filter((page) => page.systemRole === "participant").flatMap((page) => page.fieldIds));
     const fieldsById = new Map((await ctx.db.query("field_definitions").collect()).map((field) => [field._id as string, field]));
     const fieldKeyById = new Map(fieldIds.filter((id) => fieldsById.has(id)).map((id, index) => [id, `field-${index + 1}`]));
     const keyEntries = [...fieldKeyById.entries()].map(([id, key]) => ({ id, key, field: fieldsById.get(id)! }));
@@ -237,7 +252,7 @@ export const submit = internalMutation({
       fieldValues: Object.fromEntries(participantEntries.map((entry) => [entry.id, participant.answers[entry.key] ?? ""])),
       availability: participant.availability ? { unavailable: participant.availability.unavailable, ...(participant.availability.notes?.trim() ? { notes: participant.availability.notes.trim() } : {}) } : undefined,
     }));
-    const routing = await resolveSubmissionRouting(ctx, event._id, form.sections, form.routingRules, fieldKeyById, submittedAnswers);
+    const routing = await resolveSubmissionRouting(ctx, event._id, pages, form.routingRules, fieldKeyById, submittedAnswers);
     const submissionId = await ctx.db.insert("submissions", {
       eventId: event._id,
       formId: form._id,

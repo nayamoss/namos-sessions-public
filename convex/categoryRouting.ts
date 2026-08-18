@@ -83,7 +83,7 @@ export function evaluateRoutingRules(rules: SubmissionRoutingRule[], answersByFi
 export async function validateRoutingRules(
   ctx: MutationCtx,
   eventId: Id<"events">,
-  sections: FormSection[],
+  pages: FormSection[],
   inputRules: SubmissionRoutingRule[] | undefined,
 ) {
   const rules = normalizeRoutingRules(inputRules);
@@ -94,7 +94,7 @@ export async function validateRoutingRules(
     throw new Error("Routing rules need unique ids.");
   }
 
-  const formFieldIds = new Set(sections.flatMap((section) => section.fieldIds));
+  const formFieldIds = new Set(pages.flatMap((page) => page.fieldIds));
   const fieldsById = new Map<string, Doc<"field_definitions">>(
     (await ctx.db.query("field_definitions").collect()).map((field) => [String(field._id), field]),
   );
@@ -138,12 +138,12 @@ export async function validateRoutingRules(
 export async function resolveSubmissionRouting(
   ctx: MutationCtx,
   eventId: Id<"events">,
-  sections: FormSection[],
+  pages: FormSection[],
   inputRules: SubmissionRoutingRule[] | undefined,
   fieldKeyById: Map<string, string>,
   submittedAnswers: Record<string, string>,
 ) {
-  const rules = await validateRoutingRules(ctx, eventId, sections, inputRules);
+  const rules = await validateRoutingRules(ctx, eventId, pages, inputRules);
   const answersByFieldId = Object.fromEntries(
     [...fieldKeyById.entries()].map(([fieldId, fieldKey]) => [fieldId, submittedAnswers[fieldKey] ?? ""]),
   );
