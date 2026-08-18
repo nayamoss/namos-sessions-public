@@ -2,6 +2,9 @@
   "name": "namos-sessions-public",
   "private": true,
   "version": "0.0.0",
+  "workspaces": [
+    "packages/*"
+  ],
   "type": "module",
   "cloudflare": {
     "bindings": {
@@ -33,18 +36,25 @@
     "build": "vite build",
     "build:hosted": "convex deploy --cmd 'npm run build' --cmd-url-env-var-name VITE_CONVEX_URL",
     "build:dev": "vite build --mode development",
-    "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc -p convex/tsconfig.json --noEmit && tsc --noEmit -p tsconfig.worker.json",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc -p convex/tsconfig.json --noEmit && tsc --noEmit -p tsconfig.worker.json && tsc -p packages/sdk/tsconfig.json --noEmit && tsc -p packages/cli/tsconfig.json --noEmit && tsc -p packages/mcp/tsconfig.json --noEmit",
+    "check:worker-types": "wrangler types worker-configuration.d.ts --env-interface Env --env-file wrangler.types.env --check",
     "lint": "eslint .",
+    "preview": "vite preview",
     "start:railway": "serve --single --listen tcp://0.0.0.0:$PORT dist",
-    "deploy": "node scripts/deploy-cloudflare.mjs",
+    "convex:deploy": "convex dev --once && node scripts/check-convex-auth.mjs --fix",
+    "convex:check-auth": "node scripts/check-convex-auth.mjs",
+    "deploy": "node scripts/check-convex-auth.mjs && node scripts/deploy-cloudflare.mjs",
     "deploy:cloudflare": "node scripts/deploy-cloudflare.mjs",
     "preview:cloudflare": "npm run build && wrangler dev",
-    "preview": "vite preview",
     "test": "vitest run",
-    "check": "npm run typecheck && npm run test && npm run build",
+    "test:sdk": "vitest run --configLoader runner packages/sdk",
+    "check:agent-no-stubs": "node scripts/check-agent-no-stubs.mjs",
+    "validate:config": "node scripts/lib/validate-wrangler-config.mjs",
+    "check": "npm run check:worker-types && npm run typecheck && npm run check:agent-no-stubs && npm run test && npm run build",
     "test:watch": "vitest",
     "prepare": "husky",
-    "seed:demo": "npx convex run seed:demo"
+    "seed:demo": "npx convex run seed:demo",
+    "eval:agent:live": "node scripts/agent-live-eval.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "3.0.96",

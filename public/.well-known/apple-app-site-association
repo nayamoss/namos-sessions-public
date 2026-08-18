@@ -1,0 +1,23 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "39CT4529Y3.com.namos.sessions",
+        "paths": [
+          "/e/*",
+          "/submit/*",
+          "/embed/*",
+          "NOT /dashboard/*",
+          "NOT /settings/*",
+          "NOT /program/*",
+          "NOT /portal/*",
+          "NOT /portals/*",
+          "NOT /events/*",
+          "NOT /cms/*",
+          "NOT /dev/*"
+        ]
+      }
+    ]
+  }
+}

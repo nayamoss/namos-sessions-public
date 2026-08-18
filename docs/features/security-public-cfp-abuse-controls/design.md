@@ -32,7 +32,7 @@ old direct mutation.
 - IP: 30 attempts per 10 minutes. The raw address is HMACed before Durable Object lookup.
 - Form: 300 verified attempts per hour. The form identifier is HMACed before lookup.
 - Normalized email: 5 verified attempts per hour, HMACed before lookup.
-- Turnstile: exact `cfp-submit` action and `app.your-project.example` hostname.
+- Turnstile: exact `cfp-submit` action and `app.namos-sessions.xyz` hostname.
 
 All thresholds are checked-in Worker variables so operators can tune them without weakening proof
 verification. The IP allowance intentionally leaves room for legitimate shared office/conference

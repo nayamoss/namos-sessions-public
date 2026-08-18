@@ -1,0 +1,22 @@
+{
+  "name": "@namos-sessions/mcp",
+  "version": "0.1.0",
+  "description": "MCP server for Namos Sessions.",
+  "type": "module",
+  "bin": {
+    "namos-sessions-mcp": "./dist/bin.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "cd ../.. && vitest run --configLoader runner --config vitest.config.ts packages/mcp",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@namos-sessions/sdk": "^0.1.0"
+  }
+}

@@ -134,7 +134,7 @@ it.
 | Backend/frontend coupling | `npm run build:hosted` | Already present, officially documented, and structurally prevents building the frontend against the wrong backend. Two independent steps would only re-create today's drift. |
 | Migration invocation | Optional workflow input naming a function | Keeps the workflow generic. Hardcoding `backfillOrganizations` would date it immediately. |
 | Migration position | Between the two deploys | Fail-closed guards mean schema and backfill must be adjacent. Running it after the Worker deploy would expose users to the denial window. |
-| Target deployment | `your-project` via the deploy key | It is what production serves. Moving to the project's real prod deployment needs a data move — out of scope, tracked separately. |
+| Target deployment | `pastel-mosquito-479` via the deploy key | It is what production serves. Moving to the project's real prod deployment needs a data move — out of scope, tracked separately. |
 | Keep `scripts/deploy-cloudflare.mjs` | Yes | Local escape hatch for when Actions is down or a hotfix is urgent. Its clean-tree and placeholder guards remain valuable. |
 | Wrangler action | `cloudflare/wrangler-action@v4` | Current major; v4 is the action's default Wrangler line. |
 | `lint` in CI | Separate step, not folded into `check` | A lint failure and a type failure should be distinguishable at a glance in the checks list. |
@@ -145,7 +145,7 @@ it.
 
 **Requires:**
 - Four repository secrets, none of which currently exist (`gh secret list` is empty)
-- A Convex deploy key generated against `your-project`
+- A Convex deploy key generated against `pastel-mosquito-479`
 - A Cloudflare API token with Edit Cloudflare Workers
 
 **Enables:**

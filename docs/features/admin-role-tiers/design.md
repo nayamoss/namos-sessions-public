@@ -130,7 +130,7 @@ rejects copies that would exceed the same limit.
 
 ## Production owner-claim incident
 
-On 2026-08-13, deployment `your-project-prod` had the correct Clerk issuer and an empty
+On 2026-08-13, deployment `calculating-loris-761` had the correct Clerk issuer and an empty
 `organizers` table but its deployed function manifest contained zero functions. The browser's old
 error was not produced by the checked-in `claimOwner` predicate. Redeploying the current `convex/`
 source restored `organizers:claimOwner`, `canClaimOwner`, and `getMine`; an authenticated production

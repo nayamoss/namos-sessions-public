@@ -10,7 +10,7 @@ During authenticated agenda verification on 2026-08-13, the schedule grew to 10 
 
 ## Database and log evidence
 
-The retained logs for development deployment `your-project` establish the transition:
+The retained logs for development deployment `pastel-mosquito-479` establish the transition:
 
 - `agenda:list` at 2026-08-13 09:36:15 EDT read 11 documents (the event-access check plus 10 agenda rows) and returned 5,165 bytes.
 - `agenda:list` at 09:43:40 EDT again read 11 documents after an edit.

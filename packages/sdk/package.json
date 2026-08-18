@@ -1,0 +1,21 @@
+{
+  "name": "@namos-sessions/sdk",
+  "version": "0.1.0",
+  "description": "Typed TypeScript client for the Namos Sessions REST API.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepublishOnly": "npm run build"
+  }
+}
