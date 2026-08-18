@@ -1,4 +1,4 @@
-import { ClipboardCheck, Mail, Megaphone, Plus } from "lucide-react";
+import { ClipboardCheck, Megaphone, Plus, Send, UserSearch } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
   CommandDialog,
@@ -18,7 +18,8 @@ const QUICK_ACTIONS = [
   { label: "Create a CFP", value: "create cfp call for papers new form", to: "/program/forms?new=true", icon: Megaphone },
   { label: "Add a submission", value: "create new abstract submission", to: "/program/abstracts?new=true", icon: Plus },
   { label: "Judge submissions", value: "review score judge evaluation", to: "/program/evaluation", icon: ClipboardCheck },
-  { label: "Email speakers", value: "compose email", to: "/program/communications?new=true", icon: Mail },
+  { label: "Draft an email", value: "draft compose send email blast communication template", to: "/program/communications/templates/new/edit", icon: Send },
+  { label: "Find a speaker", value: "find search speaker", to: "/program/speakers?focus=search", icon: UserSearch },
 ] as const;
 
 const keyClassName = "rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground";
@@ -43,14 +44,14 @@ export function CommandPalette({
     <CommandDialog
       open={open}
       onOpenChange={onOpenChange}
-      className="max-w-[32rem] rounded-[12px] border-0 bg-popover shadow-none"
+      className="w-[calc(100vw-2rem)] max-w-[42rem] rounded-[12px] border-0 bg-popover shadow-none"
     >
       <CommandInput
         aria-label="Command palette"
         autoFocus
         placeholder="Jump to a page or run a command…"
       />
-      <CommandList className="pb-2">
+      <CommandList className="max-h-[min(32rem,calc(100dvh-10rem))] pb-2">
         <CommandEmpty className="py-6 text-center text-sm text-muted-foreground">
           No matches.
         </CommandEmpty>

@@ -59,7 +59,15 @@ export async function validateAndCreateTask(
 // its own speaker's tasks — pass speakerId to get that instead of the full event list;
 // omitting it requires organizer access.
 export const list = query({
-  args: { eventId: v.id("events"), speakerId: v.optional(v.id("speakers")) },
+  args: {
+    eventId: v.id("events"),
+    speakerId: v.optional(v.id("speakers")),
+    // Sponsor tasks were being filtered client-side out of the full event list (see
+    // PersonTasksView on iOS). Fine at current data volumes, but pushes an
+    // organizer-only bulk read to the client just to throw most of it away — mirrors
+    // the speakerId argument's shape rather than inventing a new pattern.
+    sponsorId: v.optional(v.id("sponsors")),
+  },
   handler: async (ctx, args) => {
     if (args.speakerId) {
       const identity = await requireIdentity(ctx);
@@ -69,6 +77,11 @@ export const list = query({
         assertOwnsSpeaker(identity, speaker);
       }
       const tasks = await ctx.db.query("onboarding_tasks").withIndex("by_speaker", (q) => q.eq("speakerId", args.speakerId!)).collect();
+      return tasks.filter((task) => task.eventId === args.eventId);
+    }
+    if (args.sponsorId) {
+      await assertEventOrganizerAccess(ctx, args.eventId);
+      const tasks = await ctx.db.query("onboarding_tasks").withIndex("by_sponsor", (q) => q.eq("sponsorId", args.sponsorId!)).collect();
       return tasks.filter((task) => task.eventId === args.eventId);
     }
     await assertEventOrganizerAccess(ctx, args.eventId);

@@ -6,9 +6,15 @@ import { clerkAppearance } from "@/lib/clerk-appearance";
 
 describe("product color system", () => {
   it("keeps primary actions electric blue and destructive actions red", () => {
-    expect(buttonVariants({ variant: "accent" })).toContain("bg-primary");
-    expect(buttonVariants({ variant: "accent" })).not.toContain("bg-destructive");
+    const accentButton = buttonVariants({ variant: "accent" });
+    const css = readFileSync(join(process.cwd(), "src/index.css"), "utf8");
+
+    expect(accentButton).toContain("bg-primary");
+    expect(accentButton).toContain("hover:bg-[hsl(var(--primary-hover))]");
+    expect(accentButton).not.toContain("bg-destructive");
     expect(buttonVariants({ variant: "destructive" })).toContain("bg-destructive");
+    expect(css).toMatch(/:root[\s\S]*?--primary: 216 100% 50%/);
+    expect(css).toMatch(/\.dark[\s\S]*?--primary: 216 100% 65%/);
     expect(clerkAppearance.variables.colorPrimary).toBe("#0066FF");
   });
 

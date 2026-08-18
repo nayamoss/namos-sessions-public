@@ -53,6 +53,10 @@ describe("shared component canon", () => {
     const violations = sourceFiles(sourceRoot).flatMap((file) => {
       const projectPath = relative(sourceRoot, file).replaceAll("\\", "/");
       if (projectPath === "pages/public/ApiDocs.tsx") return [];
+      // Per-integration brand swatches are fixed to each provider's own brand color, not
+      // the app's semantic palette — there is no token to express "Notion black" or
+      // "Airtable yellow" in both themes, so a hardcoded hex pair per provider is correct.
+      if (projectPath === "components/settings/IntegrationBrandIcon.tsx") return [];
       const source = readFileSync(file, "utf8");
       return /(?:bg|text)-neutral-|dark:bg-\[#[0-9a-f]{6}\]/i.test(source) ? [projectPath] : [];
     });

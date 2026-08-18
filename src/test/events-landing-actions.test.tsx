@@ -5,15 +5,6 @@ import { describe, expect, it, vi } from "vitest";
 import { RepoContext, type Repository } from "@/data/repo";
 import type { Event, EventId } from "@/data/types";
 
-// Radix's DropdownMenu trigger relies on the Pointer Events API (hasPointerCapture /
-// releasePointerCapture) that jsdom doesn't implement — without these stubs the menu
-// never opens in this environment, even though it opens fine in a real browser.
-if (typeof Element !== "undefined" && !Element.prototype.hasPointerCapture) {
-  Element.prototype.hasPointerCapture = () => false;
-  Element.prototype.setPointerCapture = () => {};
-  Element.prototype.releasePointerCapture = () => {};
-}
-
 vi.mock("@/components/AppLayout", () => ({
   AppLayout: ({ title, children, detail }: { title: string; children: ReactNode; detail?: ReactNode }) => (
     <main>
@@ -61,19 +52,74 @@ function renderEvents(events: Event[]) {
 }
 
 describe("event row actions", () => {
+  it("filters events with a dropdown instead of status toggles", async () => {
+    renderEvents([
+      draftEvent,
+      {
+        ...draftEvent,
+        id: "event-2" as EventId,
+        name: "Published Talks",
+        slug: "published-talks",
+        status: "published",
+      },
+    ]);
+
+    const statusFilter = await screen.findByRole("combobox", {
+      name: "Filter events by status",
+    });
+    expect(statusFilter).toHaveTextContent("All events");
+    expect(screen.queryByRole("radiogroup", { name: "Event status" })).not.toBeInTheDocument();
+
+    fireEvent.keyDown(statusFilter, { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("option", { name: "Published" }));
+
+    expect(statusFilter).toHaveTextContent("Published");
+    expect(screen.getByRole("rowheader", { name: "Published Talks" })).toBeVisible();
+    expect(screen.queryByRole("rowheader", { name: "Takumi Talks Draft" })).not.toBeInTheDocument();
+  });
+
+  it("sorts the Events table by its declared columns", async () => {
+    renderEvents([
+      draftEvent,
+      {
+        ...draftEvent,
+        id: "event-2" as EventId,
+        name: "Alpha Conference",
+        slug: "alpha-conference",
+        startDate: Date.UTC(2026, 0, 9),
+        endDate: Date.UTC(2026, 0, 10),
+        status: "published",
+      },
+    ]);
+
+    const eventSort = await screen.findByRole("button", { name: "Sort by Event, currently not sorted" });
+    const rowNames = () =>
+      Array.from(screen.getByRole("table", { name: "Events" }).querySelectorAll("tbody th")).map(
+        (cell) => cell.textContent,
+      );
+
+    expect(rowNames()).toEqual(["Takumi Talks Draft", "Alpha Conference"]);
+    fireEvent.click(eventSort);
+    expect(rowNames()).toEqual(["Alpha Conference", "Takumi Talks Draft"]);
+    expect(eventSort.closest("th")).toHaveAttribute("aria-sort", "ascending");
+  });
+
   it("opens the guarded deletion dialog directly for a manageable draft", async () => {
     renderEvents([draftEvent]);
 
-    const menuTrigger = await screen.findByRole("button", {
-      name: "Actions for Takumi Talks Draft",
+    const deleteButton = await screen.findByRole("button", {
+      name: "Delete Takumi Talks Draft",
     });
-    fireEvent.pointerDown(menuTrigger, { button: 0, ctrlKey: false, pointerType: "mouse" });
-    fireEvent.click(menuTrigger);
+    const table = screen.getByRole("table", { name: "Events" });
+    const eventRow = screen.getByRole("rowheader", { name: "Takumi Talks Draft" }).closest("tr");
 
-    const deleteItem = await screen.findByRole("menuitem", { name: "Delete" });
-    expect(screen.getByRole("menuitem", { name: "Duplicate" })).toBeVisible();
+    const actionsHeader = screen.getByRole("columnheader", { name: "Actions" });
+    expect(actionsHeader.querySelector(".sr-only")).toHaveTextContent("Actions");
+    expect(eventRow?.querySelector('td[data-label="Actions"]')).toContainElement(deleteButton);
+    expect(screen.getByRole("button", { name: "Duplicate Takumi Talks Draft" })).toBeVisible();
+    expect(table).toContainElement(eventRow);
 
-    fireEvent.click(deleteItem);
+    fireEvent.click(deleteButton);
 
     expect(await screen.findByRole("alertdialog")).toBeVisible();
     expect(screen.getByRole("heading", { name: "Delete Takumi Talks Draft?" })).toBeVisible();
@@ -88,15 +134,9 @@ describe("event row actions", () => {
   it("does not offer deletion for a published event", async () => {
     renderEvents([{ ...draftEvent, status: "published", name: "Published Talks" }]);
 
-    const menuTrigger = await screen.findByRole("button", {
-      name: "Actions for Published Talks",
-    });
-    fireEvent.pointerDown(menuTrigger, { button: 0, ctrlKey: false, pointerType: "mouse" });
-    fireEvent.click(menuTrigger);
-
     await waitFor(() =>
-      expect(screen.getByRole("menuitem", { name: "Duplicate" })).toBeVisible(),
+      expect(screen.getByRole("button", { name: "Duplicate Published Talks" })).toBeVisible(),
     );
-    expect(screen.queryByRole("menuitem", { name: "Delete" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete Published Talks" })).not.toBeInTheDocument();
   });
 });

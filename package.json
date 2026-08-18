@@ -10,6 +10,21 @@
       },
       "VITE_CLERK_PUBLISHABLE_KEY": {
         "description": "Public publishable key from your Clerk production application."
+      },
+      "VITE_GA_MEASUREMENT_ID": {
+        "description": "GA4 measurement ID. Loaded only after visitor analytics consent."
+      },
+      "VITE_POSTHOG_KEY": {
+        "description": "PostHog US project key. Loaded only after visitor analytics consent."
+      },
+      "VITE_POSTHOG_HOST": {
+        "description": "PostHog API host, normally https://us.i.posthog.com."
+      },
+      "VITE_ENABLE_ANALYTICS": {
+        "description": "Leave false outside production unless intentionally validating analytics."
+      },
+      "VITE_MARKETING_SITE_URL": {
+        "description": "Public marketing site base URL used for privacy links."
       }
     }
   },
@@ -106,6 +121,7 @@
     "recharts": "^2.15.4",
     "resend": "^6.12.4",
     "serverless-http": "^4.0.0",
+    "simple-icons": "^16.28.0",
     "sonner": "^1.7.4",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",

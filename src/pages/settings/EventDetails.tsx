@@ -197,7 +197,6 @@ export default function EventDetails() {
     key: Key,
     value: (typeof event)[Key],
   ) => setEvent((current) => ({ ...current, [key]: value }));
-  const setItems = setRooms;
   return (
     <>
       <div className="space-y-4">
@@ -337,13 +336,13 @@ export default function EventDetails() {
             <Collection
               title="Rooms"
               items={rooms}
-              setItems={setItems}
+              setItems={setRooms}
               onRemove={removeRoom}
             />
             <Collection
               title="Tracks"
               items={tracks}
-              setItems={setItems}
+              setItems={setTracks}
               onRemove={removeTrack}
             />
           </>
