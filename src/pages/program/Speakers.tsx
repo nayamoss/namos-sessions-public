@@ -15,7 +15,10 @@ import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
 import { DataGrid, type DataGridColumn } from "@/components/shared/DataGrid";
 import { DetailPane } from "@/components/shared/DetailPane";
-import { ActivityTimeline, type SpeakerTimelineEvent } from "@/components/speakers/ActivityTimeline";
+import {
+  ActivityTimeline,
+  type SpeakerTimelineEvent,
+} from "@/components/speakers/ActivityTimeline";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import {
@@ -333,36 +336,129 @@ export function SpeakerDetail({
 
   useEffect(() => {
     let current = true;
-    void repo.speakerNotes.list({ eventId: event.id, speakerId: row.speaker.id })
-      .then((items) => { if (current) setNotes(items); })
-      .catch((error) => { if (current) setMessage({ tone: "error", text: error instanceof Error ? error.message : "Could not load notes." }); });
-    return () => { current = false; };
+    void repo.speakerNotes
+      .list({ eventId: event.id, speakerId: row.speaker.id })
+      .then((items) => {
+        if (current) setNotes(items);
+      })
+      .catch((error) => {
+        if (current)
+          setMessage({
+            tone: "error",
+            text:
+              error instanceof Error ? error.message : "Could not load notes.",
+          });
+      });
+    return () => {
+      current = false;
+    };
   }, [event.id, repo.speakerNotes, row.speaker.id]);
 
   const saveNote = async () => {
     const body = noteBody.trim();
     if (!body) return;
-    setSavingNote(true); setMessage(undefined);
+    setSavingNote(true);
+    setMessage(undefined);
     try {
-      const id = await repo.speakerNotes.create({ eventId: event.id, speakerId: row.speaker.id, body });
-      setNotes((items) => [{ id, eventId: event.id, speakerId: row.speaker.id, authorId: "", body, createdAt: Date.now(), updatedAt: Date.now() }, ...(items ?? [])]);
-      setNoteBody(""); setMessage({ tone: "status", text: "Note saved." });
-    } catch (error) { setMessage({ tone: "error", text: error instanceof Error ? error.message : "Could not save note." }); }
-    finally { setSavingNote(false); }
+      const id = await repo.speakerNotes.create({
+        eventId: event.id,
+        speakerId: row.speaker.id,
+        body,
+      });
+      setNotes((items) => [
+        {
+          id,
+          eventId: event.id,
+          speakerId: row.speaker.id,
+          authorId: "",
+          body,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        },
+        ...(items ?? []),
+      ]);
+      setNoteBody("");
+      setMessage({ tone: "status", text: "Note saved." });
+    } catch (error) {
+      setMessage({
+        tone: "error",
+        text: error instanceof Error ? error.message : "Could not save note.",
+      });
+    } finally {
+      setSavingNote(false);
+    }
   };
 
   const deleteNote = async (noteId: string) => {
     setMessage(undefined);
-    try { await repo.speakerNotes.remove({ eventId: event.id, noteId }); setNotes((items) => items?.filter((note) => note.id !== noteId) ?? []); setMessage({ tone: "status", text: "Note deleted." }); }
-    catch (error) { setMessage({ tone: "error", text: error instanceof Error ? error.message : "Could not delete note." }); }
+    try {
+      await repo.speakerNotes.remove({ eventId: event.id, noteId });
+      setNotes((items) => items?.filter((note) => note.id !== noteId) ?? []);
+      setMessage({ tone: "status", text: "Note deleted." });
+    } catch (error) {
+      setMessage({
+        tone: "error",
+        text: error instanceof Error ? error.message : "Could not delete note.",
+      });
+    }
   };
 
-  const timelineEvents = useMemo<SpeakerTimelineEvent[]>(() => [
-    ...(notes ?? []).map((note) => ({ id: `note-${note.id}`, type: "note" as const, timestamp: note.createdAt, title: "Added note", body: note.body })),
-    ...row.tasks.map((task) => ({ id: `task-${task.id}`, type: "task" as const, timestamp: task.completedAt ?? task.updatedAt ?? task.createdAt ?? task.dueDate ?? row.speaker.updatedAt ?? Date.now(), title: task.title, body: "", status: taskStatusLabels[task.status], isDone: task.status === "completed" })),
-    ...comms.filter((comm) => comm.speakerId === row.speaker.id).map((comm) => ({ id: `email-${comm.id}`, type: "email" as const, timestamp: comm.sentAt ?? comm.createdAt ?? Date.now(), title: comm.type === "reminder" ? "Sent reminder" : "Sent email", body: "", status: comm.status })),
-    ...(row.speaker.updatedAt ? [{ id: `status-${row.speaker.id}`, type: "status" as const, timestamp: row.speaker.updatedAt, title: "Confirmation status updated", body: "", status: confirmationLabels[row.confirmationStatus] }] : []),
-  ], [comms, notes, row.speaker.id, row.speaker.updatedAt, row.confirmationStatus, row.tasks]);
+  const timelineEvents = useMemo<SpeakerTimelineEvent[]>(
+    () => [
+      ...(notes ?? []).map((note) => ({
+        id: `note-${note.id}`,
+        type: "note" as const,
+        timestamp: note.createdAt,
+        title: "Added note",
+        body: note.body,
+      })),
+      ...row.tasks.map((task) => ({
+        id: `task-${task.id}`,
+        type: "task" as const,
+        timestamp:
+          task.completedAt ??
+          task.updatedAt ??
+          task.createdAt ??
+          task.dueDate ??
+          row.speaker.updatedAt ??
+          Date.now(),
+        title: task.title,
+        body: "",
+        status: taskStatusLabels[task.status],
+        isDone: task.status === "completed",
+      })),
+      ...comms
+        .filter((comm) => comm.speakerId === row.speaker.id)
+        .map((comm) => ({
+          id: `email-${comm.id}`,
+          type: "email" as const,
+          timestamp: comm.sentAt ?? comm.createdAt ?? Date.now(),
+          title: comm.type === "reminder" ? "Sent reminder" : "Sent email",
+          body: "",
+          status: comm.status,
+        })),
+      ...(row.speaker.updatedAt
+        ? [
+            {
+              id: `status-${row.speaker.id}`,
+              type: "status" as const,
+              timestamp: row.speaker.updatedAt,
+              title: "Confirmation status updated",
+              body: "",
+              status: confirmationLabels[row.confirmationStatus],
+            },
+          ]
+        : []),
+    ],
+    [
+      comms,
+      notes,
+      row.speaker.id,
+      row.speaker.updatedAt,
+      row.confirmationStatus,
+      row.tasks,
+    ],
+  );
 
   const saveConfirmation = async () => {
     setSavingConfirmation(true);
@@ -435,43 +531,130 @@ export function SpeakerDetail({
   };
 
   const prepareReminder = async () => {
-    setPreparingReminder(true); setMessage(undefined); setReminderPreview(undefined);
-    try { setReminderPreview(await repo.comms.previewReminder({ eventId: event.id, speakerId: row.speaker.id })); }
-    catch (error) { setMessage({ tone: "error", text: error instanceof Error ? error.message : "The reminder preview could not be prepared." }); }
-    finally { setPreparingReminder(false); }
+    setPreparingReminder(true);
+    setMessage(undefined);
+    setReminderPreview(undefined);
+    try {
+      setReminderPreview(
+        await repo.comms.previewReminder({
+          eventId: event.id,
+          speakerId: row.speaker.id,
+        }),
+      );
+    } catch (error) {
+      setMessage({
+        tone: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : "The reminder preview could not be prepared.",
+      });
+    } finally {
+      setPreparingReminder(false);
+    }
   };
 
   const sendReminder = async () => {
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email ?? "")) { setMessage({ tone: "error", text: "This speaker has no valid email on file." }); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email ?? "")) {
+      setMessage({
+        tone: "error",
+        text: "This speaker has no valid email on file.",
+      });
+      return;
+    }
     setSendingReminder(true);
     setMessage(undefined);
     try {
-      const outcome = await repo.comms.sendReminder({ eventId: event.id, speakerId: row.speaker.id });
-      if (outcome.status === "sent") { setMessage({ tone: "status", text: `Reminder sent to ${outcome.sent} recipient.` }); setReminderPreview(undefined); return; }
-      const problem = outcome.results.find(result => result.error || result.reason);
-      setMessage({ tone: "error", text: problem?.error ?? problem?.reason ?? "The reminder could not be sent." });
+      const outcome = await repo.comms.sendReminder({
+        eventId: event.id,
+        speakerId: row.speaker.id,
+      });
+      if (outcome.status === "sent") {
+        setMessage({
+          tone: "status",
+          text: `Reminder sent to ${outcome.sent} recipient.`,
+        });
+        setReminderPreview(undefined);
+        return;
+      }
+      const problem = outcome.results.find(
+        (result) => result.error || result.reason,
+      );
+      setMessage({
+        tone: "error",
+        text:
+          problem?.error ??
+          problem?.reason ??
+          "The reminder could not be sent.",
+      });
     } catch (error) {
-      setMessage({ tone: "error", text: error instanceof Error ? error.message : "The reminder could not be sent." });
+      setMessage({
+        tone: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : "The reminder could not be sent.",
+      });
     } finally {
       setSendingReminder(false);
     }
   };
 
   const prepareConsolidated = async () => {
-    setMessage(undefined); setConsolidatedPreview(undefined);
-    try { setConsolidatedPreview(await repo.comms.previewConsolidatedDecision({ eventId: event.id, speakerId: row.speaker.id })); }
-    catch (error) { setMessage({ tone: "error", text: error instanceof Error ? error.message : "A combined decision email could not be prepared." }); }
+    setMessage(undefined);
+    setConsolidatedPreview(undefined);
+    try {
+      setConsolidatedPreview(
+        await repo.comms.previewConsolidatedDecision({
+          eventId: event.id,
+          speakerId: row.speaker.id,
+        }),
+      );
+    } catch (error) {
+      setMessage({
+        tone: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : "A combined decision email could not be prepared.",
+      });
+    }
   };
 
   const sendConsolidated = async () => {
-    setSendingConsolidated(true); setMessage(undefined);
+    setSendingConsolidated(true);
+    setMessage(undefined);
     try {
-      const outcome = await repo.comms.sendConsolidatedDecision({ eventId: event.id, speakerId: row.speaker.id });
-      if (outcome.status === "sent") { setMessage({ tone: "status", text: "Combined decision email sent." }); setConsolidatedPreview(undefined); return; }
-      const problem = outcome.results.find(result => result.error || result.reason);
-      setMessage({ tone: "error", text: problem?.error ?? problem?.reason ?? "The combined decision email could not be sent." });
-    } catch (error) { setMessage({ tone: "error", text: error instanceof Error ? error.message : "The combined decision email could not be sent." }); }
-    finally { setSendingConsolidated(false); }
+      const outcome = await repo.comms.sendConsolidatedDecision({
+        eventId: event.id,
+        speakerId: row.speaker.id,
+      });
+      if (outcome.status === "sent") {
+        setMessage({ tone: "status", text: "Combined decision email sent." });
+        setConsolidatedPreview(undefined);
+        return;
+      }
+      const problem = outcome.results.find(
+        (result) => result.error || result.reason,
+      );
+      setMessage({
+        tone: "error",
+        text:
+          problem?.error ??
+          problem?.reason ??
+          "The combined decision email could not be sent.",
+      });
+    } catch (error) {
+      setMessage({
+        tone: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : "The combined decision email could not be sent.",
+      });
+    } finally {
+      setSendingConsolidated(false);
+    }
   };
 
   const updateTask = async (
@@ -513,13 +696,74 @@ export function SpeakerDetail({
       </Button>
 
       <section className="space-y-2" aria-labelledby="speaker-contact-heading">
-        <h3 id="speaker-contact-heading" className="text-sm font-semibold">Contact</h3>
-        <p className="text-sm text-muted-foreground">{row.email || "No email on file"}</p>
-        {row.lastContactAt && <p className="text-xs text-muted-foreground">Last contacted {readableDate(row.lastContactAt)}</p>}
-        <Button type="button" variant="outline" size="sm" disabled={preparingReminder || sendingReminder || !row.email} onClick={() => void prepareReminder()}>
+        <h3 id="speaker-contact-heading" className="text-sm font-semibold">
+          Contact
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          {row.email || "No email on file"}
+        </p>
+        {row.lastContactAt && (
+          <p className="text-xs text-muted-foreground">
+            Last contacted {readableDate(row.lastContactAt)}
+          </p>
+        )}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={preparingReminder || sendingReminder || !row.email}
+          onClick={() => void prepareReminder()}
+        >
           {preparingReminder ? "Preparing…" : "Send reminder"}
         </Button>
-        {reminderPreview && <div className="space-y-3 rounded-lg bg-background p-3"><div><p className="text-sm font-medium">Review reminder</p><p className="mt-1 text-xs text-muted-foreground">{reminderPreview.templateName ? `Using “${reminderPreview.templateName}”.` : "Using the built-in branded template."}</p></div><div><p className="text-sm font-medium">{reminderPreview.subject}</p><p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{reminderPreview.body}</p></div><p className="text-xs text-muted-foreground">To {reminderPreview.recipients[0]?.name} · {reminderPreview.recipients[0]?.email || "No email on file"}</p><p className="text-xs text-muted-foreground">{reminderPreview.calendarAttached ? `Calendar invite attached${reminderPreview.scheduleTime ? ` for ${reminderPreview.scheduleTime}` : ""}.` : "No scheduled session is available, so no calendar invite will be attached."}</p><div className="flex justify-end gap-2"><Button type="button" variant="ghost" size="sm" onClick={() => setReminderPreview(undefined)} disabled={sendingReminder}>Cancel</Button><Button type="button" size="sm" onClick={() => void sendReminder()} disabled={sendingReminder || !reminderPreview.recipients[0]?.email}>{sendingReminder ? "Sending…" : "Confirm send"}</Button></div></div>}
+        {reminderPreview && (
+          <div className="space-y-3 rounded-lg bg-background p-3">
+            <div>
+              <p className="text-sm font-medium">Review reminder</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {reminderPreview.templateName
+                  ? `Using “${reminderPreview.templateName}”.`
+                  : "Using the built-in branded template."}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm font-medium">{reminderPreview.subject}</p>
+              <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">
+                {reminderPreview.body}
+              </p>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              To {reminderPreview.recipients[0]?.name} ·{" "}
+              {reminderPreview.recipients[0]?.email || "No email on file"}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {reminderPreview.calendarAttached
+                ? `Calendar invite attached${reminderPreview.scheduleTime ? ` for ${reminderPreview.scheduleTime}` : ""}.`
+                : "No scheduled session is available, so no calendar invite will be attached."}
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setReminderPreview(undefined)}
+                disabled={sendingReminder}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => void sendReminder()}
+                disabled={
+                  sendingReminder || !reminderPreview.recipients[0]?.email
+                }
+              >
+                {sendingReminder ? "Sending…" : "Confirm send"}
+              </Button>
+            </div>
+          </div>
+        )}
       </section>
 
       <section
@@ -575,15 +819,72 @@ export function SpeakerDetail({
             <li key={submission.id}>
               <Link
                 className="text-sm font-medium hover:underline"
-                to={event.slug ? `/events/${event.slug}/program/abstracts?selected=${encodeURIComponent(submission.id)}` : `/program/abstracts?selected=${encodeURIComponent(submission.id)}`}
+                to={
+                  event.slug
+                    ? `/events/${event.slug}/program/abstracts?selected=${encodeURIComponent(submission.id)}`
+                    : `/program/abstracts?selected=${encodeURIComponent(submission.id)}`
+                }
               >
                 {submission.title}
               </Link>
             </li>
           ))}
         </ul>
-        <Button type="button" variant="outline" size="sm" onClick={() => void prepareConsolidated()} disabled={!row.email || sendingConsolidated}>Prepare combined decisions</Button>
-        {consolidatedPreview && <div className="space-y-3 rounded-lg bg-background p-3"><div><p className="text-sm font-medium">Review combined decision email</p><p className="mt-1 text-xs text-muted-foreground">{consolidatedPreview.templateName ? `Using “${consolidatedPreview.templateName}”.` : "Using the built-in branded template."}</p></div><div><p className="text-sm font-medium">{consolidatedPreview.subject}</p><p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{consolidatedPreview.body}</p></div><p className="text-xs text-muted-foreground">{consolidatedPreview.attachmentCount ? `${consolidatedPreview.attachmentCount} calendar invite${consolidatedPreview.attachmentCount === 1 ? "" : "s"} attached for accepted sessions.` : "No calendar invites will be attached."}</p><div className="flex justify-end gap-2"><Button type="button" variant="ghost" size="sm" onClick={() => setConsolidatedPreview(undefined)} disabled={sendingConsolidated}>Cancel</Button><Button type="button" size="sm" onClick={() => void sendConsolidated()} disabled={sendingConsolidated}>{sendingConsolidated ? "Sending…" : "Confirm send"}</Button></div></div>}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => void prepareConsolidated()}
+          disabled={!row.email || sendingConsolidated}
+        >
+          Prepare combined decisions
+        </Button>
+        {consolidatedPreview && (
+          <div className="space-y-3 rounded-lg bg-background p-3">
+            <div>
+              <p className="text-sm font-medium">
+                Review combined decision email
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {consolidatedPreview.templateName
+                  ? `Using “${consolidatedPreview.templateName}”.`
+                  : "Using the built-in branded template."}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm font-medium">
+                {consolidatedPreview.subject}
+              </p>
+              <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">
+                {consolidatedPreview.body}
+              </p>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {consolidatedPreview.attachmentCount
+                ? `${consolidatedPreview.attachmentCount} calendar invite${consolidatedPreview.attachmentCount === 1 ? "" : "s"} attached for accepted sessions.`
+                : "No calendar invites will be attached."}
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setConsolidatedPreview(undefined)}
+                disabled={sendingConsolidated}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => void sendConsolidated()}
+                disabled={sendingConsolidated}
+              >
+                {sendingConsolidated ? "Sending…" : "Confirm send"}
+              </Button>
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="space-y-3" aria-labelledby="speaker-profile-heading">
@@ -746,14 +1047,98 @@ export function SpeakerDetail({
       </section>
 
       <section className="space-y-3" aria-labelledby="speaker-notes-heading">
-        <div><h3 id="speaker-notes-heading" className="text-sm font-semibold">Notes</h3><p className="mt-1 text-xs text-muted-foreground">Private organizer context for this speaker.</p></div>
-        <div className="space-y-2 rounded-lg bg-background p-3"><Textarea aria-label="New note" value={noteBody} onChange={(inputEvent) => setNoteBody(inputEvent.target.value)} onKeyDown={(keyEvent) => { if ((keyEvent.metaKey || keyEvent.ctrlKey) && keyEvent.key === "Enter") { keyEvent.preventDefault(); void saveNote(); } }} placeholder="Add a note…" disabled={savingNote} /><div className="flex items-center justify-between gap-2"><p className="text-xs text-muted-foreground">⌘/Ctrl + Enter to save</p><Button type="button" size="sm" onClick={() => void saveNote()} disabled={savingNote || !noteBody.trim()}>{savingNote ? "Saving…" : "Save note"}</Button></div></div>
-        {notes === undefined ? <p className="text-sm text-muted-foreground">Loading notes…</p> : notes.length === 0 ? <p className="rounded-lg bg-background px-3 py-6 text-center text-sm text-muted-foreground">No notes yet.</p> : <div className="space-y-2">{notes.map((note) => <article key={note.id} className="group rounded-lg bg-background p-3"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="whitespace-pre-wrap break-words text-sm">{note.body}</p><p className="mt-1 text-xs text-muted-foreground">{readableDate(note.createdAt)}</p></div><Button type="button" variant="ghost" size="icon" onClick={() => void deleteNote(note.id)} className="h-6 w-6 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100" title="Delete note"><Trash2 className="h-3.5 w-3.5" /><span className="sr-only">Delete note</span></Button></div></article>)}</div>}
+        <div>
+          <h3 id="speaker-notes-heading" className="text-sm font-semibold">
+            Notes
+          </h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Private organizer context for this speaker.
+          </p>
+        </div>
+        <div className="space-y-2 rounded-lg bg-background p-3">
+          <Textarea
+            aria-label="New note"
+            value={noteBody}
+            onChange={(inputEvent) => setNoteBody(inputEvent.target.value)}
+            onKeyDown={(keyEvent) => {
+              if (
+                (keyEvent.metaKey || keyEvent.ctrlKey) &&
+                keyEvent.key === "Enter"
+              ) {
+                keyEvent.preventDefault();
+                void saveNote();
+              }
+            }}
+            placeholder="Add a note…"
+            disabled={savingNote}
+          />
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">
+              ⌘/Ctrl + Enter to save
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => void saveNote()}
+              disabled={savingNote || !noteBody.trim()}
+            >
+              {savingNote ? "Saving…" : "Save note"}
+            </Button>
+          </div>
+        </div>
+        {notes === undefined ? (
+          <p className="text-sm text-muted-foreground">Loading notes…</p>
+        ) : notes.length === 0 ? (
+          <p className="rounded-lg bg-background px-3 py-6 text-center text-sm text-muted-foreground">
+            No notes yet.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {notes.map((note) => (
+              <article
+                key={note.id}
+                className="group rounded-lg bg-background p-3"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="whitespace-pre-wrap break-words text-sm">
+                      {note.body}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {readableDate(note.createdAt)}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => void deleteNote(note.id)}
+                    className="h-6 w-6 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"
+                    title="Delete note"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span className="sr-only">Delete note</span>
+                  </Button>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="space-y-3" aria-labelledby="speaker-activity-heading">
-        <div><h3 id="speaker-activity-heading" className="text-sm font-semibold">Activity</h3><p className="mt-1 text-xs text-muted-foreground">Notes, tasks, and delivery history in one record.</p></div>
-        <ActivityTimeline events={timelineEvents} loading={notes === undefined} />
+        <div>
+          <h3 id="speaker-activity-heading" className="text-sm font-semibold">
+            Activity
+          </h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Notes, tasks, and delivery history in one record.
+          </p>
+        </div>
+        <ActivityTimeline
+          events={timelineEvents}
+          loading={notes === undefined}
+        />
       </section>
 
       {message && (
@@ -943,11 +1328,14 @@ export default function Speakers() {
   useEffect(() => {
     if (!shouldFocusSearch || loading) return;
     searchRef.current?.focus();
-    setParams((current) => {
-      const next = new URLSearchParams(current);
-      next.delete("focus");
-      return next;
-    }, { replace: true });
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete("focus");
+        return next;
+      },
+      { replace: true },
+    );
   }, [loading, setParams, shouldFocusSearch]);
 
   const setParam = (key: string, value?: string) => {
@@ -1226,7 +1614,9 @@ export default function Speakers() {
               </p>
             </div>
             <Button asChild variant="outline" size="sm">
-              <Link to={`/events/${activeEvent.slug}/settings/event`}>Open event settings</Link>
+              <Link to={`/events/${activeEvent.slug}/settings/event`}>
+                Open event settings
+              </Link>
             </Button>
           </section>
         ) : (
@@ -1334,14 +1724,32 @@ export default function Speakers() {
                 icon={UserRoundCheck}
                 title="No speakers yet"
                 message="Add a speaker manually or accept an abstract."
-                action={<Button type="button" variant="accent" size="sm" onClick={openAddSpeaker}><Plus /> Add speaker</Button>}
+                action={
+                  <Button
+                    type="button"
+                    variant="accent"
+                    size="sm"
+                    onClick={openAddSpeaker}
+                  >
+                    <Plus /> Add speaker
+                  </Button>
+                }
               />
             ) : visibleRows.length === 0 ? (
               <EmptyState
                 icon={Search}
                 title="No speakers match this view"
                 message="Clear the search and filters to see every speaker."
-                action={<Button type="button" variant="outline" size="sm" onClick={() => setParams(new URLSearchParams())}>Clear filters</Button>}
+                action={
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setParams(new URLSearchParams())}
+                  >
+                    Clear filters
+                  </Button>
+                }
               />
             ) : (
               <DataGrid

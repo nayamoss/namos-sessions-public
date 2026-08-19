@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { CalendarDays, CheckCircle2, Circle, FilePlus2, ImageUp } from "lucide-react";
+import {
+  CalendarDays,
+  CheckCircle2,
+  Circle,
+  FilePlus2,
+  ImageUp,
+} from "lucide-react";
 import { RichTextEditor } from "@/components/editor/RichTextEditor";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -11,22 +17,190 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FilterMenu } from "@/components/shared/StatusTabs";
 import { SkeletonList } from "@/components/shared/SkeletonList";
-import { loadPortalProfile, portalSubmissionStatusLabel, savePortalProfile, type PortalProfile, type PortalProfileScope } from "./portal-data";
+import {
+  loadPortalProfile,
+  portalSubmissionStatusLabel,
+  savePortalProfile,
+  type PortalProfile,
+  type PortalProfileScope,
+} from "./portal-data";
 import { usePortalIdentity } from "./PortalIdentity";
 import { SpeakerDocuments } from "./SpeakerDocuments";
 import { useRepo } from "@/data/repo";
-import type { OnboardingTask, PublicSubmissionFormSummary, Speaker, Submission } from "@/data/types";
-import { formatPortalDate, listEditability, relativeEditTime, submissionEditCopy } from "@/lib/submission-editing";
+import type {
+  OnboardingTask,
+  PublicSubmissionFormSummary,
+  Speaker,
+  Submission,
+} from "@/data/types";
+import {
+  formatPortalDate,
+  listEditability,
+  relativeEditTime,
+  submissionEditCopy,
+} from "@/lib/submission-editing";
 import { backendUnavailable } from "@/lib/backend";
 
-export function PortalAccessRequired() { const { loading } = usePortalIdentity(); return loading ? <SkeletonList rows={1} label="Loading speaker access…" /> : <section className={cardSurfaceClasses()}><EmptyState title="No speaker profile found" message="We couldn't find a speaker profile linked to your account. Contact the event organizer if you believe this is a mistake." /></section>; }
+export function PortalAccessRequired() {
+  const { loading } = usePortalIdentity();
+  return loading ? (
+    <SkeletonList rows={1} label="Loading speaker access…" />
+  ) : (
+    <section className={cardSurfaceClasses()}>
+      <EmptyState
+        title="No speaker profile found"
+        message="We couldn't find a speaker profile linked to your account. Contact the event organizer if you believe this is a mistake."
+      />
+    </section>
+  );
+}
 function TaskList({ compact = false }: { compact?: boolean }) {
-  const repo = useRepo(); const { eventId, selectedSpeaker } = usePortalIdentity(); const [filter, setFilter] = useState("all"); const [tasks, setTasks] = useState<OnboardingTask[]>([]); const [error, setError] = useState<string>();
+  const repo = useRepo();
+  const { eventId, selectedSpeaker } = usePortalIdentity();
+  const [filter, setFilter] = useState("all");
+  const [tasks, setTasks] = useState<OnboardingTask[]>([]);
+  const [error, setError] = useState<string>();
   const speakerId = selectedSpeaker?.id;
-  useEffect(() => { let active = true; if (!eventId || !speakerId) { setTasks([]); return () => { active = false; }; } Promise.resolve().then(async () => { const allTasks = await repo.tasks.list({ eventId, speakerId }); if (active) setTasks(allTasks); }).catch(cause => { if (active) setError(cause instanceof Error ? cause.message : "Could not load portal tasks."); }); return () => { active = false; }; }, [eventId, repo, speakerId]);
-  const visible = tasks.filter(task => filter === "all" || (filter === "submission" && task.targetType === "submission") || (filter === "mine" && task.targetType !== "submission"));
-  const toggle = async (task: OnboardingTask) => { const status = task.status === "completed" ? "in_progress" : "completed"; setTasks(current => current.map(item => item.id === task.id ? { ...item, status } : item)); try { await repo.tasks.setStatus(task.id, status); } catch (cause) { setTasks(current => current.map(item => item.id === task.id ? task : item)); setError(cause instanceof Error ? cause.message : "Could not update task."); } };
-  return <div className="space-y-3">{error && <p role="alert" className="text-sm text-destructive">{error}</p>}<FilterMenu value={filter} onValueChange={setFilter} tabs={[{ value: "all", label: "All", count: tasks.length }, { value: "mine", label: "My Tasks", count: tasks.filter(task => task.targetType !== "submission").length }, { value: "submission", label: "Submissions", count: tasks.filter(task => task.targetType === "submission").length }]} />{visible.map(task => { const complete = task.status === "completed"; const taskAction = complete ? `Reopen ${task.title}` : `Complete ${task.title}`; const sourceLabel = task.source === "agent" ? "Created by Operations Agent" : task.source === "auto" ? "Created from acceptance" : "Manual task"; return <div key={task.id} className="flex w-full items-center gap-3 rounded-md bg-background p-3 text-left"><button type="button" aria-label={taskAction} title={taskAction} onClick={() => void toggle(task)} className="text-muted-foreground">{complete ? <CheckCircle2 className="h-5 w-5" /> : <Circle className="h-5 w-5" />}</button><span className="min-w-0 flex-1"><span className={`block text-sm font-medium ${complete ? "line-through text-muted-foreground" : ""}`}>{task.title}</span><span className="mt-1 block text-xs text-muted-foreground">{task.dueDate ? `Due ${new Date(task.dueDate).toLocaleDateString()} · ${sourceLabel}` : sourceLabel}</span>{task.linkedFormId && <Link to={`/portal/forms/${task.linkedFormId}?task=${task.id}`} className="mt-2 inline-block text-xs font-medium text-foreground underline underline-offset-4">Complete form</Link>}</span></div>; })}{!compact && (visible.length ? <p className="text-xs text-muted-foreground">Select a task to update its status.</p> : <EmptyState compact title="No tasks assigned" message="Your organizer will add onboarding tasks here when action is needed." className={cardSurfaceClasses("default", "bg-muted")} />)}</div>;
+  useEffect(() => {
+    let active = true;
+    if (!eventId || !speakerId) {
+      setTasks([]);
+      return () => {
+        active = false;
+      };
+    }
+    Promise.resolve()
+      .then(async () => {
+        const allTasks = await repo.tasks.list({ eventId, speakerId });
+        if (active) setTasks(allTasks);
+      })
+      .catch((cause) => {
+        if (active)
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "Could not load portal tasks.",
+          );
+      });
+    return () => {
+      active = false;
+    };
+  }, [eventId, repo, speakerId]);
+  const visible = tasks.filter(
+    (task) =>
+      filter === "all" ||
+      (filter === "submission" && task.targetType === "submission") ||
+      (filter === "mine" && task.targetType !== "submission"),
+  );
+  const toggle = async (task: OnboardingTask) => {
+    const status = task.status === "completed" ? "in_progress" : "completed";
+    setTasks((current) =>
+      current.map((item) => (item.id === task.id ? { ...item, status } : item)),
+    );
+    try {
+      await repo.tasks.setStatus(task.id, status);
+    } catch (cause) {
+      setTasks((current) =>
+        current.map((item) => (item.id === task.id ? task : item)),
+      );
+      setError(
+        cause instanceof Error ? cause.message : "Could not update task.",
+      );
+    }
+  };
+  return (
+    <div className="space-y-3">
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+      <FilterMenu
+        value={filter}
+        onValueChange={setFilter}
+        tabs={[
+          { value: "all", label: "All", count: tasks.length },
+          {
+            value: "mine",
+            label: "My Tasks",
+            count: tasks.filter((task) => task.targetType !== "submission")
+              .length,
+          },
+          {
+            value: "submission",
+            label: "Submissions",
+            count: tasks.filter((task) => task.targetType === "submission")
+              .length,
+          },
+        ]}
+      />
+      {visible.map((task) => {
+        const complete = task.status === "completed";
+        const taskAction = complete
+          ? `Reopen ${task.title}`
+          : `Complete ${task.title}`;
+        const sourceLabel =
+          task.source === "agent"
+            ? "Created by Operations Agent"
+            : task.source === "auto"
+              ? "Created from acceptance"
+              : "Manual task";
+        return (
+          <div
+            key={task.id}
+            className="flex w-full items-center gap-3 rounded-md bg-background p-3 text-left"
+          >
+            <button
+              type="button"
+              aria-label={taskAction}
+              title={taskAction}
+              onClick={() => void toggle(task)}
+              className="text-muted-foreground"
+            >
+              {complete ? (
+                <CheckCircle2 className="h-5 w-5" />
+              ) : (
+                <Circle className="h-5 w-5" />
+              )}
+            </button>
+            <span className="min-w-0 flex-1">
+              <span
+                className={`block text-sm font-medium ${complete ? "line-through text-muted-foreground" : ""}`}
+              >
+                {task.title}
+              </span>
+              <span className="mt-1 block text-xs text-muted-foreground">
+                {task.dueDate
+                  ? `Due ${new Date(task.dueDate).toLocaleDateString()} · ${sourceLabel}`
+                  : sourceLabel}
+              </span>
+              {task.linkedFormId && (
+                <Link
+                  to={`/portal/forms/${task.linkedFormId}?task=${task.id}`}
+                  className="mt-2 inline-block text-xs font-medium text-foreground underline underline-offset-4"
+                >
+                  Complete form
+                </Link>
+              )}
+            </span>
+          </div>
+        );
+      })}
+      {!compact &&
+        (visible.length ? (
+          <p className="text-xs text-muted-foreground">
+            Select a task to update its status.
+          </p>
+        ) : (
+          <EmptyState
+            compact
+            title="No tasks assigned"
+            message="Your organizer will add onboarding tasks here when action is needed."
+            className={cardSurfaceClasses("default", "bg-muted")}
+          />
+        ))}
+    </div>
+  );
 }
 
 function usePortalSubmissions() {
@@ -37,34 +211,188 @@ function usePortalSubmissions() {
   const [error, setError] = useState<string>();
   useEffect(() => {
     let active = true;
-    if (!eventId || !selectedSpeaker) { setSubmissions([]); setLoading(false); return () => { active = false; }; }
-    Promise.resolve().then(async () => {
-      const allSubmissions = await repo.submissions.list({ eventId, speakerId: selectedSpeaker.id });
-      if (active) setSubmissions(allSubmissions);
-    }).catch(cause => {
-      if (active) setError(cause instanceof Error ? cause.message : "Could not load portal submissions.");
-    }).finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
+    if (!eventId || !selectedSpeaker) {
+      setSubmissions([]);
+      setLoading(false);
+      return () => {
+        active = false;
+      };
+    }
+    Promise.resolve()
+      .then(async () => {
+        const allSubmissions = await repo.submissions.list({
+          eventId,
+          speakerId: selectedSpeaker.id,
+        });
+        if (active) setSubmissions(allSubmissions);
+      })
+      .catch((cause) => {
+        if (active)
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "Could not load portal submissions.",
+          );
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, [eventId, repo, selectedSpeaker]);
   return { submissions, loading, error };
 }
 
 function submissionTitle(submission: Submission) {
-  return submission.title?.trim() || String(submission.answers?.title || "Untitled submission");
+  return (
+    submission.title?.trim() ||
+    String(submission.answers?.title || "Untitled submission")
+  );
 }
 
 function submissionUpdatedAt(submission: Submission, timezone = "UTC") {
-  const updated = submission.updatedAt ? `Updated ${formatPortalDate(submission.updatedAt, timezone)}` : "Submitted";
-  return submission.lastSpeakerEditAt ? `${updated} · Edited ${relativeEditTime(submission.lastSpeakerEditAt)}` : updated;
+  const updated = submission.updatedAt
+    ? `Updated ${formatPortalDate(submission.updatedAt, timezone)}`
+    : "Submitted";
+  return submission.lastSpeakerEditAt
+    ? `${updated} · Edited ${relativeEditTime(submission.lastSpeakerEditAt)}`
+    : updated;
 }
 
-export function PortalDashboard() { const { eventId, selectedSpeaker } = usePortalIdentity(); const scope = eventId && selectedSpeaker ? { eventId, speakerId: selectedSpeaker.id, speakerName: selectedSpeaker.name } : undefined; const profile = loadPortalProfile(scope); const { submissions, loading, error } = usePortalSubmissions(); if (!scope) return <PortalAccessRequired />; return <div className="space-y-4"><p className="text-sm text-muted-foreground">Welcome back, {profile.firstName}.</p><div className="grid gap-4 lg:grid-cols-2"><SectionCard title={`My submissions (${submissions.length})`} action={<Button asChild variant="ghost" size="sm"><Link to="/portal/submissions">View all</Link></Button>}><div className="space-y-3">{error && <p role="alert" className="text-sm text-destructive">{error}</p>}{loading ? <SkeletonList rows={2} label="Loading submissions…" /> : submissions.length ? submissions.map(submission => <div key={submission.id} className="flex items-center justify-between gap-3 rounded-md bg-background p-3"><div className="min-w-0"><p className="text-xs text-muted-foreground">Submission</p><p className="truncate text-sm font-medium">{submissionTitle(submission)}</p></div><SubmissionStatusBadge status={submission.status} label={portalSubmissionStatusLabel(submission.status)} /></div>) : <p className="text-sm text-muted-foreground">No submissions yet.</p>}</div></SectionCard><SectionCard title="My profile" action={<Button asChild variant="ghost" size="sm"><Link to="/portal/profile">View more</Link></Button>}><div className="flex items-center gap-4"><div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-sm font-semibold">{profile.firstName.slice(0, 1)}{profile.lastName.slice(0, 1)}</div><div><p className="text-sm font-medium">{profile.firstName} {profile.lastName}</p></div></div></SectionCard></div><SectionCard title="Tasks"><TaskList /></SectionCard></div>; }
+export function PortalDashboard() {
+  const { eventId, selectedSpeaker } = usePortalIdentity();
+  const scope =
+    eventId && selectedSpeaker
+      ? {
+          eventId,
+          speakerId: selectedSpeaker.id,
+          speakerName: selectedSpeaker.name,
+        }
+      : undefined;
+  const profile = loadPortalProfile(scope);
+  const { submissions, loading, error } = usePortalSubmissions();
+  if (!scope) return <PortalAccessRequired />;
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Welcome back, {profile.firstName}.
+      </p>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <SectionCard
+          title={`My submissions (${submissions.length})`}
+          action={
+            <Button asChild variant="ghost" size="sm">
+              <Link to="/portal/submissions">View all</Link>
+            </Button>
+          }
+        >
+          <div className="space-y-3">
+            {error && (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+            )}
+            {loading ? (
+              <SkeletonList rows={2} label="Loading submissions…" />
+            ) : submissions.length ? (
+              submissions.map((submission) => (
+                <div
+                  key={submission.id}
+                  className="flex items-center justify-between gap-3 rounded-md bg-background p-3"
+                >
+                  <div className="min-w-0">
+                    <p className="text-xs text-muted-foreground">Submission</p>
+                    <p className="truncate text-sm font-medium">
+                      {submissionTitle(submission)}
+                    </p>
+                  </div>
+                  <SubmissionStatusBadge
+                    status={submission.status}
+                    label={portalSubmissionStatusLabel(submission.status)}
+                  />
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No submissions yet.
+              </p>
+            )}
+          </div>
+        </SectionCard>
+        <SectionCard
+          title="My profile"
+          action={
+            <Button asChild variant="ghost" size="sm">
+              <Link to="/portal/profile">View more</Link>
+            </Button>
+          }
+        >
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-sm font-semibold">
+              {profile.firstName.slice(0, 1)}
+              {profile.lastName.slice(0, 1)}
+            </div>
+            <div>
+              <p className="text-sm font-medium">
+                {profile.firstName} {profile.lastName}
+              </p>
+            </div>
+          </div>
+        </SectionCard>
+      </div>
+      <SectionCard title="Tasks">
+        <TaskList />
+      </SectionCard>
+    </div>
+  );
+}
 
 export function PortalSubmissions() {
   const { selectedSpeaker, event } = usePortalIdentity();
   const { submissions, loading, error } = usePortalSubmissions();
   if (!selectedSpeaker) return <PortalAccessRequired />;
-  return <div className="space-y-4"><ContentToolbar ariaLabel="Submission actions" primaryAction={<Button asChild variant="accent" size="sm"><Link to="/portal/submissions/new">New submission</Link></Button>} />{error && <p role="alert" className="text-sm text-destructive">{error}</p>}<section className={cardSurfaceClasses("default", "overflow-hidden")}>{loading ? <SkeletonList rows={3} label="Loading submissions…" /> : submissions.length ? submissions.map(submission => <PortalSubmissionRow key={submission.id} submission={submission} timezone={event?.timezone ?? "UTC"} />) : <EmptyState icon={FilePlus2} title="Start your first proposal" message="Choose an open call for papers and submit a session for this event." action={<Button asChild variant="accent" size="sm"><Link to="/portal/submissions/new">New submission</Link></Button>} />}</section></div>;
+  return (
+    <div className="space-y-4">
+      <ContentToolbar
+        ariaLabel="Submission actions"
+        primaryAction={
+          <Button asChild variant="accent" size="sm">
+            <Link to="/portal/submissions/new">New submission</Link>
+          </Button>
+        }
+      />
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+      <section className={cardSurfaceClasses("default", "overflow-hidden")}>
+        {loading ? (
+          <SkeletonList rows={3} label="Loading submissions…" />
+        ) : submissions.length ? (
+          submissions.map((submission) => (
+            <PortalSubmissionRow
+              key={submission.id}
+              submission={submission}
+              timezone={event?.timezone ?? "UTC"}
+            />
+          ))
+        ) : (
+          <EmptyState
+            icon={FilePlus2}
+            title="Start your first proposal"
+            message="Choose an open call for papers and submit a session for this event."
+            action={
+              <Button asChild variant="accent" size="sm">
+                <Link to="/portal/submissions/new">New submission</Link>
+              </Button>
+            }
+          />
+        )}
+      </section>
+    </div>
+  );
 }
 
 export function PortalNewSubmission() {
@@ -75,30 +403,474 @@ export function PortalNewSubmission() {
   const [error, setError] = useState<string>();
   useEffect(() => {
     let active = true;
-    if (!event) { setForms([]); setLoading(false); return () => { active = false; }; }
+    if (!event) {
+      setForms([]);
+      setLoading(false);
+      return () => {
+        active = false;
+      };
+    }
     setLoading(true);
     setError(undefined);
-    void repo.publicForms.listOpen(event.slug)
-      .then((next) => { if (active) setForms(next); })
-      .catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : "Could not load open submission forms."); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
+    void repo.publicForms
+      .listOpen(event.slug)
+      .then((next) => {
+        if (active) setForms(next);
+      })
+      .catch((cause) => {
+        if (active)
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "Could not load open submission forms.",
+          );
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, [event, repo]);
   if (!selectedSpeaker) return <PortalAccessRequired />;
-  return <div className="space-y-4"><ContentToolbar ariaLabel="New submission navigation" utilities={<Button asChild variant="ghost" size="sm"><Link to="/portal/submissions">Back to submissions</Link></Button>} /><section className={cardSurfaceClasses("default", "p-6")}><div><h2 className="text-lg font-semibold">Start a new submission</h2><p className="mt-1 text-sm text-muted-foreground">Choose the call for proposals you want to respond to.</p></div>{error && <p role="alert" className="mt-5 text-sm text-destructive">{error}</p>}{loading ? <div className="mt-5"><SkeletonList rows={2} label="Loading open submission forms…" /></div> : forms.length ? <div className="mt-5 space-y-2">{forms.map((form) => <div key={form.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-background p-4"><p className="text-sm font-medium">{form.title}</p><Button asChild variant="accent" size="sm"><Link to={`/submit/${event!.slug}/${form.id}`}>Start submission</Link></Button></div>)}</div> : <div className="mt-5 rounded-md bg-background"><EmptyState compact icon={CalendarDays} title="No calls are open right now" message="An open call for papers will appear here as soon as the organizer publishes one." /></div>}</section></div>;
+  return (
+    <div className="space-y-4">
+      <ContentToolbar
+        ariaLabel="New submission navigation"
+        utilities={
+          <Button asChild variant="ghost" size="sm">
+            <Link to="/portal/submissions">Back to submissions</Link>
+          </Button>
+        }
+      />
+      <section className={cardSurfaceClasses("default", "p-6")}>
+        <div>
+          <h2 className="text-lg font-semibold">Start a new submission</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Choose the call for proposals you want to respond to.
+          </p>
+        </div>
+        {error && (
+          <p role="alert" className="mt-5 text-sm text-destructive">
+            {error}
+          </p>
+        )}
+        {loading ? (
+          <div className="mt-5">
+            <SkeletonList rows={2} label="Loading open submission forms…" />
+          </div>
+        ) : forms.length ? (
+          <div className="mt-5 space-y-2">
+            {forms.map((form) => (
+              <div
+                key={form.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-background p-4"
+              >
+                <p className="text-sm font-medium">{form.title}</p>
+                <Button asChild variant="accent" size="sm">
+                  <Link to={`/submit/${event!.slug}/${form.id}`}>
+                    Start submission
+                  </Link>
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-5 rounded-md bg-background">
+            <EmptyState
+              compact
+              icon={CalendarDays}
+              title="No calls are open right now"
+              message="An open call for papers will appear here as soon as the organizer publishes one."
+            />
+          </div>
+        )}
+      </section>
+    </div>
+  );
 }
 
-export function PortalSubmissionRow({ submission, timezone }: { submission: Submission; timezone: string }) {
+export function PortalSubmissionRow({
+  submission,
+  timezone,
+}: {
+  submission: Submission;
+  timezone: string;
+}) {
   const title = submissionTitle(submission);
-  const editability = submission.editability ?? listEditability(submission.status);
-  return <div className="flex flex-wrap items-center justify-between gap-4 p-5"><div><p className="text-xs text-muted-foreground">Submission</p><p className="mt-1 text-sm font-semibold">{title}</p><p className="mt-1 text-xs text-muted-foreground">{submissionUpdatedAt(submission, timezone)}</p></div><div className="flex items-center gap-3"><SubmissionStatusBadge status={submission.status} label={portalSubmissionStatusLabel(submission.status)} />{editability.editable ? <Button asChild variant="ghost" size="sm"><Link to={`/portal/submissions/${submission.id}/edit`} aria-label={`Edit ${title}`}>Edit</Link></Button> : <span className="text-xs text-muted-foreground">{submissionEditCopy["reason" in editability ? editability.reason : "under_review"].list}</span>}</div></div>;
+  const editability =
+    submission.editability ?? listEditability(submission.status);
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-4 p-5">
+      <div>
+        <p className="text-xs text-muted-foreground">Submission</p>
+        <p className="mt-1 text-sm font-semibold">{title}</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {submissionUpdatedAt(submission, timezone)}
+        </p>
+      </div>
+      <div className="flex items-center gap-3">
+        <SubmissionStatusBadge
+          status={submission.status}
+          label={portalSubmissionStatusLabel(submission.status)}
+        />
+        {editability.editable ? (
+          <Button asChild variant="ghost" size="sm">
+            <Link
+              to={`/portal/submissions/${submission.id}/edit`}
+              aria-label={`Edit ${title}`}
+            >
+              Edit
+            </Link>
+          </Button>
+        ) : (
+          <span className="text-xs text-muted-foreground">
+            {
+              submissionEditCopy[
+                "reason" in editability ? editability.reason : "under_review"
+              ].list
+            }
+          </span>
+        )}
+      </div>
+    </div>
+  );
 }
 
-function profileFromSpeaker(speaker: Speaker): PortalProfile { const names = speaker.name.split(/\s+/).filter(Boolean); return { firstName: speaker.firstName ?? names[0] ?? "", lastName: speaker.lastName ?? names.slice(1).join(" "), email: "", bio: speaker.bio ?? "", salutation: speaker.salutation ?? "", honorific: speaker.honorific ?? "", pronouns: speaker.pronouns ?? "", gender: speaker.gender ?? "", linkedinUrl: speaker.linkedinUrl ?? "", xUrl: speaker.xUrl ?? "", facebookUrl: speaker.facebookUrl ?? "", websiteUrl: speaker.websiteUrl ?? "" }; }
-export function PortalProfilePage() { const repo = useRepo(); const { eventId, selectedSpeaker } = usePortalIdentity(); const scope: PortalProfileScope | undefined = eventId && selectedSpeaker ? { eventId, speakerId: selectedSpeaker.id, speakerName: selectedSpeaker.name } : undefined; const [profile, setProfile] = useState<PortalProfile>(() => selectedSpeaker ? profileFromSpeaker(selectedSpeaker) : loadPortalProfile(scope)); const [saved, setSaved] = useState<string>(); const [saveError, setSaveError] = useState<string>(); const [headshotUrl, setHeadshotUrl] = useState<string | null>(); const [uploadingHeadshot, setUploadingHeadshot] = useState(false); useEffect(() => { let active = true; setProfile(selectedSpeaker ? profileFromSpeaker(selectedSpeaker) : loadPortalProfile(scope)); setSaved(undefined); setSaveError(undefined); setHeadshotUrl(undefined); if (scope) void repo.speakers.getHeadshotUrl({ eventId: scope.eventId as never, speakerId: scope.speakerId as never }).then(url => { if (active) setHeadshotUrl(url); }).catch(() => { if (active) setHeadshotUrl(null); }); return () => { active = false; }; }, [repo, scope?.eventId, scope?.speakerId, selectedSpeaker]); const update = <K extends keyof PortalProfile>(key: K, value: PortalProfile[K]) => { setSaved(undefined); setProfile(current => ({ ...current, [key]: value })); }; const save = async () => { if (!scope) return; setSaveError(undefined); try { await repo.speakers.updateProfile({ eventId: scope.eventId as never, speakerId: scope.speakerId as never, firstName: profile.firstName, lastName: profile.lastName, bio: profile.bio, salutation: profile.salutation, honorific: profile.honorific, pronouns: profile.pronouns, gender: profile.gender, linkedinUrl: profile.linkedinUrl, xUrl: profile.xUrl, facebookUrl: profile.facebookUrl, websiteUrl: profile.websiteUrl }); setSaved("Profile saved."); } catch (error) { if (backendUnavailable(error)) { savePortalProfile(scope, profile); setSaved("Profile saved locally until this backend supports speaker profiles."); } else setSaveError(error instanceof Error ? error.message : "Could not save your profile."); } }; const uploadHeadshot = async (file: File | undefined) => { if (!scope || !file) return; if (!file.type.startsWith("image/")) { setSaveError("Headshots must be image files."); return; } if (file.size > 10 * 1024 * 1024) { setSaveError("Headshots must be 10 MB or smaller."); return; } setSaved(undefined); setSaveError(undefined); setUploadingHeadshot(true); try { const { uploadUrl } = await repo.speakers.requestHeadshotUpload({ eventId: scope.eventId as never, speakerId: scope.speakerId as never }); const response = await fetch(uploadUrl, { method: "POST", headers: { "content-type": file.type }, body: file }); if (!response.ok) throw new Error("The headshot upload was rejected."); const { storageId } = await response.json() as { storageId?: string }; if (!storageId) throw new Error("The upload did not return a storage reference."); await repo.speakers.saveHeadshot({ eventId: scope.eventId as never, speakerId: scope.speakerId as never, storageId }); const nextUrl = await repo.speakers.getHeadshotUrl({ eventId: scope.eventId as never, speakerId: scope.speakerId as never }); setHeadshotUrl(nextUrl); setSaved("Headshot uploaded."); } catch (error) { setSaveError(error instanceof Error ? error.message : "Could not upload your headshot."); } finally { setUploadingHeadshot(false); } }; if (!scope) return <PortalAccessRequired />; return <div className="space-y-4"><ContentToolbar ariaLabel="Profile actions" primaryAction={<Button type="button" variant="accent" size="sm" onClick={() => void save()}>Save</Button>} />{saved && <p role="status" className="rounded-md bg-muted px-4 py-3 text-sm">{saved}</p>}{saveError && <p role="alert" className="text-sm text-destructive">{saveError}</p>}<div className="grid gap-4 lg:grid-cols-2"><section className={cardSurfaceClasses("default", "space-y-5 p-6")}><div><h2 className="text-base font-semibold">General</h2><p className="mt-1 text-sm text-muted-foreground">Update your bio, links and headshot for this speaker profile.</p></div><FormField label="Biography"><RichTextEditor value={profile.bio} onChange={value => update("bio", value.slice(0, 5000))} placeholder="Tell attendees about yourself…" /><p className="text-right text-xs text-muted-foreground">{stripHtmlTags(profile.bio).length} / 5,000 characters</p></FormField><div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><FormField label="Salutation"><Input value={profile.salutation} onChange={event => update("salutation", event.target.value)} /></FormField><FormField label="Honorific"><Input value={profile.honorific} onChange={event => update("honorific", event.target.value)} /></FormField><FormField label="First name"><Input value={profile.firstName} onChange={event => update("firstName", event.target.value)} /></FormField><FormField label="Last name"><Input value={profile.lastName} onChange={event => update("lastName", event.target.value)} /></FormField><FormField label="Pronouns"><Input value={profile.pronouns} onChange={event => update("pronouns", event.target.value)} /></FormField><FormField label="Gender"><Input value={profile.gender} onChange={event => update("gender", event.target.value)} /></FormField></div></section><section className={cardSurfaceClasses("default", "space-y-5 p-6")}><div><h2 className="text-base font-semibold">My links</h2><p className="mt-1 text-sm text-muted-foreground">Share the places attendees can learn more about you.</p></div>{([ ["LinkedIn URL", "linkedinUrl"], ["X (Twitter) URL", "xUrl"], ["Facebook URL", "facebookUrl"], ["Website", "websiteUrl"] ] as const).map(([label, key]) => <FormField key={key} label={label}><Input type="url" placeholder="https://" value={profile[key]} onChange={event => update(key, event.target.value)} /></FormField>)}<div className="rounded-md bg-background p-4"><div className="flex items-center gap-3">{headshotUrl ? <img src={headshotUrl} alt={`${selectedSpeaker.name}'s headshot`} className="h-14 w-14 rounded-full object-cover" /> : <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted text-xs text-muted-foreground">{headshotUrl === undefined ? "Loading" : "No photo"}</div>}<div><p className="text-sm font-medium">Headshot</p><p className="mt-1 text-xs text-muted-foreground">JPEG, PNG, WebP, or GIF. Up to 10 MB.</p></div></div><Input id="portal-headshot-upload" type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="sr-only" disabled={uploadingHeadshot} onChange={event => { void uploadHeadshot(event.target.files?.[0]); event.currentTarget.value = ""; }} /><Button variant="outline" size="sm" disabled={uploadingHeadshot} asChild><label htmlFor="portal-headshot-upload" role="button" className="mt-3 cursor-pointer">{uploadingHeadshot ? "Uploading…" : "Upload headshot"} <ImageUp /></label></Button></div></section></div><section className={cardSurfaceClasses("default", "flex flex-wrap items-center gap-x-2 gap-y-1 p-6 text-sm")}><span className="text-muted-foreground">Uploading slides, travel details or other files?</span><Link to="/portal/files" className="font-medium underline underline-offset-4">Go to Files</Link></section></div>; }
+function profileFromSpeaker(speaker: Speaker): PortalProfile {
+  const names = speaker.name.split(/\s+/).filter(Boolean);
+  return {
+    firstName: speaker.firstName ?? names[0] ?? "",
+    lastName: speaker.lastName ?? names.slice(1).join(" "),
+    email: "",
+    bio: speaker.bio ?? "",
+    salutation: speaker.salutation ?? "",
+    honorific: speaker.honorific ?? "",
+    pronouns: speaker.pronouns ?? "",
+    gender: speaker.gender ?? "",
+    linkedinUrl: speaker.linkedinUrl ?? "",
+    xUrl: speaker.xUrl ?? "",
+    facebookUrl: speaker.facebookUrl ?? "",
+    websiteUrl: speaker.websiteUrl ?? "",
+  };
+}
+export function PortalProfilePage() {
+  const repo = useRepo();
+  const { eventId, selectedSpeaker } = usePortalIdentity();
+  const scope: PortalProfileScope | undefined =
+    eventId && selectedSpeaker
+      ? {
+          eventId,
+          speakerId: selectedSpeaker.id,
+          speakerName: selectedSpeaker.name,
+        }
+      : undefined;
+  const [profile, setProfile] = useState<PortalProfile>(() =>
+    selectedSpeaker
+      ? profileFromSpeaker(selectedSpeaker)
+      : loadPortalProfile(scope),
+  );
+  const [saved, setSaved] = useState<string>();
+  const [saveError, setSaveError] = useState<string>();
+  const [headshotUrl, setHeadshotUrl] = useState<string | null>();
+  const [uploadingHeadshot, setUploadingHeadshot] = useState(false);
+  useEffect(() => {
+    let active = true;
+    setProfile(
+      selectedSpeaker
+        ? profileFromSpeaker(selectedSpeaker)
+        : loadPortalProfile(scope),
+    );
+    setSaved(undefined);
+    setSaveError(undefined);
+    setHeadshotUrl(undefined);
+    if (scope)
+      void repo.speakers
+        .getHeadshotUrl({
+          eventId: scope.eventId as never,
+          speakerId: scope.speakerId as never,
+        })
+        .then((url) => {
+          if (active) setHeadshotUrl(url);
+        })
+        .catch(() => {
+          if (active) setHeadshotUrl(null);
+        });
+    return () => {
+      active = false;
+    };
+  }, [repo, scope?.eventId, scope?.speakerId, selectedSpeaker]);
+  const update = <K extends keyof PortalProfile>(
+    key: K,
+    value: PortalProfile[K],
+  ) => {
+    setSaved(undefined);
+    setProfile((current) => ({ ...current, [key]: value }));
+  };
+  const save = async () => {
+    if (!scope) return;
+    setSaveError(undefined);
+    try {
+      await repo.speakers.updateProfile({
+        eventId: scope.eventId as never,
+        speakerId: scope.speakerId as never,
+        firstName: profile.firstName,
+        lastName: profile.lastName,
+        bio: profile.bio,
+        salutation: profile.salutation,
+        honorific: profile.honorific,
+        pronouns: profile.pronouns,
+        gender: profile.gender,
+        linkedinUrl: profile.linkedinUrl,
+        xUrl: profile.xUrl,
+        facebookUrl: profile.facebookUrl,
+        websiteUrl: profile.websiteUrl,
+      });
+      setSaved("Profile saved.");
+    } catch (error) {
+      if (backendUnavailable(error)) {
+        savePortalProfile(scope, profile);
+        setSaved(
+          "Profile saved locally until this backend supports speaker profiles.",
+        );
+      } else
+        setSaveError(
+          error instanceof Error
+            ? error.message
+            : "Could not save your profile.",
+        );
+    }
+  };
+  const uploadHeadshot = async (file: File | undefined) => {
+    if (!scope || !file) return;
+    if (!file.type.startsWith("image/")) {
+      setSaveError("Headshots must be image files.");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setSaveError("Headshots must be 10 MB or smaller.");
+      return;
+    }
+    setSaved(undefined);
+    setSaveError(undefined);
+    setUploadingHeadshot(true);
+    try {
+      const { uploadUrl } = await repo.speakers.requestHeadshotUpload({
+        eventId: scope.eventId as never,
+        speakerId: scope.speakerId as never,
+      });
+      const response = await fetch(uploadUrl, {
+        method: "POST",
+        headers: { "content-type": file.type },
+        body: file,
+      });
+      if (!response.ok) throw new Error("The headshot upload was rejected.");
+      const { storageId } = (await response.json()) as { storageId?: string };
+      if (!storageId)
+        throw new Error("The upload did not return a storage reference.");
+      await repo.speakers.saveHeadshot({
+        eventId: scope.eventId as never,
+        speakerId: scope.speakerId as never,
+        storageId,
+      });
+      const nextUrl = await repo.speakers.getHeadshotUrl({
+        eventId: scope.eventId as never,
+        speakerId: scope.speakerId as never,
+      });
+      setHeadshotUrl(nextUrl);
+      setSaved("Headshot uploaded.");
+    } catch (error) {
+      setSaveError(
+        error instanceof Error
+          ? error.message
+          : "Could not upload your headshot.",
+      );
+    } finally {
+      setUploadingHeadshot(false);
+    }
+  };
+  if (!scope) return <PortalAccessRequired />;
+  return (
+    <div className="space-y-4">
+      <ContentToolbar
+        ariaLabel="Profile actions"
+        primaryAction={
+          <Button
+            type="button"
+            variant="accent"
+            size="sm"
+            onClick={() => void save()}
+          >
+            Save
+          </Button>
+        }
+      />
+      {saved && (
+        <p role="status" className="rounded-md bg-muted px-4 py-3 text-sm">
+          {saved}
+        </p>
+      )}
+      {saveError && (
+        <p role="alert" className="text-sm text-destructive">
+          {saveError}
+        </p>
+      )}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section className={cardSurfaceClasses("default", "space-y-5 p-6")}>
+          <div>
+            <h2 className="text-base font-semibold">General</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Update your bio, links and headshot for this speaker profile.
+            </p>
+          </div>
+          <FormField label="Biography">
+            <RichTextEditor
+              value={profile.bio}
+              onChange={(value) => update("bio", value.slice(0, 5000))}
+              placeholder="Tell attendees about yourself…"
+            />
+            <p className="text-right text-xs text-muted-foreground">
+              {stripHtmlTags(profile.bio).length} / 5,000 characters
+            </p>
+          </FormField>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <FormField label="Salutation">
+              <Input
+                value={profile.salutation}
+                onChange={(event) => update("salutation", event.target.value)}
+              />
+            </FormField>
+            <FormField label="Honorific">
+              <Input
+                value={profile.honorific}
+                onChange={(event) => update("honorific", event.target.value)}
+              />
+            </FormField>
+            <FormField label="First name">
+              <Input
+                value={profile.firstName}
+                onChange={(event) => update("firstName", event.target.value)}
+              />
+            </FormField>
+            <FormField label="Last name">
+              <Input
+                value={profile.lastName}
+                onChange={(event) => update("lastName", event.target.value)}
+              />
+            </FormField>
+            <FormField label="Pronouns">
+              <Input
+                value={profile.pronouns}
+                onChange={(event) => update("pronouns", event.target.value)}
+              />
+            </FormField>
+            <FormField label="Gender">
+              <Input
+                value={profile.gender}
+                onChange={(event) => update("gender", event.target.value)}
+              />
+            </FormField>
+          </div>
+        </section>
+        <section className={cardSurfaceClasses("default", "space-y-5 p-6")}>
+          <div>
+            <h2 className="text-base font-semibold">My links</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Share the places attendees can learn more about you.
+            </p>
+          </div>
+          {(
+            [
+              ["LinkedIn URL", "linkedinUrl"],
+              ["X (Twitter) URL", "xUrl"],
+              ["Facebook URL", "facebookUrl"],
+              ["Website", "websiteUrl"],
+            ] as const
+          ).map(([label, key]) => (
+            <FormField key={key} label={label}>
+              <Input
+                type="url"
+                placeholder="https://"
+                value={profile[key]}
+                onChange={(event) => update(key, event.target.value)}
+              />
+            </FormField>
+          ))}
+          <div className="rounded-md bg-background p-4">
+            <div className="flex items-center gap-3">
+              {headshotUrl ? (
+                <img
+                  src={headshotUrl}
+                  alt={`${selectedSpeaker.name}'s headshot`}
+                  className="h-14 w-14 rounded-full object-cover"
+                />
+              ) : (
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted text-xs text-muted-foreground">
+                  {headshotUrl === undefined ? "Loading" : "No photo"}
+                </div>
+              )}
+              <div>
+                <p className="text-sm font-medium">Headshot</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  JPEG, PNG, WebP, or GIF. Up to 10 MB.
+                </p>
+              </div>
+            </div>
+            <Input
+              id="portal-headshot-upload"
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              className="sr-only"
+              disabled={uploadingHeadshot}
+              onChange={(event) => {
+                void uploadHeadshot(event.target.files?.[0]);
+                event.currentTarget.value = "";
+              }}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={uploadingHeadshot}
+              asChild
+            >
+              <label
+                htmlFor="portal-headshot-upload"
+                role="button"
+                className="mt-3 cursor-pointer"
+              >
+                {uploadingHeadshot ? "Uploading…" : "Upload headshot"}{" "}
+                <ImageUp />
+              </label>
+            </Button>
+          </div>
+        </section>
+      </div>
+      <section
+        className={cardSurfaceClasses(
+          "default",
+          "flex flex-wrap items-center gap-x-2 gap-y-1 p-6 text-sm",
+        )}
+      >
+        <span className="text-muted-foreground">
+          Uploading slides, travel details or other files?
+        </span>
+        <Link
+          to="/portal/files"
+          className="font-medium underline underline-offset-4"
+        >
+          Go to Files
+        </Link>
+      </section>
+    </div>
+  );
+}
 // Tasks live on Home and files live here. They used to share one page, which meant the
 // same interactive task list rendered in two places and a file library sat below a
 // checklist it had no relationship to.
-export function PortalFilesPage() { const { selectedSpeaker } = usePortalIdentity(); if (!selectedSpeaker) return <PortalAccessRequired />; return <SpeakerDocuments />; }
+export function PortalFilesPage() {
+  const { selectedSpeaker } = usePortalIdentity();
+  if (!selectedSpeaker) return <PortalAccessRequired />;
+  return <SpeakerDocuments />;
+}
 import { cardSurfaceClasses } from "@/components/ui/card";
 import { stripHtmlTags } from "@/lib/strip-html";

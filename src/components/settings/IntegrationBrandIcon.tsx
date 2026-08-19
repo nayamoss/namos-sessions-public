@@ -1,10 +1,5 @@
 import { Bot } from "lucide-react";
-import {
-  siAirtable,
-  siNotion,
-  siResend,
-  type SimpleIcon,
-} from "simple-icons";
+import { siAirtable, siNotion, siResend, type SimpleIcon } from "simple-icons";
 import { cn } from "@/lib/utils";
 
 export type IntegrationProvider =
@@ -42,7 +37,11 @@ const iconDefinitions: Partial<Record<IntegrationProvider, IconDefinition>> = {
 function SimpleBrandMark({ definition }: { definition: IconDefinition }) {
   const { icon } = definition;
   return (
-    <svg viewBox="0 0 24 24" className={cn("h-5 w-5", definition.iconClassName)} aria-hidden="true">
+    <svg
+      viewBox="0 0 24 24"
+      className={cn("h-5 w-5", definition.iconClassName)}
+      aria-hidden="true"
+    >
       <path d={icon.path} fill="currentColor" />
     </svg>
   );
@@ -91,9 +90,9 @@ export function IntegrationBrandIcon({
       ? "bg-[#fff1f3] dark:bg-[#4d1820]"
       : provider === "sanity"
         ? "bg-[#fff0ed] dark:bg-[#4a1610]"
-      : provider === "operations_agent"
-        ? "bg-[#e8f1ff] dark:bg-[#102b55]"
-        : definition?.surfaceClassName;
+        : provider === "operations_agent"
+          ? "bg-[#e8f1ff] dark:bg-[#102b55]"
+          : definition?.surfaceClassName;
 
   return (
     <span
@@ -111,7 +110,12 @@ export function IntegrationBrandIcon({
       ) : provider === "sanity" ? (
         <SanityMark />
       ) : provider === "operations_agent" ? (
-        <Bot className={cn("text-primary", size === "small" ? "h-4 w-4" : "h-5 w-5")} />
+        <Bot
+          className={cn(
+            "text-primary",
+            size === "small" ? "h-4 w-4" : "h-5 w-5",
+          )}
+        />
       ) : definition ? (
         <SimpleBrandMark definition={definition} />
       ) : null}
