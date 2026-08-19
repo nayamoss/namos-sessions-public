@@ -1,12 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import {
-  ChevronDown,
-  ChevronUp,
-  Download,
-  Plus,
-  Search,
-} from "lucide-react";
+import { ChevronDown, ChevronUp, Download, Plus, Search } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
@@ -184,8 +178,8 @@ function legacyAbstractFieldIds(
   fieldsById: Map<string, FieldDefinition>,
 ) {
   const ids =
-    form?.sections?.find((section) => section.key === "abstract")
-      ?.fieldIds ?? [];
+    form?.sections?.find((section) => section.key === "abstract")?.fieldIds ??
+    [];
   // Existing submissions predate abstractFieldId. Their form section is stable, and rich-text
   // fields are the intended abstract body regardless of the organizer's visible label.
   return ids.filter((id) => fieldsById.get(id)?.type === "wysiwyg");
@@ -239,8 +233,13 @@ export function createRows({
 
   return submissions.map((submission) => {
     const answers = submission.answers;
-    const storedAbstractFieldId = typeof answers?.abstractFieldId === "string" ? answers.abstractFieldId : undefined;
-    const abstractFieldIds = storedAbstractFieldId ? [storedAbstractFieldId] : legacyAbstractFieldIds(formsById.get(submission.formId), fieldsById);
+    const storedAbstractFieldId =
+      typeof answers?.abstractFieldId === "string"
+        ? answers.abstractFieldId
+        : undefined;
+    const abstractFieldIds = storedAbstractFieldId
+      ? [storedAbstractFieldId]
+      : legacyAbstractFieldIds(formsById.get(submission.formId), fieldsById);
     const scores = scoresBySubmission.get(submission.id) ?? [];
     const speakerId = submission.speakerId ?? submission.speakerIds[0];
     return {
@@ -554,7 +553,9 @@ export default function Abstracts() {
   const [sendingId, setSendingId] = useState<string>();
   const [preparingId, setPreparingId] = useState<string>();
   const [decisionPreview, setDecisionPreview] = useState<CommPreview>();
-  const [decisionResults, setDecisionResults] = useState<CommSendRecipientResult[]>([]);
+  const [decisionResults, setDecisionResults] = useState<
+    CommSendRecipientResult[]
+  >([]);
   const [taggingId, setTaggingId] = useState<string>();
   const [decisionFeedback, setDecisionFeedback] = useState<string>();
   const [updatingDecisionId, setUpdatingDecisionId] = useState<string>();
@@ -680,7 +681,9 @@ export default function Abstracts() {
           ? error.message
           : "Could not update the abstract status.",
       );
-    } finally { setUpdatingDecisionId(undefined); }
+    } finally {
+      setUpdatingDecisionId(undefined);
+    }
   };
   const updateTags = async (id: string, tagIds: TagId[]) => {
     if (!event || taggingId) return;
@@ -715,25 +718,83 @@ export default function Abstracts() {
     }
   };
   const prepareDecision = async (row: AbstractRow) => {
-    if (!event || (row.status !== "accepted" && row.status !== "declined")) return;
-    setPreparingId(row.id); setDecisionFeedback(undefined); setDecisionPreview(undefined); setDecisionResults([]);
-    const next = new URLSearchParams(searchParams); next.set("selected", row.id); setSearchParams(next);
-    try { setDecisionPreview(await repo.comms.previewDecision({ eventId: event.id, submissionId: row.id })); }
-    catch (cause) { setDecisionFeedback(cause instanceof Error ? `Could not prepare decision: ${cause.message}` : "Could not prepare the decision email."); }
-    finally { setPreparingId(undefined); }
-  };
-  const sendDecision = async (row: AbstractRow, recipientSpeakerIds?: string[]) => {
-    if (!event || !decisionPreview) return;
-    setSendingId(row.id); setDecisionFeedback(undefined);
+    if (!event || (row.status !== "accepted" && row.status !== "declined"))
+      return;
+    setPreparingId(row.id);
+    setDecisionFeedback(undefined);
+    setDecisionPreview(undefined);
+    setDecisionResults([]);
+    const next = new URLSearchParams(searchParams);
+    next.set("selected", row.id);
+    setSearchParams(next);
     try {
-      const outcome = await repo.comms.sendDecision({ eventId: event.id, submissionId: row.id, recipientSpeakerIds });
-      setDecisionResults((current) => recipientSpeakerIds?.length ? [...current.filter((result) => !recipientSpeakerIds.includes(result.speakerId ?? "")), ...outcome.results] : outcome.results);
-      if (outcome.sent) setRows(current => current.map(item => item.id === row.id ? { ...item, notified: true } : item));
-      if (outcome.status === "sent") { setDecisionFeedback(`Decision sent to ${outcome.sent} recipient${outcome.sent === 1 ? "" : "s"}.`); return; }
-      const firstProblem = outcome.results.find(result => result.error || result.reason);
-      setDecisionFeedback(`Decision delivery finished with ${outcome.failed} failed and ${outcome.skipped} skipped.${firstProblem ? ` ${firstProblem.error ?? firstProblem.reason}` : ""}`);
-    } catch (cause) { setDecisionFeedback(cause instanceof Error ? `Decision email failed: ${cause.message}` : "Decision email could not be sent."); }
-    finally { setSendingId(undefined); }
+      setDecisionPreview(
+        await repo.comms.previewDecision({
+          eventId: event.id,
+          submissionId: row.id,
+        }),
+      );
+    } catch (cause) {
+      setDecisionFeedback(
+        cause instanceof Error
+          ? `Could not prepare decision: ${cause.message}`
+          : "Could not prepare the decision email.",
+      );
+    } finally {
+      setPreparingId(undefined);
+    }
+  };
+  const sendDecision = async (
+    row: AbstractRow,
+    recipientSpeakerIds?: string[],
+  ) => {
+    if (!event || !decisionPreview) return;
+    setSendingId(row.id);
+    setDecisionFeedback(undefined);
+    try {
+      const outcome = await repo.comms.sendDecision({
+        eventId: event.id,
+        submissionId: row.id,
+        recipientSpeakerIds,
+      });
+      setDecisionResults((current) =>
+        recipientSpeakerIds?.length
+          ? [
+              ...current.filter(
+                (result) =>
+                  !recipientSpeakerIds.includes(result.speakerId ?? ""),
+              ),
+              ...outcome.results,
+            ]
+          : outcome.results,
+      );
+      if (outcome.sent)
+        setRows((current) =>
+          current.map((item) =>
+            item.id === row.id ? { ...item, notified: true } : item,
+          ),
+        );
+      if (outcome.status === "sent") {
+        setDecisionFeedback(
+          `Decision sent to ${outcome.sent} recipient${outcome.sent === 1 ? "" : "s"}.`,
+        );
+        return;
+      }
+      const firstProblem = outcome.results.find(
+        (result) => result.error || result.reason,
+      );
+      setDecisionFeedback(
+        `Decision delivery finished with ${outcome.failed} failed and ${outcome.skipped} skipped.${firstProblem ? ` ${firstProblem.error ?? firstProblem.reason}` : ""}`,
+      );
+    } catch (cause) {
+      setDecisionFeedback(
+        cause instanceof Error
+          ? `Decision email failed: ${cause.message}`
+          : "Decision email could not be sent.",
+      );
+    } finally {
+      setSendingId(undefined);
+    }
   };
   const openAddAbstract = () => {
     setAddError(undefined);
@@ -748,7 +809,9 @@ export default function Abstracts() {
   const createAbstract = async () => {
     if (!event) return;
     if (!draft.formId) {
-      setAddError("Create a call for papers first — submissions attach to a CFP form.");
+      setAddError(
+        "Create a call for papers first — submissions attach to a CFP form.",
+      );
       return;
     }
     if (!draft.title.trim()) {
@@ -798,16 +861,135 @@ export default function Abstracts() {
         : rows.filter((row) => row.status === value).length,
   }));
   const allColumns: DataGridColumn<AbstractRow>[] = [
-    { key: "status", width: "18rem", header: "Status", cell: row => <div className="flex items-center gap-2"><DecisionButtons status={row.status} pending={updatingDecisionId === row.id} onDecide={next => void updateStatus(row.id, next)} />{editableStatuses.includes(row.status) ? <Select value={row.status} onValueChange={value => void updateStatus(row.id, value as SubmissionStatus)}><SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger><SelectContent>{editableStatuses.map(option => <SelectItem key={option} value={option}>{statusLabels[option]}</SelectItem>)}</SelectContent></Select> : <span className="text-sm text-muted-foreground">{statusLabels[row.status]}</span>}</div> },
-    { key: "source", width: "10rem", header: "Source", cell: row => <span className="whitespace-nowrap text-muted-foreground">{row.source}</span> },
-    { key: "title", width: "20rem", header: "Title", cell: row => <span className="font-medium">{row.title}</span> },
-    { key: "description", width: "18rem", header: "Description", cell: row => <span className="line-clamp-2 min-w-64 text-muted-foreground">{row.description}</span> },
-    { key: "speaker", width: "10rem", header: "Speaker", cell: row => row.speaker },
-    { key: "track", width: "8rem", header: "Track", cell: row => <span className="text-muted-foreground">{row.track}</span> },
-    { key: "tags", width: "12rem", header: "Tags", cell: row => <TagsCell row={row} library={tagLibrary} saving={Boolean(taggingId)} onChange={tagIds => void updateTags(row.id, tagIds)} /> },
-    { key: "rating", width: "8rem", header: "Rating", cell: row => <StarRating value={row.rating} max={5} label="Aggregate rating" size="sm" /> },
-    { key: "notified", width: "7rem", header: "Notified", cell: row => row.notified ? "Yes" : "No" },
-    { key: "decision", width: "9rem", header: "Decision email", cell: row => row.status === "accepted" || row.status === "declined" ? <Button type="button" variant="outline" size="sm" disabled={preparingId === row.id} onClick={click => { click.stopPropagation(); void prepareDecision(row); }}>{preparingId === row.id ? "Preparing…" : "Send decision"}</Button> : <span className="text-muted-foreground">Decide first</span> },
+    {
+      key: "status",
+      width: "18rem",
+      header: "Status",
+      cell: (row) => (
+        <div className="flex items-center gap-2">
+          <DecisionButtons
+            status={row.status}
+            pending={updatingDecisionId === row.id}
+            onDecide={(next) => void updateStatus(row.id, next)}
+          />
+          {editableStatuses.includes(row.status) ? (
+            <Select
+              value={row.status}
+              onValueChange={(value) =>
+                void updateStatus(row.id, value as SubmissionStatus)
+              }
+            >
+              <SelectTrigger className="h-8 w-28">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {editableStatuses.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {statusLabels[option]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <span className="text-sm text-muted-foreground">
+              {statusLabels[row.status]}
+            </span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "source",
+      width: "10rem",
+      header: "Source",
+      cell: (row) => (
+        <span className="whitespace-nowrap text-muted-foreground">
+          {row.source}
+        </span>
+      ),
+    },
+    {
+      key: "title",
+      width: "20rem",
+      header: "Title",
+      cell: (row) => <span className="font-medium">{row.title}</span>,
+    },
+    {
+      key: "description",
+      width: "18rem",
+      header: "Description",
+      cell: (row) => (
+        <span className="line-clamp-2 min-w-64 text-muted-foreground">
+          {row.description}
+        </span>
+      ),
+    },
+    {
+      key: "speaker",
+      width: "10rem",
+      header: "Speaker",
+      cell: (row) => row.speaker,
+    },
+    {
+      key: "track",
+      width: "8rem",
+      header: "Track",
+      cell: (row) => <span className="text-muted-foreground">{row.track}</span>,
+    },
+    {
+      key: "tags",
+      width: "12rem",
+      header: "Tags",
+      cell: (row) => (
+        <TagsCell
+          row={row}
+          library={tagLibrary}
+          saving={Boolean(taggingId)}
+          onChange={(tagIds) => void updateTags(row.id, tagIds)}
+        />
+      ),
+    },
+    {
+      key: "rating",
+      width: "8rem",
+      header: "Rating",
+      cell: (row) => (
+        <StarRating
+          value={row.rating}
+          max={5}
+          label="Aggregate rating"
+          size="sm"
+        />
+      ),
+    },
+    {
+      key: "notified",
+      width: "7rem",
+      header: "Notified",
+      cell: (row) => (row.notified ? "Yes" : "No"),
+    },
+    {
+      key: "decision",
+      width: "9rem",
+      header: "Decision email",
+      cell: (row) =>
+        row.status === "accepted" || row.status === "declined" ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={preparingId === row.id}
+            onClick={(click) => {
+              click.stopPropagation();
+              void prepareDecision(row);
+            }}
+          >
+            {preparingId === row.id ? "Preparing…" : "Send decision"}
+          </Button>
+        ) : (
+          <span className="text-muted-foreground">Decide first</span>
+        ),
+    },
   ];
   const byColumnKey = new Map(allColumns.map((column) => [column.key, column]));
   const columns = columnPreferences.order
@@ -815,20 +997,283 @@ export default function Abstracts() {
     .map((key) => byColumnKey.get(key))
     .filter((column): column is DataGridColumn<AbstractRow> => Boolean(column));
 
-  const addDetail = <DetailPane title="Add submission" onClose={() => setAddOpen(false)}><p className="-mt-3 text-base text-muted-foreground">Create an organizer-owned row for this event’s review queue. No speaker is added automatically.</p><div className="space-y-5"><div className="space-y-2"><Label htmlFor="abstract-source">Source form</Label><Select value={draft.formId} onValueChange={formId => setDraft(current => ({ ...current, formId }))}><SelectTrigger id="abstract-source"><SelectValue placeholder="Choose a submission form" /></SelectTrigger><SelectContent>{forms.map(form => <SelectItem key={form.id} value={form.id}>{form.name}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label htmlFor="abstract-title">Title</Label><Input id="abstract-title" value={draft.title} onChange={change => setDraft(current => ({ ...current, title: change.target.value }))} placeholder="Session title" /></div><div className="space-y-2"><Label htmlFor="abstract-status">Status</Label><Select value={draft.status} onValueChange={status => setDraft(current => ({ ...current, status: status as SubmissionStatus }))}><SelectTrigger id="abstract-status"><SelectValue /></SelectTrigger><SelectContent>{(["draft", "pending", "accept_queue", "accepted", "maybe", "decline_queue", "declined", "withdrawn"] as SubmissionStatus[]).map(option => <SelectItem key={option} value={option}>{statusLabels[option]}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label htmlFor="abstract-description">Description</Label><Textarea id="abstract-description" value={draft.description} onChange={change => setDraft(current => ({ ...current, description: change.target.value }))} placeholder="What is this session about?" /></div>{addError && <p role="alert" className="text-sm text-destructive">{addError}</p>}<div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setAddOpen(false)} disabled={adding}>Cancel</Button><Button type="button" variant="outline" onClick={() => void createAbstract()} disabled={adding}>{adding ? "Adding…" : "Add submission"}</Button></div></div></DetailPane>;
-  const closeSelected = () => { const next = new URLSearchParams(searchParams); next.delete("selected"); setSearchParams(next); setDecisionPreview(undefined); setDecisionResults([]); };
-  const selectedDetail = selectedRow ? <DetailPane title={selectedRow.title} onClose={closeSelected}>
-    <div className="mb-5"><DecisionButtons status={selectedRow.status} pending={updatingDecisionId === selectedRow.id} size="md" onDecide={next => void updateStatus(selectedRow.id, next)} /></div><dl className="space-y-5"><div><dt className="text-sm text-muted-foreground">Status</dt><dd className="mt-1 text-base font-medium">{statusLabels[selectedRow.status]}</dd></div><div><dt className="text-sm text-muted-foreground">Speaker</dt><dd className="mt-1 text-base">{selectedRow.speaker}</dd></div><div><dt className="text-sm text-muted-foreground">Abstract</dt><dd className="mt-1"><ExpandableText>{selectedRow.description}</ExpandableText></dd></div><div><dt className="text-sm text-muted-foreground">Track</dt><dd className="mt-1 text-base">{selectedRow.track}</dd></div><div><dt className="text-sm text-muted-foreground">Tags</dt><dd className="mt-1 text-base">{selectedRow.tags.map(tag => tag.name).join(", ") || "—"}</dd></div></dl>
-    {decisionPreview && <section className="mt-6 space-y-4 rounded-lg bg-background p-4" aria-labelledby="decision-preview-heading">
-      <div><h3 id="decision-preview-heading" className="text-sm font-semibold">Review decision email</h3><p className="mt-1 text-xs text-muted-foreground">{decisionPreview.templateName ? `Using “${decisionPreview.templateName}”.` : "Using the built-in branded template."}</p></div>
-      <div className="space-y-1 text-sm"><p className="font-medium">{decisionPreview.subject}</p><p className="whitespace-pre-wrap text-muted-foreground">{decisionPreview.body}</p></div>
-      <div className="text-sm"><p className="font-medium">Recipients ({decisionPreview.recipients.length})</p><ul className="mt-1 space-y-2 text-muted-foreground">{decisionPreview.recipients.map(recipient => { const result = decisionResults.find(entry => entry.speakerId === recipient.speakerId); return <li key={recipient.speakerId}><span>{recipient.name} · {recipient.email || "No email on file"}</span>{result && <span className={result.status === "sent" ? "ml-2 text-success" : "ml-2 text-destructive"}>{result.status === "sent" ? "Sent" : result.error ?? result.reason ?? "Skipped"}</span>}</li>; })}</ul></div>
-      <p className="text-xs text-muted-foreground">{decisionPreview.calendarAttached ? `Calendar invite attached${decisionPreview.scheduleTime ? ` for ${decisionPreview.scheduleTime}` : ""}.` : "No calendar invite will be attached."}</p>
-      <div className="flex flex-wrap justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setDecisionPreview(undefined)} disabled={sendingId === selectedRow.id}>{decisionResults.length ? "Close" : "Cancel"}</Button>{decisionResults.some(result => result.status === "failed") && <Button type="button" variant="outline" onClick={() => void sendDecision(selectedRow, decisionResults.filter(result => result.status === "failed" && result.speakerId).map(result => result.speakerId!))} disabled={sendingId === selectedRow.id}>Retry failed</Button>}<Button type="button" onClick={() => void sendDecision(selectedRow)} disabled={sendingId === selectedRow.id || (decisionResults.length > 0 && decisionResults.every(result => result.status === "sent")) || !decisionPreview.recipients.some(recipient => isValidEmail(recipient.email))}>{sendingId === selectedRow.id ? "Sending…" : decisionResults.length ? "Send again" : `Send to ${decisionPreview.recipients.length}`}</Button></div>
-    </section>}
-  </DetailPane> : undefined;
+  const addDetail = (
+    <DetailPane title="Add submission" onClose={() => setAddOpen(false)}>
+      <p className="-mt-3 text-base text-muted-foreground">
+        Create an organizer-owned row for this event’s review queue. No speaker
+        is added automatically.
+      </p>
+      <div className="space-y-5">
+        <div className="space-y-2">
+          <Label htmlFor="abstract-source">Source form</Label>
+          <Select
+            value={draft.formId}
+            onValueChange={(formId) =>
+              setDraft((current) => ({ ...current, formId }))
+            }
+          >
+            <SelectTrigger id="abstract-source">
+              <SelectValue placeholder="Choose a submission form" />
+            </SelectTrigger>
+            <SelectContent>
+              {forms.map((form) => (
+                <SelectItem key={form.id} value={form.id}>
+                  {form.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="abstract-title">Title</Label>
+          <Input
+            id="abstract-title"
+            value={draft.title}
+            onChange={(change) =>
+              setDraft((current) => ({
+                ...current,
+                title: change.target.value,
+              }))
+            }
+            placeholder="Session title"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="abstract-status">Status</Label>
+          <Select
+            value={draft.status}
+            onValueChange={(status) =>
+              setDraft((current) => ({
+                ...current,
+                status: status as SubmissionStatus,
+              }))
+            }
+          >
+            <SelectTrigger id="abstract-status">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(
+                [
+                  "draft",
+                  "pending",
+                  "accept_queue",
+                  "accepted",
+                  "maybe",
+                  "decline_queue",
+                  "declined",
+                  "withdrawn",
+                ] as SubmissionStatus[]
+              ).map((option) => (
+                <SelectItem key={option} value={option}>
+                  {statusLabels[option]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="abstract-description">Description</Label>
+          <Textarea
+            id="abstract-description"
+            value={draft.description}
+            onChange={(change) =>
+              setDraft((current) => ({
+                ...current,
+                description: change.target.value,
+              }))
+            }
+            placeholder="What is this session about?"
+          />
+        </div>
+        {addError && (
+          <p role="alert" className="text-sm text-destructive">
+            {addError}
+          </p>
+        )}
+        <div className="flex justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setAddOpen(false)}
+            disabled={adding}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void createAbstract()}
+            disabled={adding}
+          >
+            {adding ? "Adding…" : "Add submission"}
+          </Button>
+        </div>
+      </div>
+    </DetailPane>
+  );
+  const closeSelected = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("selected");
+    setSearchParams(next);
+    setDecisionPreview(undefined);
+    setDecisionResults([]);
+  };
+  const selectedDetail = selectedRow ? (
+    <DetailPane title={selectedRow.title} onClose={closeSelected}>
+      <div className="mb-5">
+        <DecisionButtons
+          status={selectedRow.status}
+          pending={updatingDecisionId === selectedRow.id}
+          size="md"
+          onDecide={(next) => void updateStatus(selectedRow.id, next)}
+        />
+      </div>
+      <dl className="space-y-5">
+        <div>
+          <dt className="text-sm text-muted-foreground">Status</dt>
+          <dd className="mt-1 text-base font-medium">
+            {statusLabels[selectedRow.status]}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-sm text-muted-foreground">Speaker</dt>
+          <dd className="mt-1 text-base">{selectedRow.speaker}</dd>
+        </div>
+        <div>
+          <dt className="text-sm text-muted-foreground">Abstract</dt>
+          <dd className="mt-1">
+            <ExpandableText>{selectedRow.description}</ExpandableText>
+          </dd>
+        </div>
+        <div>
+          <dt className="text-sm text-muted-foreground">Track</dt>
+          <dd className="mt-1 text-base">{selectedRow.track}</dd>
+        </div>
+        <div>
+          <dt className="text-sm text-muted-foreground">Tags</dt>
+          <dd className="mt-1 text-base">
+            {selectedRow.tags.map((tag) => tag.name).join(", ") || "—"}
+          </dd>
+        </div>
+      </dl>
+      {decisionPreview && (
+        <section
+          className="mt-6 space-y-4 rounded-lg bg-background p-4"
+          aria-labelledby="decision-preview-heading"
+        >
+          <div>
+            <h3 id="decision-preview-heading" className="text-sm font-semibold">
+              Review decision email
+            </h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {decisionPreview.templateName
+                ? `Using “${decisionPreview.templateName}”.`
+                : "Using the built-in branded template."}
+            </p>
+          </div>
+          <div className="space-y-1 text-sm">
+            <p className="font-medium">{decisionPreview.subject}</p>
+            <p className="whitespace-pre-wrap text-muted-foreground">
+              {decisionPreview.body}
+            </p>
+          </div>
+          <div className="text-sm">
+            <p className="font-medium">
+              Recipients ({decisionPreview.recipients.length})
+            </p>
+            <ul className="mt-1 space-y-2 text-muted-foreground">
+              {decisionPreview.recipients.map((recipient) => {
+                const result = decisionResults.find(
+                  (entry) => entry.speakerId === recipient.speakerId,
+                );
+                return (
+                  <li key={recipient.speakerId}>
+                    <span>
+                      {recipient.name} · {recipient.email || "No email on file"}
+                    </span>
+                    {result && (
+                      <span
+                        className={
+                          result.status === "sent"
+                            ? "ml-2 text-success"
+                            : "ml-2 text-destructive"
+                        }
+                      >
+                        {result.status === "sent"
+                          ? "Sent"
+                          : (result.error ?? result.reason ?? "Skipped")}
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {decisionPreview.calendarAttached
+              ? `Calendar invite attached${decisionPreview.scheduleTime ? ` for ${decisionPreview.scheduleTime}` : ""}.`
+              : "No calendar invite will be attached."}
+          </p>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setDecisionPreview(undefined)}
+              disabled={sendingId === selectedRow.id}
+            >
+              {decisionResults.length ? "Close" : "Cancel"}
+            </Button>
+            {decisionResults.some((result) => result.status === "failed") && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() =>
+                  void sendDecision(
+                    selectedRow,
+                    decisionResults
+                      .filter(
+                        (result) =>
+                          result.status === "failed" && result.speakerId,
+                      )
+                      .map((result) => result.speakerId!),
+                  )
+                }
+                disabled={sendingId === selectedRow.id}
+              >
+                Retry failed
+              </Button>
+            )}
+            <Button
+              type="button"
+              onClick={() => void sendDecision(selectedRow)}
+              disabled={
+                sendingId === selectedRow.id ||
+                (decisionResults.length > 0 &&
+                  decisionResults.every(
+                    (result) => result.status === "sent",
+                  )) ||
+                !decisionPreview.recipients.some((recipient) =>
+                  isValidEmail(recipient.email),
+                )
+              }
+            >
+              {sendingId === selectedRow.id
+                ? "Sending…"
+                : decisionResults.length
+                  ? "Send again"
+                  : `Send to ${decisionPreview.recipients.length}`}
+            </Button>
+          </div>
+        </section>
+      )}
+    </DetailPane>
+  ) : undefined;
   return (
-    <AppLayout title="Submissions" detail={addOpen ? addDetail : selectedDetail}>
+    <AppLayout
+      title="Submissions"
+      detail={addOpen ? addDetail : selectedDetail}
+    >
       <div className="space-y-3">
         {loadError && (
           <p role="alert" className="text-sm text-destructive">
@@ -895,11 +1340,26 @@ export default function Abstracts() {
             <EmptyState
               compact
               icon={Search}
-              title={rows.length ? "No abstracts match this view" : "No abstracts yet"}
-              message={rows.length ? "Clear the filters to see every abstract." : "Add an abstract or publish a call for papers."}
+              title={
+                rows.length
+                  ? "No abstracts match this view"
+                  : "No abstracts yet"
+              }
+              message={
+                rows.length
+                  ? "Clear the filters to see every abstract."
+                  : "Add an abstract or publish a call for papers."
+              }
               action={
                 rows.length ? (
-                  <Button variant="outline" size="sm" onClick={() => { setQuery(""); setStatus("all"); }}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setQuery("");
+                      setStatus("all");
+                    }}
+                  >
                     Clear filters
                   </Button>
                 ) : (
