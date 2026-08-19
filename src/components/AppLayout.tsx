@@ -15,15 +15,12 @@ import {
   PanelLeft,
   Search,
   Settings2,
-  Tags,
   Users,
+  ContactRound,
   ShieldCheck,
-  KeyRound,
   Handshake,
   Bot,
-  Code2,
   BarChart3,
-  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -41,6 +38,7 @@ import { RepoContext } from "@/data/repo";
 import { SettingsModalProvider } from "@/components/settings/SettingsModalContext";
 import { useOptionalSettingsModal } from "@/components/settings/SettingsModalContext";
 import { settingsTabFromPath } from "@/components/settings/settings-nav";
+import { selectedBackend } from "@/data/backend";
 
 export type DashboardNavItem = {
   to: string;
@@ -74,6 +72,7 @@ const navSections: DashboardNavSection[] = [
     label: "Program",
     items: [
       { to: "/program/speakers", label: "Speakers", icon: Users },
+      { to: "/program/contacts", label: "Contacts", icon: ContactRound },
       { to: "/program/agenda", label: "Schedule", icon: CalendarDays },
       { to: "/program/sponsors", label: "Sponsors", icon: Handshake },
       { to: "/program/communications", label: "Communications", icon: Mail },
@@ -98,18 +97,12 @@ const navSections: DashboardNavSection[] = [
       { to: "/program/agent", label: "Operations Agent", icon: Bot },
     ],
   },
+  // Configuration is a focused settings hub, not another long sidebar section.
+  // The single destination opens the modal and its internal navigation owns the
+  // individual settings surfaces.
   {
-    label: "Settings",
-    items: [
-      { to: "/settings/event", label: "Event settings", icon: Settings2 },
-      { to: "/settings/team", label: "Event team", icon: Users },
-      { to: "/settings/library", label: "Library", icon: Tags },
-      { to: "/settings/task-templates", label: "Task templates", icon: ClipboardList },
-      { to: "/settings/integrations", label: "Integrations", icon: Mail },
-      { to: "/cms/embeds", label: "Embeds", icon: Code2 },
-      { to: "/settings/api", label: "API", icon: KeyRound },
-      { to: "/settings/activity", label: "Activity", icon: Activity },
-    ],
+    label: "Configure",
+    items: [{ to: "/settings/event", label: "Configure", icon: Settings2 }],
   },
 ];
 
@@ -496,7 +489,8 @@ export function AppLayout({
     return () => { active = false; };
   }, [current, repo]);
   const openCommandPalette = useCallback(() => setCommandPaletteOpen(true), []);
-  const visibleNavSections = current ? navSections.map(section => ({ ...section, items: section.items.filter(item => (item.to !== "/program/sponsors" || current.sponsorsEnabled) && (item.to !== "/program/agent" || agentAccess)).map(item => ({ ...item, to: `/events/${current.slug}${item.to}` })) })) : repo ? [] : navSections;
+  const managedCrm = selectedBackend() === "convex";
+  const visibleNavSections = current ? navSections.map(section => ({ ...section, items: section.items.filter(item => (item.to !== "/program/sponsors" || current.sponsorsEnabled) && (item.to !== "/program/agent" || agentAccess) && (item.to !== "/program/contacts" || managedCrm)).map(item => ({ ...item, to: `/events/${current.slug}${item.to}` })) })) : repo ? [] : navSections;
 
   return (
     <SettingsModalProvider>

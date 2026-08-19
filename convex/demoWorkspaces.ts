@@ -134,6 +134,17 @@ async function seedDemoFixture(ctx: MutationCtx, input: {
     createdAt: now,
     updatedAt: now,
   });
+  const secondSpeakerId = await ctx.db.insert("speakers", {
+    eventId,
+    email: `casey+${eventId}@demo.your-project.example`,
+    firstName: "Casey",
+    lastName: "Demo",
+    bio: "A second seeded speaker for the Schedule Studio room grid.",
+    confirmationStatus: "awaiting",
+    status: "active",
+    createdAt: now,
+    updatedAt: now,
+  });
   const taskTemplateId = await ctx.db.insert("task_templates", {
     eventId,
     name: "Demo speaker onboarding",
@@ -157,10 +168,11 @@ async function seedDemoFixture(ctx: MutationCtx, input: {
   await ctx.db.insert("onboarding_tasks", { eventId, targetType: "submission", submissionId: unscheduledId, speakerId, title: "Upload final slides", description: "Add the deck used for your accepted session.", source: "auto", status: "pending", dueDate: now - 24 * 60 * 60 * 1_000, createdAt: now, updatedAt: now });
   await ctx.db.insert("onboarding_tasks", { eventId, targetType: "submission", submissionId: unscheduledId, speakerId, title: "Confirm session details", source: "manual", status: "pending", dueDate: now + 3 * 24 * 60 * 60 * 1_000, createdAt: now, updatedAt: now });
   const roomId = await ctx.db.insert("rooms", { eventId, name: "Main Hall", capacity: 320, sortOrder: 0 });
+  const workshopRoomId = await ctx.db.insert("rooms", { eventId, name: "Workshop Studio", capacity: 80, sortOrder: 1 });
   const trackId = await ctx.db.insert("tracks", { eventId, name: "AI Operations", color: "#E56B5D", sortOrder: 0 });
   const startTime = now + 14 * 24 * 60 * 60 * 1_000 + 9 * 60 * 60 * 1_000;
   await ctx.db.insert("agenda_items", { eventId, submissionId: conflictAId, title: "Opening program briefing", roomId, trackId, startTime, endTime: startTime + 60 * 60 * 1_000, speakerIds: [speakerId], isPublished: false, createdAt: now, updatedAt: now });
-  await ctx.db.insert("agenda_items", { eventId, submissionId: conflictBId, title: "Operations clinic", roomId, trackId, startTime: startTime + 30 * 60 * 1_000, endTime: startTime + 90 * 60 * 1_000, speakerIds: [speakerId], isPublished: false, createdAt: now, updatedAt: now });
+  await ctx.db.insert("agenda_items", { eventId, submissionId: conflictBId, title: "Operations clinic", roomId: workshopRoomId, trackId, startTime: startTime + 30 * 60 * 1_000, endTime: startTime + 90 * 60 * 1_000, speakerIds: [secondSpeakerId], isPublished: false, createdAt: now, updatedAt: now });
   await ctx.db.insert("comms_templates", { eventId, name: "Reviewed acceptance", kind: "acceptance", subject: "You’re accepted to {{eventName}}", body: "Hi {{speakerName}}, your session {{sessionTitle}} is accepted.", createdAt: now, updatedAt: now });
   const embedFields = { agenda: { title: true, time: true, room: true, track: true, speakers: true }, session: { title: true, time: true, room: true, track: true, speakers: true }, speaker: { name: true, headshot: true, bio: true, links: true, sessions: true } };
   await ctx.db.insert("embeds", { eventId, name: "Speaker gallery", format: "styled_html", view: "speaker_gallery", enabled: false, theme: "system", primaryColor: "#E56B5D", dateFormat: "weekday_long", timeFormat: "12_hour", trackIds: [], fields: embedFields, createdAt: now, updatedAt: now });
@@ -196,6 +208,8 @@ export const provision = internalMutation({
       timezone: "America/New_York",
       startDate: args.now + 14 * 24 * 60 * 60 * 1_000,
       endDate: args.now + 16 * 24 * 60 * 60 * 1_000,
+      scheduleStartTime: "08:00",
+      scheduleEndTime: "18:00",
       description: "An isolated, resettable event for the five-minute Namos walkthrough.",
       contactEmail: args.organizerEmail,
       exhibitorsEnabled: false,

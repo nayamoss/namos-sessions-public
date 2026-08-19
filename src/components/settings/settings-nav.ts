@@ -7,6 +7,7 @@ import {
   Plug,
   Users,
   Building2,
+  Code2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -20,8 +21,8 @@ export type SettingsTabId =
   | "activity"
   | "organization";
 
-type SettingsNavItem = {
-  id: SettingsTabId;
+export type SettingsNavItem = {
+  id: SettingsTabId | "embeds";
   label: string;
   icon: LucideIcon;
 };
@@ -40,6 +41,7 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
       { id: "library", label: "Library", icon: Library },
       { id: "task-templates", label: "Task templates", icon: Blocks },
       { id: "integrations", label: "Integrations", icon: Plug },
+      { id: "embeds", label: "Embeds", icon: Code2 },
       { id: "api", label: "API keys", icon: KeyRound },
       { id: "activity", label: "Activity log", icon: Activity },
     ],

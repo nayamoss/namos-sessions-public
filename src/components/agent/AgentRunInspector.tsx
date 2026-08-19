@@ -1,9 +1,172 @@
 import { Link } from "react-router-dom";
-import type { AgentActionProposal, AgentProposalId, AgentRun } from "@/data/types";
+import type {
+  AgentActionProposal,
+  AgentProposalId,
+  AgentRun,
+} from "@/data/types";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
 
-export function AgentRunInspector({ run, proposals, onApprove, onReject, onCancel, onRetry, decisionPendingId, error, showRunMeta = true }: { run: AgentRun; proposals: AgentActionProposal[]; onApprove(proposal: AgentActionProposal): Promise<void>; onReject(id: AgentProposalId): Promise<void>; onCancel(): Promise<void>; onRetry(): Promise<void>; decisionPendingId?: AgentProposalId; error?: string; showRunMeta?: boolean }) {
-  const cancellable = ["queued", "running", "needs_input", "needs_approval"].includes(run.status);
-  return <div className="space-y-4">{showRunMeta && <div className="space-y-2"><StatusBadge tone={run.status === "completed" ? "success" : run.status === "failed" ? "destructive" : run.status.startsWith("needs") ? "warning" : "info"}>{run.status.replace(/_/g, " ")}</StatusBadge><p className="text-sm font-medium">{run.objective}</p><p className="text-xs text-muted-foreground">{run.model} · {run.stepCount}/{run.maxSteps} steps</p></div>}{proposals.map((proposal) => <section key={proposal.id} className="space-y-3 rounded-lg bg-background p-4"><div className="flex items-center justify-between gap-2"><h2 className="text-sm font-semibold">{proposal.kind === "create_tasks" ? "Proposed tasks" : "Proposed message drafts"}</h2><StatusBadge>{proposal.status}</StatusBadge></div><p className="text-sm text-muted-foreground">{proposal.summary}</p><div className="space-y-3">{proposal.kind === "create_tasks" ? proposal.tasks.map((task, index) => <div key={`${task.title}-${index}`} className="rounded-md bg-muted/60 p-3"><p className="text-sm font-medium">{task.title}</p><p className="text-xs text-muted-foreground">{task.targetType}{task.dueDate ? ` · Due ${new Date(task.dueDate).toLocaleDateString()}` : ""}</p><p className="mt-1 text-xs">{task.reason}</p></div>) : proposal.messages.map((message, index) => <div key={`${message.speakerId}-${index}`} className="rounded-md bg-muted/60 p-3"><p className="text-sm font-medium">{message.subject}</p><p className="text-xs text-muted-foreground">{message.kind.replace(/_/g, " ")}{message.calendarAttached ? " · Calendar invite" : ""}</p><p className="mt-1 line-clamp-3 whitespace-pre-wrap text-xs">{message.body}</p><p className="mt-2 text-xs text-muted-foreground">{message.reason}</p></div>)}</div>{proposal.status === "pending" && <div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" disabled={decisionPendingId === proposal.id} onClick={() => void onApprove(proposal)}>{decisionPendingId === proposal.id ? "Preparing…" : proposal.kind === "create_tasks" ? "Approve & create" : "Approve & prepare drafts"}</Button><Button variant="ghost" size="sm" disabled={decisionPendingId === proposal.id} onClick={() => void onReject(proposal.id)}>Reject</Button></div>}{proposal.status === "applied" && (proposal.kind === "create_tasks" ? <p className="text-sm">Created {proposal.createdTaskIds?.length ?? 0} tasks.</p> : <p className="text-sm">Prepared {proposal.createdDraftIds?.length ?? 0} drafts. Nothing was sent. {proposal.createdDraftIds?.[0] && <Link className="font-medium underline underline-offset-4" to={`../communications?selected=${proposal.createdDraftIds[0]}`}>Review drafts</Link>}</p>)}</section>)}{error && <p role="alert" className="text-sm text-destructive">{error}</p>}{run.status === "failed" && <Button variant="outline" size="sm" onClick={() => void onRetry()}>Retry run</Button>}{cancellable && <Button variant="outline" size="sm" onClick={() => void onCancel()}>Cancel run</Button>}</div>;
+export function AgentRunInspector({
+  run,
+  proposals,
+  onApprove,
+  onReject,
+  onCancel,
+  onRetry,
+  decisionPendingId,
+  error,
+  showRunMeta = true,
+}: {
+  run: AgentRun;
+  proposals: AgentActionProposal[];
+  onApprove(proposal: AgentActionProposal): Promise<void>;
+  onReject(id: AgentProposalId): Promise<void>;
+  onCancel(): Promise<void>;
+  onRetry(): Promise<void>;
+  decisionPendingId?: AgentProposalId;
+  error?: string;
+  showRunMeta?: boolean;
+}) {
+  const cancellable = [
+    "queued",
+    "running",
+    "needs_input",
+    "needs_approval",
+  ].includes(run.status);
+  return (
+    <div className="space-y-4">
+      {showRunMeta && (
+        <div className="space-y-2">
+          <StatusBadge
+            tone={
+              run.status === "completed"
+                ? "success"
+                : run.status === "failed"
+                  ? "destructive"
+                  : run.status.startsWith("needs")
+                    ? "warning"
+                    : "info"
+            }
+          >
+            {run.status.replace(/_/g, " ")}
+          </StatusBadge>
+          <p className="text-sm font-medium">{run.objective}</p>
+          <p className="text-xs text-muted-foreground">
+            {run.model} · {run.stepCount}/{run.maxSteps} steps
+          </p>
+        </div>
+      )}
+      {proposals.map((proposal) => (
+        <section
+          key={proposal.id}
+          className="space-y-3 rounded-lg bg-background p-4"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold">
+              {proposal.kind === "create_tasks"
+                ? "Proposed tasks"
+                : "Proposed message drafts"}
+            </h2>
+            <StatusBadge>{proposal.status}</StatusBadge>
+          </div>
+          <p className="text-sm text-muted-foreground">{proposal.summary}</p>
+          <div className="space-y-3">
+            {proposal.kind === "create_tasks"
+              ? proposal.tasks.map((task, index) => (
+                  <div
+                    key={`${task.title}-${index}`}
+                    className="rounded-md bg-muted/60 p-3"
+                  >
+                    <p className="text-sm font-medium">{task.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {task.targetType}
+                      {task.dueDate
+                        ? ` · Due ${new Date(task.dueDate).toLocaleDateString()}`
+                        : ""}
+                    </p>
+                    <p className="mt-1 text-xs">{task.reason}</p>
+                  </div>
+                ))
+              : proposal.messages.map((message, index) => (
+                  <div
+                    key={`${message.speakerId}-${index}`}
+                    className="rounded-md bg-muted/60 p-3"
+                  >
+                    <p className="text-sm font-medium">{message.subject}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {message.kind.replace(/_/g, " ")}
+                      {message.calendarAttached ? " · Calendar invite" : ""}
+                    </p>
+                    <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-xs">
+                      {message.body}
+                    </p>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {message.reason}
+                    </p>
+                  </div>
+                ))}
+          </div>
+          {proposal.status === "pending" && (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={decisionPendingId === proposal.id}
+                onClick={() => void onApprove(proposal)}
+              >
+                {decisionPendingId === proposal.id
+                  ? "Preparing…"
+                  : proposal.kind === "create_tasks"
+                    ? "Approve & create"
+                    : "Approve & prepare drafts"}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={decisionPendingId === proposal.id}
+                onClick={() => void onReject(proposal.id)}
+              >
+                Reject
+              </Button>
+            </div>
+          )}
+          {proposal.status === "applied" &&
+            (proposal.kind === "create_tasks" ? (
+              <p className="text-sm">
+                Created {proposal.createdTaskIds?.length ?? 0} tasks.
+              </p>
+            ) : (
+              <p className="text-sm">
+                Prepared {proposal.createdDraftIds?.length ?? 0} drafts. Nothing
+                was sent.{" "}
+                {proposal.createdDraftIds?.[0] && (
+                  <Link
+                    className="font-medium underline underline-offset-4"
+                    to={`../communications?selected=${proposal.createdDraftIds[0]}`}
+                  >
+                    Review drafts
+                  </Link>
+                )}
+              </p>
+            ))}
+        </section>
+      ))}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+      {run.status === "failed" && (
+        <Button variant="outline" size="sm" onClick={() => void onRetry()}>
+          Retry run
+        </Button>
+      )}
+      {cancellable && (
+        <Button variant="outline" size="sm" onClick={() => void onCancel()}>
+          Cancel run
+        </Button>
+      )}
+    </div>
+  );
 }

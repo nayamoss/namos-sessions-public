@@ -9,7 +9,7 @@ describe("event analytics summary", () => {
         { id: "accepted-1", status: "accepted" }, { id: "accepted-2", status: "accepted" },
         { id: "declined-1", status: "declined" }, { id: "review-1", status: "maybe" }, { id: "pending-1", status: "pending" },
       ],
-      assignments: [{ id: "assignment-1" }, { id: "assignment-2" }],
+      assignments: [{ id: "assignment-1", submissionId: "review-1", reviewerUserId: "reviewer-a" }, { id: "assignment-2", submissionId: "accepted-1", reviewerUserId: "reviewer-a" }],
       evaluations: [{ assignmentId: "assignment-1" }, { assignmentId: "assignment-1" }, {}],
       speakers: [
         { confirmationStatus: "confirmed", bio: "Complete", headshotStorageKey: "storage-key" },
@@ -18,15 +18,17 @@ describe("event analytics summary", () => {
       agenda: [{ submissionId: "accepted-1", isPublished: true }, { submissionId: "declined-1", isPublished: false }],
       communications: [{ status: "sent" }, { status: "failed" }, { status: "queued" }],
       tasks: [{ status: "completed" }, { status: "pending", dueDate: now - 1 }, { status: "in_progress", dueDate: now + 1 }],
+      crmContacts: [{ stage: "prospect" }, { stage: "confirmed" }, { stage: "confirmed" }],
     }, now);
     expect(summary).toMatchObject({
       version: 1,
-      submissions: { total: 5, accepted: 2, declined: 1, inReview: 1, acceptanceRate: 66.7 },
-      reviews: { assigned: 2, completed: 1, completionRate: 50 },
+      submissions: { total: 5, accepted: 2, declined: 1, inReview: 1, undecided: 2, acceptanceRate: 66.7 },
+      reviews: { assigned: 2, completed: 1, unassigned: 1, completionRate: 50, workload: { reviewers: 1, min: 2, max: 2, average: 2, light: 1, balanced: 0, heavy: 0 } },
       speakers: { total: 2, confirmed: 1, profileComplete: 1 },
       agenda: { acceptedSessions: 2, scheduledAccepted: 1, scheduleRate: 50 },
       communications: { total: 3, sent: 1, failed: 1 },
       tasks: { total: 3, completed: 1, overdue: 1, completionRate: 33.3 },
+      crm: { total: 3, prospect: 1, confirmed: 2 },
       history: { available: false, daily: [] },
     });
     expect(JSON.stringify(summary)).not.toContain("accepted-1");
@@ -34,10 +36,12 @@ describe("event analytics summary", () => {
   });
 
   it("returns stable zero rates for an empty event", () => {
-    const summary = buildEventAnalyticsSummary({ submissions: [], evaluations: [], assignments: [], speakers: [], agenda: [], communications: [], tasks: [] }, 1);
+    const summary = buildEventAnalyticsSummary({ submissions: [], evaluations: [], assignments: [], speakers: [], agenda: [], communications: [], tasks: [], crmContacts: [] }, 1);
     expect(summary.submissions.acceptanceRate).toBe(0);
     expect(summary.reviews.completionRate).toBe(0);
     expect(summary.agenda.scheduleRate).toBe(0);
     expect(summary.tasks.completionRate).toBe(0);
+    expect(summary.reviews.workload.average).toBe(0);
+    expect(summary.crm.total).toBe(0);
   });
 });

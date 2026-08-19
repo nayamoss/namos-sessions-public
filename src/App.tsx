@@ -52,6 +52,7 @@ const CommTemplateEditor = lazy(
   () => import("@/pages/program/CommTemplateEditor"),
 );
 const Speakers = lazy(() => import("@/pages/program/Speakers"));
+const Contacts = lazy(() => import("@/pages/program/Contacts"));
 const Sponsors = lazy(() => import("@/pages/program/Sponsors"));
 const DashboardHome = lazy(() => import("@/pages/dashboard/DashboardHome"));
 const EventAnalytics = lazy(() => import("@/pages/dashboard/EventAnalytics"));
@@ -429,6 +430,8 @@ export default function App() {
                     />
                     <Route path="program/abstracts" element={<Abstracts />} />
                     <Route path="program/speakers" element={<Speakers />} />
+                    <Route path="program/speakers/:speakerId" element={<Speakers />} />
+                    <Route path="program/contacts" element={<Contacts />} />
                     <Route path="program/sponsors" element={<Sponsors />} />
                     <Route path="program/evaluation" element={<Evaluation />} />
                     <Route path="program/agenda" element={<Agenda />} />

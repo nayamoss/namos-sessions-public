@@ -76,3 +76,22 @@ export const consolidatedDecisionContext = internalQuery({
     return { speaker, event, submissions: decided, agenda, rooms, template };
   },
 });
+
+// Recipient resolution stays in Convex: callers can supply opaque contact IDs in
+// navigation state, but the browser never receives the resolved names or emails.
+export const crmCampaignRecipients = internalQuery({
+  args: { eventId: v.id("events"), contactIds: v.array(v.id("crm_contacts")) },
+  handler: async (ctx, args) => {
+    const recipients = await Promise.all(args.contactIds.map(async (contactId) => {
+      const membership = await ctx.db
+        .query("crm_event_contacts")
+        .withIndex("by_event_contact", (q) => q.eq("eventId", args.eventId).eq("contactId", contactId))
+        .first();
+      if (!membership) return null;
+      const contact = await ctx.db.get(contactId);
+      if (!contact || contact.stage === "archived" || !contact.email.trim()) return null;
+      return { contactId: contact._id, email: contact.email.trim() };
+    }));
+    return recipients.filter((recipient): recipient is NonNullable<typeof recipient> => Boolean(recipient));
+  },
+});

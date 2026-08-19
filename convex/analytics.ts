@@ -7,7 +7,7 @@ export const summary = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, { eventId }) => {
     await assertEventOrganizerAccess(ctx, eventId);
-    const [submissions, evaluations, assignments, speakers, agenda, communications, tasks] =
+    const [submissions, evaluations, assignments, speakers, agenda, communications, tasks, crmMemberships] =
       await Promise.all([
         ctx.db.query("submissions").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
         ctx.db.query("evaluations").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
@@ -16,16 +16,19 @@ export const summary = query({
         ctx.db.query("agenda_items").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
         ctx.db.query("comms_log").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
         ctx.db.query("onboarding_tasks").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
+        ctx.db.query("crm_event_contacts").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
       ]);
+    const crmContacts = (await Promise.all(crmMemberships.map((membership) => ctx.db.get(membership.contactId)))).flatMap((contact) => contact ? [{ stage: contact.stage }] : []);
 
     return buildEventAnalyticsSummary({
       submissions: submissions.map((row) => ({ id: row._id, status: row.status })),
       evaluations: evaluations.map((row) => ({ assignmentId: row.assignmentId })),
-      assignments: assignments.map((row) => ({ id: row._id })),
+      assignments: assignments.map((row) => ({ id: row._id, submissionId: row.submissionId, reviewerUserId: row.reviewerUserId })),
       speakers,
       agenda,
       communications,
       tasks,
+      crmContacts,
     });
   },
 });

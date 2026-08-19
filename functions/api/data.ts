@@ -132,6 +132,9 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
         airtableEventRows(env, "Onboarding Tasks", input.eventId),
       ]);
       return json(200, buildEventAnalyticsSummary({
+        // The Airtable-backed endpoint has no CRM contacts table wired up yet;
+        // report zero CRM rows rather than fabricating data.
+        crmContacts: [],
         submissions: submissions.map((row) => ({ id: row.id, status: String(row.status || "pending") as never })),
         evaluations: evaluations.map((row) => ({ assignmentId: typeof row.assignmentId === "string" ? row.assignmentId : undefined })),
         assignments: assignments.map((row) => ({ id: row.id })),

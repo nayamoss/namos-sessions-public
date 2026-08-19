@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { SETTINGS_NAV_GROUPS, type SettingsTabId } from "./settings-nav";
 
-export function SettingsSidebarNav({ activeTab, onTabChange }: { activeTab: SettingsTabId; onTabChange: (tab: SettingsTabId) => void }) {
+export function SettingsSidebarNav({ activeTab, onTabChange, onOpenEmbeds }: { activeTab: SettingsTabId; onTabChange: (tab: SettingsTabId) => void; onOpenEmbeds: () => void }) {
   return (
     <nav aria-label="Settings" className="space-y-6 p-4">
       {SETTINGS_NAV_GROUPS.map((group) => (
@@ -13,7 +13,7 @@ export function SettingsSidebarNav({ activeTab, onTabChange }: { activeTab: Sett
               key={item.id}
               type="button"
               variant="ghost"
-              onClick={() => onTabChange(item.id)}
+              onClick={() => item.id === "embeds" ? onOpenEmbeds() : onTabChange(item.id)}
               className={cn(
                 "flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition-colors",
                 activeTab === item.id ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",

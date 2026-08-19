@@ -9,7 +9,12 @@ import {
   Trash2,
   UserRoundCheck,
 } from "lucide-react";
-import { Link, useSearchParams } from "react-router-dom";
+import {
+  Link,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
@@ -32,6 +37,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -50,6 +56,7 @@ import type {
   SpeakerId,
   SpeakerNote,
   Submission,
+  TaskTemplate,
   TaskId,
 } from "@/data/types";
 import {
@@ -75,6 +82,58 @@ const taskStatusLabels: Record<OnboardingTask["status"], string> = {
   in_progress: "In progress",
   completed: "Completed",
 };
+
+const speakerStarterTaskTemplates = [
+  {
+    name: "Standard Speaker Onboarding",
+    titles: [
+      "Upload headshot",
+      "Confirm bio",
+      "Upload slides",
+      "Sign speaker agreement",
+    ],
+  },
+  {
+    name: "Keynote Speaker",
+    titles: [
+      "Confirm keynote title",
+      "Upload headshot",
+      "Share AV requirements",
+      "Upload slides",
+    ],
+  },
+  {
+    name: "Workshop Facilitator",
+    titles: [
+      "Confirm workshop materials",
+      "Share room setup",
+      "Upload slides",
+      "Sign speaker agreement",
+    ],
+  },
+  {
+    name: "Panelist",
+    titles: ["Confirm panel topic", "Confirm bio", "Share discussion prompts"],
+  },
+  {
+    name: "Virtual/Remote Speaker",
+    titles: [
+      "Run technical check",
+      "Confirm time zone",
+      "Upload slides",
+      "Share backup connection",
+    ],
+  },
+  {
+    name: "Sponsor-Nominated Speaker",
+    titles: [
+      "Confirm sponsor details",
+      "Confirm bio",
+      "Upload headshot",
+      "Sign speaker agreement",
+    ],
+  },
+] as const;
 
 type SpeakerColumnKey =
   | "firstName"
@@ -283,6 +342,9 @@ export function SpeakerDetail({
   onConfirmationSaved,
   onTaskCreated,
   onTaskStatusChanged,
+  onTasksChanged,
+  onTaskTemplatesChanged,
+  taskTemplates = [],
   comms = [],
 }: {
   row: SpeakerOperationsRow;
@@ -294,6 +356,9 @@ export function SpeakerDetail({
     taskId: string,
     status: OnboardingTask["status"],
   ) => void;
+  onTasksChanged?: () => Promise<void>;
+  onTaskTemplatesChanged?: () => Promise<void>;
+  taskTemplates?: TaskTemplate[];
   comms?: Comm[];
 }) {
   const repo = useRepo();
@@ -306,6 +371,12 @@ export function SpeakerDetail({
   const [taskTitle, setTaskTitle] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [creatingTask, setCreatingTask] = useState(false);
+  const [templateId, setTemplateId] = useState(
+    event.defaultOnboardingTemplateId ?? taskTemplates[0]?.id ?? "",
+  );
+  const [applyingTemplate, setApplyingTemplate] = useState(false);
+  const [creatingStarterTemplates, setCreatingStarterTemplates] =
+    useState(false);
   const [message, setMessage] = useState<{
     tone: "status" | "error";
     text: string;
@@ -318,6 +389,9 @@ export function SpeakerDetail({
   const [notes, setNotes] = useState<SpeakerNote[]>();
   const [noteBody, setNoteBody] = useState("");
   const [savingNote, setSavingNote] = useState(false);
+  const [activeTab, setActiveTab] = useState<"overview" | "notes" | "tasks">(
+    "overview",
+  );
   const currentSpeakerId = useRef(row.id);
 
   useEffect(() => {
@@ -332,7 +406,19 @@ export function SpeakerDetail({
     setConsolidatedPreview(undefined);
     setNotes(undefined);
     setNoteBody("");
+    setActiveTab("overview");
   }, [row.id, row.confirmationStatus]);
+
+  useEffect(() => {
+    if (
+      templateId &&
+      taskTemplates.some((template) => template.id === templateId)
+    )
+      return;
+    setTemplateId(
+      event.defaultOnboardingTemplateId ?? taskTemplates[0]?.id ?? "",
+    );
+  }, [event.defaultOnboardingTemplateId, taskTemplates, templateId]);
 
   useEffect(() => {
     let current = true;
@@ -530,6 +616,102 @@ export function SpeakerDetail({
     }
   };
 
+  const applyTaskTemplate = async () => {
+    if (!templateId) return;
+    setApplyingTemplate(true);
+    setMessage(undefined);
+    try {
+      const template = taskTemplates.find((item) => item.id === templateId);
+      if (!template) throw new Error("Choose an available task template.");
+      const existingTitles = new Set(row.tasks.map((task) => task.title));
+      const applicable = template.items.filter(
+        (item) => item.targetType !== "sponsor",
+      );
+      const pending = applicable.filter(
+        (item) => !existingTitles.has(item.title),
+      );
+      const now = Date.now();
+      await Promise.all(
+        pending.map((item) =>
+          repo.tasks.create({
+            eventId: event.id,
+            speakerId: row.speaker.id,
+            title: item.title,
+            targetType: item.targetType,
+            linkedFormId: item.linkedFormId,
+            dueDate:
+              item.dueDateOffsetDays === undefined
+                ? undefined
+                : now + item.dueDateOffsetDays * 86_400_000,
+          }),
+        ),
+      );
+      await onTasksChanged?.();
+      setMessage({
+        tone: "status",
+        text: pending.length
+          ? `Assigned ${pending.length} task${pending.length === 1 ? "" : "s"} from the template.${applicable.length !== pending.length ? ` ${applicable.length - pending.length} existing task${applicable.length - pending.length === 1 ? " was" : "s were"} skipped.` : ""}`
+          : "This template is already assigned to the speaker.",
+      });
+    } catch (error) {
+      setMessage({
+        tone: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : "Could not assign this task template.",
+      });
+    } finally {
+      setApplyingTemplate(false);
+    }
+  };
+
+  const createStarterTemplates = async () => {
+    setCreatingStarterTemplates(true);
+    setMessage(undefined);
+    try {
+      const existing = await repo.taskTemplates.list({ eventId: event.id });
+      const existingNames = new Set(existing.map((template) => template.name));
+      const missing = speakerStarterTaskTemplates.filter(
+        (template) => !existingNames.has(template.name),
+      );
+      const createdIds = await Promise.all(
+        missing.map((template) =>
+          repo.taskTemplates.create({
+            eventId: event.id,
+            name: template.name,
+            items: template.titles.map((title) => ({
+              title,
+              targetType: "submission" as const,
+            })),
+          }),
+        ),
+      );
+      if (!event.defaultOnboardingTemplateId && createdIds[0])
+        await repo.taskTemplates.setDefault({
+          eventId: event.id,
+          templateId: createdIds[0],
+        });
+      await onTaskTemplatesChanged?.();
+      setMessage({
+        tone: "status",
+        text: missing.length
+          ? `Created ${missing.length} starter task templates.`
+          : "Starter task templates are already available.",
+      });
+    } catch (error) {
+      setMessage({
+        tone: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : "Could not create starter task templates.",
+      });
+    } finally {
+      setCreatingStarterTemplates(false);
+    }
+  };
+
   const prepareReminder = async () => {
     setPreparingReminder(true);
     setMessage(undefined);
@@ -684,462 +866,653 @@ export function SpeakerDetail({
   };
 
   return (
-    <DetailPane title={row.name} onClose={onClose}>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className="-mt-3 w-fit lg:hidden"
-        onClick={onClose}
+    <div>
+      <Tabs
+        value={activeTab}
+        className="space-y-4"
+        onValueChange={(value) =>
+          setActiveTab(value as "overview" | "notes" | "tasks")
+        }
       >
-        <ArrowLeft className="h-4 w-4" /> Back to speakers
-      </Button>
-
-      <section className="space-y-2" aria-labelledby="speaker-contact-heading">
-        <h3 id="speaker-contact-heading" className="text-sm font-semibold">
-          Contact
-        </h3>
-        <p className="text-sm text-muted-foreground">
-          {row.email || "No email on file"}
-        </p>
-        {row.lastContactAt && (
-          <p className="text-xs text-muted-foreground">
-            Last contacted {readableDate(row.lastContactAt)}
-          </p>
-        )}
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={preparingReminder || sendingReminder || !row.email}
-          onClick={() => void prepareReminder()}
-        >
-          {preparingReminder ? "Preparing…" : "Send reminder"}
-        </Button>
-        {reminderPreview && (
-          <div className="space-y-3 rounded-lg bg-background p-3">
-            <div>
-              <p className="text-sm font-medium">Review reminder</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {reminderPreview.templateName
-                  ? `Using “${reminderPreview.templateName}”.`
-                  : "Using the built-in branded template."}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm font-medium">{reminderPreview.subject}</p>
-              <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">
-                {reminderPreview.body}
-              </p>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              To {reminderPreview.recipients[0]?.name} ·{" "}
-              {reminderPreview.recipients[0]?.email || "No email on file"}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {reminderPreview.calendarAttached
-                ? `Calendar invite attached${reminderPreview.scheduleTime ? ` for ${reminderPreview.scheduleTime}` : ""}.`
-                : "No scheduled session is available, so no calendar invite will be attached."}
-            </p>
-            <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setReminderPreview(undefined)}
-                disabled={sendingReminder}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => void sendReminder()}
-                disabled={
-                  sendingReminder || !reminderPreview.recipients[0]?.email
-                }
-              >
-                {sendingReminder ? "Sending…" : "Confirm send"}
-              </Button>
-            </div>
-          </div>
-        )}
-      </section>
-
-      <section
-        className="space-y-3"
-        aria-labelledby="speaker-confirmation-heading"
-      >
-        <div>
-          <h3
-            id="speaker-confirmation-heading"
-            className="text-sm font-semibold"
-          >
-            Confirmation
-          </h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Record the speaker’s explicit response. Email delivery does not
-            change this status.
-          </p>
-        </div>
-        <Select
-          value={confirmation}
-          onValueChange={(value) =>
-            setConfirmation(value as SpeakerConfirmationStatus)
-          }
-          disabled={savingConfirmation}
-        >
-          <SelectTrigger aria-label="Confirmation status">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="awaiting">Awaiting response</SelectItem>
-            <SelectItem value="confirmed">Confirmed</SelectItem>
-            <SelectItem value="declined">Declined</SelectItem>
-          </SelectContent>
-        </Select>
-        <Button
-          type="button"
-          size="sm"
-          onClick={() => void saveConfirmation()}
-          disabled={
-            savingConfirmation || confirmation === row.confirmationStatus
-          }
-        >
-          {savingConfirmation ? "Saving…" : "Save confirmation"}
-        </Button>
-      </section>
-
-      <section className="space-y-3" aria-labelledby="speaker-sessions-heading">
-        <h3 id="speaker-sessions-heading" className="text-sm font-semibold">
-          Accepted sessions
-        </h3>
-        <ul className="space-y-2">
-          {row.submissions.map((submission) => (
-            <li key={submission.id}>
-              <Link
-                className="text-sm font-medium hover:underline"
-                to={
-                  event.slug
-                    ? `/events/${event.slug}/program/abstracts?selected=${encodeURIComponent(submission.id)}`
-                    : `/program/abstracts?selected=${encodeURIComponent(submission.id)}`
-                }
-              >
-                {submission.title}
-              </Link>
-            </li>
-          ))}
-        </ul>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => void prepareConsolidated()}
-          disabled={!row.email || sendingConsolidated}
-        >
-          Prepare combined decisions
-        </Button>
-        {consolidatedPreview && (
-          <div className="space-y-3 rounded-lg bg-background p-3">
-            <div>
-              <p className="text-sm font-medium">
-                Review combined decision email
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {consolidatedPreview.templateName
-                  ? `Using “${consolidatedPreview.templateName}”.`
-                  : "Using the built-in branded template."}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm font-medium">
-                {consolidatedPreview.subject}
-              </p>
-              <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">
-                {consolidatedPreview.body}
-              </p>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {consolidatedPreview.attachmentCount
-                ? `${consolidatedPreview.attachmentCount} calendar invite${consolidatedPreview.attachmentCount === 1 ? "" : "s"} attached for accepted sessions.`
-                : "No calendar invites will be attached."}
-            </p>
-            <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setConsolidatedPreview(undefined)}
-                disabled={sendingConsolidated}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => void sendConsolidated()}
-                disabled={sendingConsolidated}
-              >
-                {sendingConsolidated ? "Sending…" : "Confirm send"}
-              </Button>
-            </div>
-          </div>
-        )}
-      </section>
-
-      <section className="space-y-3" aria-labelledby="speaker-profile-heading">
-        <div>
-          <h3 id="speaker-profile-heading" className="text-sm font-semibold">
-            Profile readiness
-          </h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Speakers maintain these fields in their portal.
-          </p>
-        </div>
-        <ul className="space-y-2 text-sm">
-          <li className="flex items-center gap-2">
-            <Check
-              className={
-                row.speaker.bio?.trim()
-                  ? "h-4 w-4 text-success"
-                  : "h-4 w-4 text-muted-foreground"
-              }
-            />{" "}
-            Biography {row.speaker.bio?.trim() ? "received" : "missing"}
-          </li>
-          <li className="flex items-center gap-2">
-            <Check
-              className={
-                row.speaker.headshotStorageKey
-                  ? "h-4 w-4 text-success"
-                  : "h-4 w-4 text-muted-foreground"
-              }
-            />{" "}
-            Headshot {row.speaker.headshotStorageKey ? "received" : "missing"}
-          </li>
-        </ul>
-      </section>
-
-      <section className="space-y-3" aria-labelledby="speaker-tasks-heading">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h3 id="speaker-tasks-heading" className="text-sm font-semibold">
-              Onboarding tasks
-            </h3>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {row.openTaskCount} open · {row.overdueTaskCount} overdue
-            </p>
-          </div>
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             size="sm"
-            onClick={() => setAddOpen((open) => !open)}
-            aria-expanded={addOpen}
+            className="h-11 w-fit shrink-0 px-2"
+            onClick={onClose}
           >
-            Add task
+            <ArrowLeft className="h-4 w-4" /> Back to speakers
           </Button>
+          <div
+            aria-hidden="true"
+            className="hidden h-6 w-px shrink-0 bg-border sm:block"
+          />
+          <TabsList
+            aria-label="Speaker detail sections"
+            className="inline-flex w-fit max-w-full gap-1 rounded-md border-0 bg-muted p-1"
+          >
+            <TabsTrigger
+              value="overview"
+              className="group min-h-[44px] min-w-24 gap-2 rounded-md border-0 px-5 py-2.5 text-sm font-semibold text-muted-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+            >
+              Overview
+            </TabsTrigger>
+            <TabsTrigger
+              value="notes"
+              className="group min-h-[44px] min-w-24 gap-2 rounded-md border-0 px-5 py-2.5 text-sm font-semibold text-muted-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+            >
+              Notes
+              <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-foreground/10 px-1.5 py-0.5 text-xs tabular-nums group-data-[state=active]:bg-white/20">
+                {notes?.length ?? 0}
+              </span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="tasks"
+              className="group min-h-[44px] min-w-24 gap-2 rounded-md border-0 px-5 py-2.5 text-sm font-semibold text-muted-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+            >
+              Tasks
+              <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-foreground/10 px-1.5 py-0.5 text-xs tabular-nums group-data-[state=active]:bg-white/20">
+                {row.openTaskCount}
+              </span>
+            </TabsTrigger>
+          </TabsList>
         </div>
 
-        {addOpen && (
-          <form
-            className="space-y-3 rounded-lg bg-background p-3"
-            onSubmit={(event) => void createTask(event)}
+        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_24rem]">
+          <section
+            aria-label={
+              activeTab === "tasks" ? "Onboarding tasks" : "Speaker overview"
+            }
+            role="tabpanel"
+            className={
+              activeTab === "notes" ? "hidden" : "order-1 space-y-6 p-5"
+            }
           >
-            <div className="space-y-1.5">
-              <Label htmlFor={`task-title-${row.id}`}>Task title</Label>
-              <Input
-                id={`task-title-${row.id}`}
-                value={taskTitle}
-                onChange={(event) => setTaskTitle(event.target.value)}
-                placeholder="e.g. Upload final slides"
-                disabled={creatingTask}
-                autoFocus
-              />
+            <div className={activeTab === "overview" ? "" : "hidden"}>
+              <h2 className="text-base font-semibold">Speaker details</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Current status and next steps.
+              </p>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor={`task-due-${row.id}`}>
-                Due date{" "}
-                <span className="text-muted-foreground">(optional)</span>
-              </Label>
-              <Input
-                id={`task-due-${row.id}`}
-                type="date"
-                value={dueDate}
-                onChange={(event) => setDueDate(event.target.value)}
-                disabled={creatingTask}
-              />
-            </div>
-            <div className="flex justify-end gap-2">
+            <section
+              className={activeTab === "overview" ? "space-y-3" : "hidden"}
+              aria-labelledby="speaker-contact-heading"
+            >
+              <h3
+                id="speaker-contact-heading"
+                className="text-sm font-semibold"
+              >
+                Contact
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                {row.email || "No email on file"}
+              </p>
+              {row.lastContactAt && (
+                <p className="text-xs text-muted-foreground">
+                  Last contacted {readableDate(row.lastContactAt)}
+                </p>
+              )}
               <Button
                 type="button"
-                variant="ghost"
+                variant="outline"
                 size="sm"
-                onClick={() => setAddOpen(false)}
-                disabled={creatingTask}
+                disabled={preparingReminder || sendingReminder || !row.email}
+                onClick={() => void prepareReminder()}
               >
-                Cancel
+                {preparingReminder ? "Preparing…" : "Send reminder"}
               </Button>
-              <Button type="submit" size="sm" disabled={creatingTask}>
-                {creatingTask ? "Creating…" : "Create task"}
-              </Button>
-            </div>
-          </form>
-        )}
-
-        {row.tasks.length ? (
-          <ul className="space-y-2">
-            {row.tasks.map((task) => (
-              <li
-                key={task.id}
-                className="space-y-2 rounded-lg bg-background p-3"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium">{task.title}</p>
-                    {task.dueDate && (
-                      <p
-                        className={
-                          task.status !== "completed" &&
-                          task.dueDate < Date.now()
-                            ? "mt-1 text-xs text-destructive"
-                            : "mt-1 text-xs text-muted-foreground"
-                        }
-                      >
-                        Due {readableDate(task.dueDate)}
-                      </p>
-                    )}
+              {reminderPreview && (
+                <div className="space-y-3 rounded-lg bg-background p-3">
+                  <div>
+                    <p className="text-sm font-medium">Review reminder</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {reminderPreview.templateName
+                        ? `Using “${reminderPreview.templateName}”.`
+                        : "Using the built-in branded template."}
+                    </p>
                   </div>
-                  {task.status === "completed" && (
-                    <Check
-                      className="h-4 w-4 shrink-0 text-success"
-                      aria-label="Completed"
-                    />
-                  )}
+                  <div>
+                    <p className="text-sm font-medium">
+                      {reminderPreview.subject}
+                    </p>
+                    <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">
+                      {reminderPreview.body}
+                    </p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    To {reminderPreview.recipients[0]?.name} ·{" "}
+                    {reminderPreview.recipients[0]?.email || "No email on file"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {reminderPreview.calendarAttached
+                      ? `Calendar invite attached${reminderPreview.scheduleTime ? ` for ${reminderPreview.scheduleTime}` : ""}.`
+                      : "No scheduled session is available, so no calendar invite will be attached."}
+                  </p>
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setReminderPreview(undefined)}
+                      disabled={sendingReminder}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => void sendReminder()}
+                      disabled={
+                        sendingReminder || !reminderPreview.recipients[0]?.email
+                      }
+                    >
+                      {sendingReminder ? "Sending…" : "Confirm send"}
+                    </Button>
+                  </div>
                 </div>
-                <Select
-                  value={task.status}
-                  onValueChange={(value) =>
-                    void updateTask(task, value as OnboardingTask["status"])
-                  }
-                  disabled={updatingTaskId === task.id}
-                >
-                  <SelectTrigger
-                    className="h-8"
-                    aria-label={`Status for ${task.title}`}
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="in_progress">In progress</SelectItem>
-                    <SelectItem value="completed">Completed</SelectItem>
-                  </SelectContent>
-                </Select>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="rounded-lg bg-background px-3 py-6 text-center text-sm text-muted-foreground">
-            No onboarding tasks assigned.
-          </p>
-        )}
-      </section>
+              )}
+            </section>
 
-      <section className="space-y-3" aria-labelledby="speaker-notes-heading">
-        <div>
-          <h3 id="speaker-notes-heading" className="text-sm font-semibold">
-            Notes
-          </h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Private organizer context for this speaker.
-          </p>
-        </div>
-        <div className="space-y-2 rounded-lg bg-background p-3">
-          <Textarea
-            aria-label="New note"
-            value={noteBody}
-            onChange={(inputEvent) => setNoteBody(inputEvent.target.value)}
-            onKeyDown={(keyEvent) => {
-              if (
-                (keyEvent.metaKey || keyEvent.ctrlKey) &&
-                keyEvent.key === "Enter"
-              ) {
-                keyEvent.preventDefault();
-                void saveNote();
-              }
-            }}
-            placeholder="Add a note…"
-            disabled={savingNote}
-          />
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-xs text-muted-foreground">
-              ⌘/Ctrl + Enter to save
-            </p>
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => void saveNote()}
-              disabled={savingNote || !noteBody.trim()}
+            <section
+              className={activeTab === "overview" ? "space-y-3" : "hidden"}
+              aria-labelledby="speaker-confirmation-heading"
             >
-              {savingNote ? "Saving…" : "Save note"}
-            </Button>
-          </div>
-        </div>
-        {notes === undefined ? (
-          <p className="text-sm text-muted-foreground">Loading notes…</p>
-        ) : notes.length === 0 ? (
-          <p className="rounded-lg bg-background px-3 py-6 text-center text-sm text-muted-foreground">
-            No notes yet.
-          </p>
-        ) : (
-          <div className="space-y-2">
-            {notes.map((note) => (
-              <article
-                key={note.id}
-                className="group rounded-lg bg-background p-3"
+              <div>
+                <h3
+                  id="speaker-confirmation-heading"
+                  className="text-sm font-semibold"
+                >
+                  Confirmation
+                </h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Record the speaker’s explicit response. Email delivery does
+                  not change this status.
+                </p>
+              </div>
+              <Select
+                value={confirmation}
+                onValueChange={(value) =>
+                  setConfirmation(value as SpeakerConfirmationStatus)
+                }
+                disabled={savingConfirmation}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="whitespace-pre-wrap break-words text-sm">
-                      {note.body}
+                <SelectTrigger aria-label="Confirmation status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="awaiting">Awaiting response</SelectItem>
+                  <SelectItem value="confirmed">Confirmed</SelectItem>
+                  <SelectItem value="declined">Declined</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => void saveConfirmation()}
+                disabled={
+                  savingConfirmation || confirmation === row.confirmationStatus
+                }
+              >
+                {savingConfirmation ? "Saving…" : "Save confirmation"}
+              </Button>
+            </section>
+
+            <section
+              className={activeTab === "overview" ? "space-y-3" : "hidden"}
+              aria-labelledby="speaker-sessions-heading"
+            >
+              <h3
+                id="speaker-sessions-heading"
+                className="text-sm font-semibold"
+              >
+                Accepted sessions
+              </h3>
+              <ul className="space-y-2">
+                {row.submissions.map((submission) => (
+                  <li key={submission.id}>
+                    <Link
+                      className="text-sm font-medium hover:underline"
+                      to={
+                        event.slug
+                          ? `/events/${event.slug}/program/abstracts?selected=${encodeURIComponent(submission.id)}`
+                          : `/program/abstracts?selected=${encodeURIComponent(submission.id)}`
+                      }
+                    >
+                      {submission.title}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void prepareConsolidated()}
+                disabled={!row.email || sendingConsolidated}
+              >
+                Prepare combined decisions
+              </Button>
+              {consolidatedPreview && (
+                <div className="space-y-3 rounded-lg bg-background p-3">
+                  <div>
+                    <p className="text-sm font-medium">
+                      Review combined decision email
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {readableDate(note.createdAt)}
+                      {consolidatedPreview.templateName
+                        ? `Using “${consolidatedPreview.templateName}”.`
+                        : "Using the built-in branded template."}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">
+                      {consolidatedPreview.subject}
+                    </p>
+                    <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">
+                      {consolidatedPreview.body}
+                    </p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {consolidatedPreview.attachmentCount
+                      ? `${consolidatedPreview.attachmentCount} calendar invite${consolidatedPreview.attachmentCount === 1 ? "" : "s"} attached for accepted sessions.`
+                      : "No calendar invites will be attached."}
+                  </p>
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setConsolidatedPreview(undefined)}
+                      disabled={sendingConsolidated}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => void sendConsolidated()}
+                      disabled={sendingConsolidated}
+                    >
+                      {sendingConsolidated ? "Sending…" : "Confirm send"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </section>
+
+            <section
+              className={activeTab === "overview" ? "space-y-3" : "hidden"}
+              aria-labelledby="speaker-profile-heading"
+            >
+              <div>
+                <h3
+                  id="speaker-profile-heading"
+                  className="text-sm font-semibold"
+                >
+                  Profile readiness
+                </h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Speakers maintain these fields in their portal.
+                </p>
+              </div>
+              <ul className="space-y-2 text-sm">
+                <li className="flex items-center gap-2">
+                  <Check
+                    className={
+                      row.speaker.bio?.trim()
+                        ? "h-4 w-4 text-success"
+                        : "h-4 w-4 text-muted-foreground"
+                    }
+                  />{" "}
+                  Biography {row.speaker.bio?.trim() ? "received" : "missing"}
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check
+                    className={
+                      row.speaker.headshotStorageKey
+                        ? "h-4 w-4 text-success"
+                        : "h-4 w-4 text-muted-foreground"
+                    }
+                  />{" "}
+                  Headshot{" "}
+                  {row.speaker.headshotStorageKey ? "received" : "missing"}
+                </li>
+              </ul>
+            </section>
+
+            <section
+              className={activeTab === "tasks" ? "space-y-4" : "hidden"}
+              aria-labelledby="speaker-tasks-heading"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3
+                    id="speaker-tasks-heading"
+                    className="text-sm font-semibold"
+                  >
+                    Onboarding tasks
+                  </h3>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {row.openTaskCount} open · {row.overdueTaskCount} overdue
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setAddOpen((open) => !open)}
+                  aria-expanded={addOpen}
+                >
+                  Add one-off task
+                </Button>
+              </div>
+
+              {taskTemplates.length ? (
+                <section
+                  className="space-y-3 rounded-md bg-muted/60 p-4"
+                  aria-labelledby="assign-template-heading"
+                >
+                  <div>
+                    <h4 id="assign-template-heading" className="font-semibold">
+                      Assign from template
+                    </h4>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Add a reusable onboarding checklist to this speaker.
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Select value={templateId} onValueChange={setTemplateId}>
+                      <SelectTrigger
+                        className="min-h-10 flex-1 bg-background"
+                        aria-label="Onboarding task template"
+                      >
+                        <SelectValue placeholder="Choose a task template" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {taskTemplates.map((template) => (
+                          <SelectItem key={template.id} value={template.id}>
+                            {template.name} · {template.items.length} task
+                            {template.items.length === 1 ? "" : "s"}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      className="sm:self-stretch"
+                      onClick={() => void applyTaskTemplate()}
+                      disabled={!templateId || applyingTemplate}
+                    >
+                      {applyingTemplate ? "Assigning…" : "Assign template"}
+                    </Button>
+                  </div>
+                  {templateId && (
+                    <p className="text-xs text-muted-foreground">
+                      {taskTemplates.find(
+                        (template) => template.id === templateId,
+                      )?.description ??
+                        "Tasks already assigned from this template will be skipped."}
+                    </p>
+                  )}
+                </section>
+              ) : (
+                <section className="flex flex-col gap-3 rounded-md bg-muted/60 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-medium">No task templates yet</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Start with six reusable speaker checklists, then customize
+                      them in Configure.
                     </p>
                   </div>
                   <Button
                     type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => void deleteNote(note.id)}
-                    className="h-6 w-6 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"
-                    title="Delete note"
+                    variant="outline"
+                    className="shrink-0"
+                    onClick={() => void createStarterTemplates()}
+                    disabled={creatingStarterTemplates}
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    <span className="sr-only">Delete note</span>
+                    {creatingStarterTemplates
+                      ? "Creating…"
+                      : "Create starter templates"}
+                  </Button>
+                </section>
+              )}
+
+              {addOpen && (
+                <form
+                  className="space-y-3 rounded-lg bg-background p-3"
+                  onSubmit={(event) => void createTask(event)}
+                >
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`task-title-${row.id}`}>Task title</Label>
+                    <Input
+                      id={`task-title-${row.id}`}
+                      value={taskTitle}
+                      onChange={(event) => setTaskTitle(event.target.value)}
+                      placeholder="e.g. Upload final slides"
+                      disabled={creatingTask}
+                      autoFocus
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`task-due-${row.id}`}>
+                      Due date{" "}
+                      <span className="text-muted-foreground">(optional)</span>
+                    </Label>
+                    <Input
+                      id={`task-due-${row.id}`}
+                      type="date"
+                      value={dueDate}
+                      onChange={(event) => setDueDate(event.target.value)}
+                      disabled={creatingTask}
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setAddOpen(false)}
+                      disabled={creatingTask}
+                    >
+                      Cancel
+                    </Button>
+                    <Button type="submit" size="sm" disabled={creatingTask}>
+                      {creatingTask ? "Creating…" : "Create task"}
+                    </Button>
+                  </div>
+                </form>
+              )}
+
+              {row.tasks.length ? (
+                <ul className="space-y-2">
+                  {row.tasks.map((task) => (
+                    <li
+                      key={task.id}
+                      className="space-y-2 rounded-lg bg-background p-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">{task.title}</p>
+                          {task.dueDate && (
+                            <p
+                              className={
+                                task.status !== "completed" &&
+                                task.dueDate < Date.now()
+                                  ? "mt-1 text-xs text-destructive"
+                                  : "mt-1 text-xs text-muted-foreground"
+                              }
+                            >
+                              Due {readableDate(task.dueDate)}
+                            </p>
+                          )}
+                        </div>
+                        {task.status === "completed" && (
+                          <Check
+                            className="h-4 w-4 shrink-0 text-success"
+                            aria-label="Completed"
+                          />
+                        )}
+                      </div>
+                      <Select
+                        value={task.status}
+                        onValueChange={(value) =>
+                          void updateTask(
+                            task,
+                            value as OnboardingTask["status"],
+                          )
+                        }
+                        disabled={updatingTaskId === task.id}
+                      >
+                        <SelectTrigger
+                          className="h-8"
+                          aria-label={`Status for ${task.title}`}
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pending">Pending</SelectItem>
+                          <SelectItem value="in_progress">
+                            In progress
+                          </SelectItem>
+                          <SelectItem value="completed">Completed</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="rounded-lg bg-background px-3 py-6 text-center text-sm text-muted-foreground">
+                  No onboarding tasks assigned.
+                </p>
+              )}
+            </section>
+          </section>
+
+          <section aria-label="Speaker notes and activity" className="contents">
+            <section
+              role="tabpanel"
+              className={
+                activeTab === "notes"
+                  ? "order-1 min-w-0 space-y-4 p-5"
+                  : "hidden"
+              }
+              aria-labelledby="speaker-notes-heading"
+            >
+              <div>
+                <h3
+                  id="speaker-notes-heading"
+                  className="text-sm font-semibold"
+                >
+                  Notes
+                </h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Private organizer context for this speaker.
+                </p>
+              </div>
+              <div className="space-y-3 p-4">
+                <Textarea
+                  aria-label="New note"
+                  value={noteBody}
+                  onChange={(inputEvent) =>
+                    setNoteBody(inputEvent.target.value)
+                  }
+                  onKeyDown={(keyEvent) => {
+                    if (
+                      (keyEvent.metaKey || keyEvent.ctrlKey) &&
+                      keyEvent.key === "Enter"
+                    ) {
+                      keyEvent.preventDefault();
+                      void saveNote();
+                    }
+                  }}
+                  placeholder="Add a note…"
+                  disabled={savingNote}
+                />
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs text-muted-foreground">
+                    ⌘/Ctrl + Enter to save
+                  </p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => void saveNote()}
+                    disabled={savingNote || !noteBody.trim()}
+                  >
+                    {savingNote ? "Saving…" : "Save note"}
                   </Button>
                 </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
+              </div>
+              {notes === undefined ? (
+                <p className="text-sm text-muted-foreground">Loading notes…</p>
+              ) : notes.length === 0 ? (
+                <p className="rounded-lg bg-background px-3 py-6 text-center text-sm text-muted-foreground">
+                  No notes yet.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {notes.map((note) => (
+                    <article
+                      key={note.id}
+                      className="group rounded-lg bg-background p-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="whitespace-pre-wrap break-words text-sm">
+                            {note.body}
+                          </p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {readableDate(note.createdAt)}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => void deleteNote(note.id)}
+                          className="h-6 w-6 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"
+                          title="Delete note"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          <span className="sr-only">Delete note</span>
+                        </Button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
 
-      <section className="space-y-3" aria-labelledby="speaker-activity-heading">
-        <div>
-          <h3 id="speaker-activity-heading" className="text-sm font-semibold">
-            Activity
-          </h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Notes, tasks, and delivery history in one record.
-          </p>
+            <aside
+              className="order-2 min-w-0 space-y-4 p-4 xl:sticky xl:top-4"
+              aria-labelledby="speaker-activity-heading"
+            >
+              <div>
+                <h3
+                  id="speaker-activity-heading"
+                  className="text-sm font-semibold"
+                >
+                  Activity
+                </h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Notes, tasks, and delivery history in one record.
+                </p>
+              </div>
+              <ActivityTimeline
+                events={timelineEvents}
+                loading={notes === undefined}
+                compact
+                onOpenEvent={(timelineEvent) => {
+                  if (timelineEvent.type === "note") setActiveTab("notes");
+                  else if (timelineEvent.type === "task") setActiveTab("tasks");
+                  else setActiveTab("overview");
+                }}
+              />
+            </aside>
+          </section>
         </div>
-        <ActivityTimeline
-          events={timelineEvents}
-          loading={notes === undefined}
-        />
-      </section>
+      </Tabs>
 
       {message && (
         <p
@@ -1153,18 +1526,21 @@ export function SpeakerDetail({
           {message.text}
         </p>
       )}
-    </DetailPane>
+    </div>
   );
 }
 
 export default function Speakers() {
   const repo = useRepo();
   const { event: activeEvent } = useCurrentEvent();
+  const navigate = useNavigate();
+  const { speakerId: routeSpeakerId } = useParams<{ speakerId?: string }>();
   const [params, setParams] = useSearchParams();
   const [event, setEvent] = useState<Event>();
   const [speakers, setSpeakers] = useState<Speaker[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [tasks, setTasks] = useState<OnboardingTask[]>([]);
+  const [taskTemplates, setTaskTemplates] = useState<TaskTemplate[]>([]);
   const [comms, setComms] = useState<Comm[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string>();
@@ -1176,7 +1552,8 @@ export default function Speakers() {
   const query = params.get("q") ?? "";
   const view = parseSpeakerOperationsView(params.get("view"));
   const shouldFocusSearch = params.get("focus") === "search";
-  const selectedId = params.get("selected");
+  const legacySelectedId = params.get("selected");
+  const selectedId = routeSpeakerId ?? legacySelectedId;
   const addingSpeaker = params.get("mode") === "add";
   const requestedSort = params.get("sort");
   const sortKey: SpeakerSortKey =
@@ -1195,6 +1572,14 @@ export default function Speakers() {
       ),
     [params],
   );
+  const listSearch = useMemo(() => {
+    const next = new URLSearchParams(params);
+    next.delete("selected");
+    next.delete("mode");
+    next.delete("focus");
+    const serialized = next.toString();
+    return serialized ? `?${serialized}` : "";
+  }, [params]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1206,20 +1591,28 @@ export default function Speakers() {
         setSpeakers([]);
         setSubmissions([]);
         setTasks([]);
+        setTaskTemplates([]);
         setComms([]);
         return;
       }
       const scope = { eventId: nextEvent.id };
-      const [nextSpeakers, nextSubmissions, nextTasks, nextComms] =
-        await Promise.all([
-          repo.speakers.list(scope),
-          repo.submissions.list(scope),
-          repo.tasks.list(scope),
-          repo.comms.list(scope),
-        ]);
+      const [
+        nextSpeakers,
+        nextSubmissions,
+        nextTasks,
+        nextTaskTemplates,
+        nextComms,
+      ] = await Promise.all([
+        repo.speakers.list(scope),
+        repo.submissions.list(scope),
+        repo.tasks.list(scope),
+        repo.taskTemplates.list(scope),
+        repo.comms.list(scope),
+      ]);
       setSpeakers(nextSpeakers);
       setSubmissions(nextSubmissions);
       setTasks(nextTasks);
+      setTaskTemplates(nextTaskTemplates);
       setComms(nextComms);
     } catch (error) {
       setLoadError(
@@ -1298,10 +1691,25 @@ export default function Speakers() {
   const selectedRow = rows.find((row) => row.id === selectedId);
 
   useEffect(() => {
+    if (!legacySelectedId || routeSpeakerId || !activeEvent?.slug) return;
+    navigate(
+      `/events/${activeEvent.slug}/program/speakers/${encodeURIComponent(legacySelectedId)}${listSearch}`,
+      { replace: true },
+    );
+  }, [
+    activeEvent?.slug,
+    legacySelectedId,
+    listSearch,
+    navigate,
+    routeSpeakerId,
+  ]);
+
+  useEffect(() => {
     if (
-      !selectedId ||
+      !legacySelectedId ||
+      routeSpeakerId ||
       loading ||
-      visibleRows.some((row) => row.id === selectedId)
+      visibleRows.some((row) => row.id === legacySelectedId)
     )
       return;
     setParams(
@@ -1313,7 +1721,7 @@ export default function Speakers() {
       { replace: true },
     );
     searchRef.current?.focus();
-  }, [loading, selectedId, setParams, visibleRows]);
+  }, [legacySelectedId, loading, routeSpeakerId, setParams, visibleRows]);
 
   useEffect(() => {
     if (selectedId || !rowToRestoreFocus.current) return;
@@ -1351,12 +1759,23 @@ export default function Speakers() {
   };
 
   const closeDetail = () => {
+    if (routeSpeakerId && event?.slug) {
+      navigate(`/events/${event.slug}/program/speakers${listSearch}`);
+      return;
+    }
     rowToRestoreFocus.current = selectedId ?? undefined;
     setParams((current) => {
       const next = new URLSearchParams(current);
       next.delete("selected");
       return next;
     });
+  };
+
+  const openSpeaker = (speakerId: string) => {
+    if (!event?.slug) return;
+    navigate(
+      `/events/${event.slug}/program/speakers/${encodeURIComponent(speakerId)}${listSearch}`,
+    );
   };
 
   const openAddSpeaker = () => {
@@ -1533,15 +1952,15 @@ export default function Speakers() {
         onClose={closeAddSpeaker}
         onCreated={(speaker) => {
           setSpeakers((items) => [...items, speaker]);
-          setParams((current) => {
-            const next = new URLSearchParams(current);
-            next.delete("mode");
-            next.set("selected", speaker.id);
-            return next;
-          });
+          navigate(
+            `/events/${event.slug}/program/speakers/${encodeURIComponent(speaker.id)}${listSearch}`,
+          );
         }}
       />
-    ) : selectedRow && event ? (
+    ) : undefined;
+
+  const speakerDetail =
+    selectedRow && event ? (
       <SpeakerDetail
         row={selectedRow}
         event={event}
@@ -1570,18 +1989,88 @@ export default function Speakers() {
             ),
           )
         }
+        taskTemplates={taskTemplates}
+        onTasksChanged={async () => {
+          const nextTasks = await repo.tasks.list({ eventId: event.id });
+          setTasks(nextTasks);
+        }}
+        onTaskTemplatesChanged={async () => {
+          const nextTemplates = await repo.taskTemplates.list({
+            eventId: event.id,
+          });
+          setTaskTemplates(nextTemplates);
+        }}
         comms={comms}
       />
     ) : undefined;
 
+  if (selectedId) {
+    return (
+      <AppLayout title={selectedRow?.name ?? "Speaker"}>
+        {loadError ? (
+          <section
+            className="flex min-h-64 flex-col items-center justify-center gap-3 text-center"
+            role="alert"
+          >
+            <CircleAlert className="h-6 w-6 text-destructive" />
+            <div>
+              <p className="text-sm font-medium">Could not load this speaker</p>
+              <p className="mt-1 max-w-md text-sm text-muted-foreground">
+                {loadError}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={closeDetail}
+              >
+                Back to speakers
+              </Button>
+              <Button type="button" size="sm" onClick={() => void load()}>
+                Retry
+              </Button>
+            </div>
+          </section>
+        ) : loading ? (
+          <div className="space-y-6" aria-label="Loading speaker details">
+            <div className="h-8 w-36 animate-pulse rounded bg-muted" />
+            <div className="h-24 animate-pulse rounded bg-muted" />
+            <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
+              <div className="h-56 animate-pulse rounded bg-muted lg:col-span-2" />
+              <div className="h-56 animate-pulse rounded bg-muted" />
+            </div>
+          </div>
+        ) : speakerDetail ? (
+          speakerDetail
+        ) : (
+          <section className="flex min-h-64 flex-col items-center justify-center gap-3 text-center">
+            <UserRoundCheck className="h-6 w-6 text-muted-foreground" />
+            <div>
+              <p className="text-sm font-medium">Speaker not found</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                This speaker may have been removed or belongs to another event.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={closeDetail}
+            >
+              Back to speakers
+            </Button>
+          </section>
+        )}
+      </AppLayout>
+    );
+  }
+
   return (
     <AppLayout title="Speakers" detail={detail}>
       <div
-        className={
-          selectedRow || addingSpeaker
-            ? "hidden space-y-3 lg:block"
-            : "space-y-3"
-        }
+        className={addingSpeaker ? "hidden space-y-3 lg:block" : "space-y-3"}
       >
         {loadError ? (
           <section
@@ -1765,7 +2254,7 @@ export default function Speakers() {
                   0,
                 )}
                 getRowLabel={(row) => `Open details for ${row.name}`}
-                onRowActivated={(row) => setParam("selected", row.id)}
+                onRowActivated={(row) => openSpeaker(row.id)}
                 onRowRef={(row, element) => {
                   if (element) rowRefs.current.set(row.id, element);
                   else rowRefs.current.delete(row.id);
@@ -1775,11 +2264,6 @@ export default function Speakers() {
           </section>
         )}
       </div>
-      {selectedRow && !event && (
-        <p role="alert" className="text-sm text-destructive">
-          The selected speaker’s event could not be loaded.
-        </p>
-      )}
     </AppLayout>
   );
 }

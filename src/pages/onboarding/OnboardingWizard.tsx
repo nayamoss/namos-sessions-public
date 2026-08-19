@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent, type ReactNode } from "react";
 import { useUser } from "@clerk/clerk-react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowRight, Camera, ChevronDown, Eye, EyeOff, Loader2, Smartphone } from "lucide-react";
+import { ArrowRight, ChevronDown, Eye, EyeOff, Loader2, Upload } from "lucide-react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { TimezoneCombobox } from "@/components/shared/TimezoneCombobox";
 import { DateTimeField } from "@/components/shared/DateTimeField";
@@ -17,14 +17,18 @@ import type { Event } from "@/data/types";
 import { friendlyErrorMessage } from "@/lib/errors";
 import { getBrowserTimezone } from "@/lib/timezones";
 import { ImportDataStep } from "./steps/ImportDataStep";
+import { AgentProviderSettingsForm } from "@/components/shared/AgentProviderSettingsForm";
 
 const stepMeta = [
   { id: "welcome", label: "Welcome" },
   { id: "identity", label: "A couple quick things" },
   { id: "conference", label: "Your conference" },
-  { id: "mobile", label: "On the go" },
+  { id: "industry", label: "Your industry" },
+  { id: "ai", label: "AI setup" },
   { id: "import", label: "Import data" },
 ] as const;
+
+const industries = ["Technology", "Education", "Healthcare", "Finance", "Government", "Media & publishing", "Nonprofit", "Professional association", "Other"] as const;
 
 const slugify = (value: string) =>
   value
@@ -154,6 +158,8 @@ export default function OnboardingWizard() {
   const [otherReferralSelected, setOtherReferralSelected] = useState(false);
   const [otherReferralSource, setOtherReferralSource] = useState("");
   const [customizeDetails, setCustomizeDetails] = useState(false);
+  const [industryChoice, setIndustryChoice] = useState("");
+  const [otherIndustry, setOtherIndustry] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -328,7 +334,26 @@ export default function OnboardingWizard() {
       return;
     }
     if (step === 3) {
-      setStep(4);
+      const industry = industryChoice === "Other" ? otherIndustry.trim() : industryChoice;
+      if (!industry) {
+        setStep(4);
+        return;
+      }
+      if (!event.id) return setStep(2);
+      setBusy(true);
+      try {
+        await repo.events.save({ ...event, industry });
+        update({ industry });
+        setStep(4);
+      } catch (cause) {
+        setError(friendlyErrorMessage(cause, "Could not save your industry."));
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+    if (step === 4) {
+      setStep(5);
       return;
     }
     await complete();
@@ -393,31 +418,28 @@ export default function OnboardingWizard() {
         ) : (
           <div ref={stepRef} key={step} className="w-full max-w-lg animate-fade-in">
             {step === 0 && (
-              <section className="space-y-6 text-center sm:text-left">
+              <section className="space-y-9">
                 <div>
-                  <h1 className="text-3xl font-semibold sm:text-4xl">What should we call you?</h1>
-                  <p className="mt-3 text-base text-muted-foreground">
-                    We'll use this everywhere we address you. Takes 30 seconds — both fields are
-                    optional, and you can change them later in Settings.
-                  </p>
+                  <h1 className="text-3xl font-semibold sm:text-4xl">Welcome to Namos Sessions</h1>
+                  <p className="mt-2 text-base text-muted-foreground">Set up your profile.</p>
                 </div>
-                <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-start sm:text-left">
-                  <div className="flex flex-col items-center gap-2">
+                <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
+                  <div className="flex shrink-0 justify-center sm:justify-start">
                     <Button
                       type="button"
                       variant="ghost"
                       onClick={() => avatarInputRef.current?.click()}
-                      className="group relative h-24 w-24 rounded-full p-0 hover:bg-transparent"
+                      className="group relative h-20 w-20 rounded-full p-0 hover:bg-transparent"
                       aria-label={avatarPreview ? "Change your photo" : "Add a photo"}
                     >
-                      <Avatar className="h-24 w-24">
+                      <Avatar className="h-20 w-20">
                         {avatarPreview && <AvatarImage src={avatarPreview} alt="" />}
-                        <AvatarFallback className="text-2xl font-medium">
+                        <AvatarFallback className="text-lg font-medium">
                           {(displayName || firstName || email)[0]?.toUpperCase() ?? "?"}
                         </AvatarFallback>
                       </Avatar>
-                      <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/0 text-transparent transition-colors group-hover:bg-black/40 group-hover:text-white">
-                        <Camera className="h-5 w-5" />
+                      <span className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full bg-card text-foreground shadow-sm transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                        <Upload className="h-3.5 w-3.5" aria-hidden="true" />
                       </span>
                     </Button>
                     <input
@@ -427,17 +449,9 @@ export default function OnboardingWizard() {
                       className="sr-only"
                       onChange={chooseAvatar}
                     />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={() => avatarInputRef.current?.click()}
-                      className="h-auto p-0 text-xs font-medium text-muted-foreground hover:bg-transparent hover:text-foreground"
-                    >
-                      {avatarPreview ? "Change photo" : "Add a photo"}
-                    </Button>
                   </div>
-                  <div className="w-full space-y-2 text-left">
-                    <Label htmlFor="onboarding-name">Your name</Label>
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <Label htmlFor="onboarding-name">Name</Label>
                     <Input
                       id="onboarding-name"
                       data-autofocus="true"
@@ -465,7 +479,7 @@ export default function OnboardingWizard() {
                   </div>
                 </div>
                 {error && <InlineError message={error} onRetry={() => void load()} />}
-                <div className="flex justify-center sm:justify-start">
+                <div>
                   <PrimaryButton onClick={() => void next()} busy={busy}>
                     Continue
                   </PrimaryButton>
@@ -573,49 +587,21 @@ export default function OnboardingWizard() {
 
             {step === 3 && (
               <section className="space-y-6">
-                <div>
-                  <h1 className="text-2xl font-semibold sm:text-3xl">Take it with you</h1>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    Namos Sessions is built to work on your phone — no app required. Open
-                    it in your mobile browser and everything you just set up is there:
-                    the schedule, speakers, and reviews.
-                  </p>
-                </div>
-                <div className="space-y-4 rounded-[12px] bg-card p-6">
-                  <div className="flex items-start gap-3">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-primary/10 text-primary">
-                      <Smartphone aria-hidden="true" className="h-4 w-4" />
-                    </span>
-                    <div>
-                      <p className="text-sm font-medium">Works on any phone today</p>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        Sign in at the same address on your phone or tablet — the whole
-                        dashboard is designed for small screens, so you can run a session
-                        from the hallway.
-                      </p>
-                    </div>
+                <div><h1 className="text-2xl font-semibold sm:text-3xl">What industry are you in?</h1><p className="mt-2 text-sm text-muted-foreground">Pick the closest match.</p></div>
+                <div className="space-y-5">
+                  <div role="group" aria-label="Industry" className="grid grid-cols-2 gap-3">
+                    {industries.map((item, index) => <Button key={item} type="button" variant="outline" data-autofocus={index === 0 ? "true" : undefined} aria-pressed={industryChoice === item} onClick={() => { setIndustryChoice(item); if (item !== "Other") setOtherIndustry(""); setError(undefined); }} className={`h-auto min-h-16 justify-start whitespace-normal rounded-[12px] px-4 py-3 text-left text-sm ${industryChoice === item ? "border-primary bg-primary/5 text-foreground" : "bg-card"}`}>{item}</Button>)}
                   </div>
-                  <div className="flex items-start gap-3">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-primary/10 text-primary">
-                      <span aria-hidden="true" className="text-xs font-semibold">Soon</span>
-                    </span>
-                    <div>
-                      <p className="text-sm font-medium">iOS and Android apps are coming</p>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        Native apps are on the way. Nothing to do now — we'll let you know
-                        the moment they're ready.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Button type="button" variant="outline" className="h-11 rounded-[12px]" onClick={goBack}>Back</Button>
-                  <PrimaryButton onClick={() => void next()} autoFocus>Got it</PrimaryButton>
-                </div>
+                  {industryChoice === "Other" && <div className="space-y-2"><Label htmlFor="other-industry">Your industry</Label><Input id="other-industry" data-autofocus="true" className="h-11 rounded-[12px] bg-card" placeholder="e.g. Climate technology" value={otherIndustry} onChange={(change) => setOtherIndustry(change.target.value)} /></div>}
+                </div>{error && <InlineError message={error} />}<div className="flex items-center gap-3"><Button type="button" variant="outline" className="h-11 rounded-[12px]" onClick={goBack}>Back</Button><PrimaryButton onClick={() => void next()} busy={busy}>Continue</PrimaryButton><Button type="button" variant="ghost" onClick={() => setStep(4)}>Skip for now</Button></div>
               </section>
             )}
 
             {step === 4 && (
+              <section className="space-y-6"><div><h1 className="text-2xl font-semibold sm:text-3xl">Use AI for chat and voice agents?</h1><p className="mt-2 text-sm text-muted-foreground">Optional. Connect it now, or set it up later.</p></div>{event.id && <div className="rounded-[12px] bg-card p-5"><AgentProviderSettingsForm eventId={event.id} onboarding /></div>}<div className="flex items-center gap-3"><Button type="button" variant="outline" className="h-11 rounded-[12px]" onClick={goBack}>Back</Button><PrimaryButton onClick={() => void next()}>Continue</PrimaryButton><Button type="button" variant="ghost" onClick={() => setStep(5)}>Set this up later</Button></div></section>
+            )}
+
+            {step === 5 && (
               <section className="space-y-6">
                 <ErrorBoundary fallback={<StepErrorFallback />}>
                   {event.id ? (

@@ -20,9 +20,11 @@ const options: { value: AgentProviderMode; label: string }[] = [
 export function AgentProviderSettingsForm({
   eventId,
   onSaved,
+  onboarding = false,
 }: {
   eventId: EventId;
   onSaved?: () => void;
+  onboarding?: boolean;
 }) {
   const repo = useRepo();
   const [setting, setSetting] = useState<AgentProviderSetting>();
@@ -117,11 +119,17 @@ export function AgentProviderSettingsForm({
   };
   if (loading)
     return (
-      <p className="text-sm text-muted-foreground">Checking AI provider…</p>
+      <p className="text-sm text-muted-foreground">Loading AI setup…</p>
     );
+  const displayOptions = onboarding
+    ? [
+        { value: "managed" as const, label: "Use Namos AI" },
+        { value: "bring_your_own" as const, label: "Use my OpenAI key" },
+      ]
+    : options;
   return (
     <div className="space-y-6">
-      <section className="space-y-3 rounded-lg bg-background p-6">
+      {!onboarding && <section className="space-y-3 rounded-lg bg-background p-6">
         <div>
           <h2 className="text-base font-semibold">Current provider</h2>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -142,8 +150,8 @@ export function AgentProviderSettingsForm({
             </div>
           )}
         </dl>
-      </section>
-      <section className="space-y-3 rounded-lg bg-background p-6">
+      </section>}
+      {!onboarding && <section className="space-y-3 rounded-lg bg-background p-6">
         <div>
           <h2 className="text-base font-semibold">Namos-managed AI usage</h2>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -197,21 +205,16 @@ export function AgentProviderSettingsForm({
             reserved.
           </p>
         )}
-      </section>
-      <section className="space-y-5 rounded-lg bg-background p-6">
+      </section>}
+      <section className={onboarding ? "space-y-5" : "space-y-5 rounded-lg bg-background p-6"}>
         <div>
-          <h2 className="text-base font-semibold">
-            Who provides the model key?
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            This choice applies to new Operations Agent runs for this event.
-            Existing runs keep the mode they started with.
-          </p>
+          <h2 className="text-base font-semibold">{onboarding ? "Choose one" : "Who provides the model key?"}</h2>
+          {!onboarding && <p className="mt-1 text-sm text-muted-foreground">This choice applies to new Operations Agent runs for this event. Existing runs keep the mode they started with.</p>}
         </div>
         <SegmentedControl
           label="AI provider billing mode"
           value={mode}
-          options={options}
+          options={displayOptions}
           onChange={(value) => {
             setMode(value);
             setError(undefined);
@@ -230,11 +233,9 @@ export function AgentProviderSettingsForm({
               aria-hidden="true"
             />
             <div>
-              <p className="text-sm font-medium">Use Namos-managed AI</p>
+              <p className="text-sm font-medium">No API key needed</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                No API key is needed. Each run checks the event creator’s Clerk
-                Billing allowance before dispatch, then records actual token
-                use.
+                {onboarding ? "We’ll set it up for you." : "Each run checks the event creator’s Clerk Billing allowance before dispatch, then records actual token use."}
               </p>
               {setting && !setting.managedAvailable && (
                 <p className="mt-2 text-sm text-destructive">
@@ -244,8 +245,8 @@ export function AgentProviderSettingsForm({
             </div>
           </div>
         ) : (
-          <div className="space-y-3">
-            <div
+          <div className={onboarding ? "space-y-2 sm:max-w-lg" : "space-y-3"}>
+            {!onboarding && <div
               className={cardSurfaceClasses(
                 "default",
                 "flex gap-3 bg-muted/60 p-4",
@@ -263,7 +264,7 @@ export function AgentProviderSettingsForm({
                   browser.
                 </p>
               </div>
-            </div>
+            </div>}
             <div className="space-y-2 sm:max-w-lg">
               <Label htmlFor="agent-openai-key">OpenAI API key</Label>
               <Input
@@ -278,10 +279,7 @@ export function AgentProviderSettingsForm({
                 value={apiKey}
                 onChange={(event) => setApiKey(event.target.value)}
               />
-              <p className="text-sm text-muted-foreground">
-                Saving replaces any previously stored organizer key for this
-                event.
-              </p>
+              <p className="text-sm text-muted-foreground">{onboarding ? "Stored securely for this event." : "Saving replaces any previously stored organizer key for this event."}</p>
             </div>
           </div>
         )}
@@ -299,6 +297,7 @@ export function AgentProviderSettingsForm({
           </p>
         )}
         <div className="flex flex-wrap gap-3">
+          {(!onboarding || mode === "bring_your_own") &&
           <Button
             type="button"
             variant="accent"
@@ -309,9 +308,10 @@ export function AgentProviderSettingsForm({
                 (!setting?.managedAvailable || !setting.billingOwnerAssigned))
             }
           >
-            {busy ? "Saving…" : "Save AI provider"}
+            {busy ? "Saving…" : onboarding ? "Save key" : "Save AI provider"}
           </Button>
-          {setting?.mode === "bring_your_own" && (
+          }
+          {!onboarding && setting?.mode === "bring_your_own" && (
             <Button
               type="button"
               variant="outline"

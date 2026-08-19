@@ -1,4 +1,5 @@
 import { act } from "react";
+import { readFileSync } from "node:fs";
 import type { ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
@@ -13,12 +14,13 @@ import EventAnalytics from "@/pages/dashboard/EventAnalytics";
 
 const summary: EventAnalyticsSummary = {
   version: 1, generatedAt: Date.UTC(2026, 7, 16, 12),
-  submissions: { total: 10, draft: 1, pending: 2, inReview: 2, accepted: 4, declined: 1, withdrawn: 0, acceptanceRate: 80 },
-  reviews: { assigned: 8, completed: 6, completionRate: 75 },
+  submissions: { total: 10, draft: 1, pending: 2, inReview: 2, accepted: 4, declined: 1, withdrawn: 0, undecided: 5, acceptanceRate: 80 },
+  reviews: { assigned: 8, completed: 6, unassigned: 1, completionRate: 75, workload: { reviewers: 3, min: 2, max: 4, average: 2.7, light: 2, balanced: 1, heavy: 0 } },
   speakers: { total: 5, awaiting: 2, confirmed: 3, declined: 0, profileComplete: 2 },
   agenda: { total: 4, published: 3, acceptedSessions: 4, scheduledAccepted: 3, scheduleRate: 75 },
   communications: { total: 5, queued: 1, sent: 3, failed: 1 },
   tasks: { total: 6, pending: 2, inProgress: 1, completed: 3, overdue: 1, completionRate: 50 },
+  crm: { total: 4, prospect: 1, contacted: 0, qualified: 1, invited: 0, negotiating: 0, confirmed: 2, declined: 0, archived: 0 },
   history: { available: false, daily: [] },
 };
 
@@ -36,21 +38,31 @@ describe("organizer analytics page", () => {
     expect(container).toHaveTextContent("Speaker readiness");
     expect(container.querySelector('a[href="/events/demo-event/program/abstracts"]')).toBeInTheDocument();
     expect(container.querySelector('a[href="/events/demo-event/program/agenda"]')).toBeInTheDocument();
-    expect(container).toHaveTextContent("no synthetic history is generated");
+    expect(container).toHaveTextContent("This snapshot updates as your event workflow changes.");
     act(() => root.unmount());
   });
 
   it("provides a useful empty state", async () => {
     const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
     const empty = structuredClone(summary);
-    empty.submissions = { total: 0, draft: 0, pending: 0, inReview: 0, accepted: 0, declined: 0, withdrawn: 0, acceptanceRate: 0 };
+    empty.submissions = { total: 0, draft: 0, pending: 0, inReview: 0, accepted: 0, declined: 0, withdrawn: 0, undecided: 0, acceptanceRate: 0 };
     empty.speakers = { total: 0, awaiting: 0, confirmed: 0, declined: 0, profileComplete: 0 };
     empty.tasks = { total: 0, pending: 0, inProgress: 0, completed: 0, overdue: 0, completionRate: 0 };
     empty.agenda = { total: 0, published: 0, acceptedSessions: 0, scheduledAccepted: 0, scheduleRate: 0 };
+    empty.reviews = { assigned: 0, completed: 0, unassigned: 0, completionRate: 0, workload: { reviewers: 0, min: 0, max: 0, average: 0, light: 0, balanced: 0, heavy: 0 } };
+    empty.crm = { total: 0, prospect: 0, contacted: 0, qualified: 0, invited: 0, negotiating: 0, confirmed: 0, declined: 0, archived: 0 };
     const repo = { analytics: { summary: vi.fn().mockResolvedValue(empty) } } as unknown as Repository;
     await act(async () => root.render(<MemoryRouter><RepoContext.Provider value={repo}><EventAnalytics /></RepoContext.Provider></MemoryRouter>));
     expect(container).toHaveTextContent("Your event snapshot starts here");
     expect(container).toHaveTextContent("Set up a call");
     act(() => root.unmount());
+  });
+
+  it("does not expose synthetic analytics or implementation-review routes", () => {
+    const app = readFileSync("src/App.tsx", "utf8");
+    const page = readFileSync("src/pages/dashboard/EventAnalytics.tsx", "utf8");
+    expect(app).not.toContain("dev/review/analytics-crm");
+    expect(page).not.toContain("Sample-data implementation review");
+    expect(page).not.toContain("synthetic history");
   });
 });

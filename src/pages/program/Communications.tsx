@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import {
   CalendarDays,
   CheckCircle2,
@@ -20,15 +20,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useRepo } from "@/data/repo";
-import type { Comm, CommTemplate, CommunicationDraft, Event } from "@/data/types";
+import type {
+  Comm,
+  CommTemplate,
+  CommunicationDraft,
+  Event,
+} from "@/data/types";
 import { calendarInvite } from "@/lib/calendar-invite";
 import { submissionConfirmationEmail } from "@/lib/confirmation-email";
 import { templateKinds } from "./CommTemplateEditor";
 
 type DeliveryStatus = "queued" | "sent" | "failed";
 type DeliveryChannel = "email" | "calendar_invite";
-type CommTab = "drafts" | "templates" | "test" | "activity";
+type CommTab = "drafts" | "templates" | "campaign" | "test" | "activity";
 
 type Delivery = {
   id: string;
@@ -88,15 +94,20 @@ function relativeTime(value: number) {
 }
 
 /** Sample invite for the active event, so organizers see their own branding and times. */
-function downloadInvite(event: Pick<Event, "name" | "slug" | "location" | "startDate"> | undefined) {
+function downloadInvite(
+  event: Pick<Event, "name" | "slug" | "location" | "startDate"> | undefined,
+) {
   const startTime = event?.startDate ?? Date.now() + 86_400_000;
   const content = calendarInvite({
     uid: `namos-sessions-preview-${event?.slug ?? "event"}`,
-    title: event ? `${event.name} — schedule invitation preview` : "Schedule invitation preview",
+    title: event
+      ? `${event.name} — schedule invitation preview`
+      : "Schedule invitation preview",
     startTime,
     endTime: startTime + 45 * 60_000,
     location: event?.location,
-    description: "Sample invite. Real invites carry each speaker's own session times, room and portal link.",
+    description:
+      "Sample invite. Real invites carry each speaker's own session times, room and portal link.",
   });
   const url = URL.createObjectURL(
     new Blob([content], { type: "text/calendar;charset=utf-8" }),
@@ -111,6 +122,7 @@ function downloadInvite(event: Pick<Event, "name" | "slug" | "location" | "start
 export default function Communications() {
   const repo = useRepo();
   const { event: activeEvent } = useCurrentEvent();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const selectedId = searchParams.get("selected");
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
@@ -123,7 +135,20 @@ export default function Communications() {
   const [recipient, setRecipient] = useState("");
   const [sessionTitle, setSessionTitle] = useState("Your session title");
   const [message, setMessage] = useState("");
-  const [tab, setTab] = useState<CommTab>(selectedId ? "activity" : "templates");
+  const crmContactIds = useMemo(() => {
+    const value = location.state as { crmContactIds?: unknown } | null;
+    return Array.isArray(value?.crmContactIds)
+      ? value.crmContactIds.filter((id): id is string => typeof id === "string")
+      : [];
+  }, [location.state]);
+  const [tab, setTab] = useState<CommTab>(
+    selectedId ? "activity" : crmContactIds.length ? "campaign" : "templates",
+  );
+  const [campaignSubject, setCampaignSubject] = useState("");
+  const [campaignBody, setCampaignBody] = useState("");
+  const [campaignConfirmOpen, setCampaignConfirmOpen] = useState(false);
+  const [campaignSending, setCampaignSending] = useState(false);
+  const [campaignResult, setCampaignResult] = useState<string>();
   const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
 
   const loadDeliveries = useCallback(async () => {
@@ -139,7 +164,10 @@ export default function Communications() {
         return;
       }
       setEventName(event.name);
-      const [log, preparedDrafts] = await Promise.all([repo.comms.list({ eventId: event.id }), repo.comms.listDrafts({ eventId: event.id })]);
+      const [log, preparedDrafts] = await Promise.all([
+        repo.comms.list({ eventId: event.id }),
+        repo.comms.listDrafts({ eventId: event.id }),
+      ]);
       setDeliveries(createDeliveries(log as CommDocument[]));
       setDrafts(preparedDrafts);
       try {
@@ -183,8 +211,14 @@ export default function Communications() {
   useEffect(() => {
     if (!selectedId) return;
     rowRefs.current.get(selectedId)?.scrollIntoView({ block: "center" });
-    document.getElementById(`draft-${selectedId}`)?.scrollIntoView({ block: "center" });
+    document
+      .getElementById(`draft-${selectedId}`)
+      ?.scrollIntoView({ block: "center" });
   }, [selectedId, deliveries, status]);
+
+  useEffect(() => {
+    if (crmContactIds.length) setTab("campaign");
+  }, [crmContactIds.length]);
 
   const visibleDeliveries = useMemo(
     () =>
@@ -221,6 +255,28 @@ export default function Communications() {
     setMessage(
       `Preview prepared for ${email}. This screen does not send or record a delivery.`,
     );
+  };
+
+  const sendCampaign = async () => {
+    if (!activeEvent || !crmContactIds.length) return;
+    setCampaignSending(true);
+    setCampaignResult(undefined);
+    try {
+      const result = await repo.comms.sendCrmCampaign({
+        eventId: activeEvent.id,
+        contactIds: crmContactIds,
+        subject: campaignSubject,
+        body: campaignBody,
+      });
+      setCampaignResult(`${result.sent} sent, ${result.failed} failed, ${result.skipped} skipped.`);
+      setCampaignConfirmOpen(false);
+      await loadDeliveries();
+    } catch (cause) {
+      setCampaignResult(cause instanceof Error ? cause.message : "Campaign could not be sent.");
+      setCampaignConfirmOpen(false);
+    } finally {
+      setCampaignSending(false);
+    }
   };
 
   const columns: DataGridColumn<Delivery>[] = [
@@ -304,16 +360,61 @@ export default function Communications() {
 
         <Tabs value={tab} onValueChange={(value) => setTab(value as CommTab)}>
           <TabsList>
-            <TabsTrigger value="drafts">Drafts{drafts.length ? ` (${drafts.length})` : ""}</TabsTrigger>
+            <TabsTrigger value="drafts">
+              Drafts{drafts.length ? ` (${drafts.length})` : ""}
+            </TabsTrigger>
             <TabsTrigger value="templates">Templates</TabsTrigger>
+            <TabsTrigger value="campaign">Campaign</TabsTrigger>
             <TabsTrigger value="test">Test &amp; preview</TabsTrigger>
             <TabsTrigger value="activity">Activity log</TabsTrigger>
           </TabsList>
 
           <TabsContent value="drafts" className="space-y-4">
             <section className={cardSurfaceClasses("default", "space-y-4 p-5")}>
-              <div><h2 className="font-semibold">Prepared drafts</h2><p className="mt-1 text-sm text-muted-foreground">Review agent-prepared copy here. Preparing a draft never sends it.</p></div>
-              {drafts.length ? <div className="space-y-3">{drafts.map((draft) => <article id={`draft-${draft.id}`} key={draft.id} className={`rounded-lg bg-background p-4 ${selectedId === draft.id ? "ring-2 ring-ring" : ""}`}><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-medium">{draft.subject}</h3><span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{draft.status}</span></div><p className="mt-1 text-xs text-muted-foreground">To {draft.toEmail} · {draft.kind}{draft.calendarAttached ? " · Calendar invite" : ""} · {draft.source === "agent" ? "Prepared by Operations Agent" : "Manual"}</p><p className="mt-3 whitespace-pre-wrap text-sm">{draft.body}</p></article>)}</div> : <EmptyState compact icon={Mail} title="No prepared drafts" message="Operations Agent proposals appear here only after organizer approval." />}
+              <div>
+                <h2 className="font-semibold">Prepared drafts</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Review agent-prepared copy here. Preparing a draft never sends
+                  it.
+                </p>
+              </div>
+              {drafts.length ? (
+                <div className="space-y-3">
+                  {drafts.map((draft) => (
+                    <article
+                      id={`draft-${draft.id}`}
+                      key={draft.id}
+                      className={`rounded-lg bg-background p-4 ${selectedId === draft.id ? "ring-2 ring-ring" : ""}`}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h3 className="font-medium">{draft.subject}</h3>
+                        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          {draft.status}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        To {draft.toEmail} · {draft.kind}
+                        {draft.calendarAttached
+                          ? " · Calendar invite"
+                          : ""} ·{" "}
+                        {draft.source === "agent"
+                          ? "Prepared by Operations Agent"
+                          : "Manual"}
+                      </p>
+                      <p className="mt-3 whitespace-pre-wrap text-sm">
+                        {draft.body}
+                      </p>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState
+                  compact
+                  icon={Mail}
+                  title="No prepared drafts"
+                  message="Operations Agent proposals appear here only after organizer approval."
+                />
+              )}
             </section>
           </TabsContent>
 
@@ -372,11 +473,45 @@ export default function Communications() {
                     icon={FileText}
                     title="Create your first message template"
                     message="Reuse consistent copy for confirmations, decisions, reminders, and calendar delivery."
-                    action={<Button type="button" variant="accent" size="sm" asChild><Link to={activeEvent ? `/events/${activeEvent.slug}/program/communications/templates/new/edit` : "#"}>New template</Link></Button>}
+                    action={
+                      <Button type="button" variant="accent" size="sm" asChild>
+                        <Link
+                          to={
+                            activeEvent
+                              ? `/events/${activeEvent.slug}/program/communications/templates/new/edit`
+                              : "#"
+                          }
+                        >
+                          New template
+                        </Link>
+                      </Button>
+                    }
                   />
                 </div>
               )}
             </section>
+          </TabsContent>
+
+          <TabsContent value="campaign" className="space-y-4">
+            <section className={cardSurfaceClasses("default", "space-y-4 p-5")}>
+              <div>
+                <h2 className="font-semibold">Campaign composer</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Selected contacts are resolved securely by the server for this event. Recipient details are never placed in the address bar or analytics.</p>
+              </div>
+              {crmContactIds.length ? (
+                <>
+                  <div className="space-y-2"><Label htmlFor="crm-campaign-subject">Subject</Label><Input id="crm-campaign-subject" value={campaignSubject} onChange={(event) => setCampaignSubject(event.target.value)} maxLength={200} disabled={campaignSending} /></div>
+                  <div className="space-y-2"><Label htmlFor="crm-campaign-body">Message</Label><Textarea id="crm-campaign-body" value={campaignBody} onChange={(event) => setCampaignBody(event.target.value)} maxLength={20_000} className="min-h-48 resize-y" disabled={campaignSending} /></div>
+                  <Button type="button" disabled={!campaignSubject.trim() || !campaignBody.trim() || campaignSending} onClick={() => setCampaignConfirmOpen(true)}><Send className="h-4 w-4" aria-hidden="true" />Review and send</Button>
+                </>
+              ) : (
+                <EmptyState compact icon={Mail} title="Select contacts to start a campaign" message="Choose contacts from the Contacts directory, then use Email selected." action={activeEvent ? <Button type="button" variant="outline" size="sm" asChild><Link to={`/events/${activeEvent.slug}/program/contacts`}>Open Contacts</Link></Button> : undefined} />
+              )}
+              {campaignResult && <p role="status" className="text-sm text-muted-foreground">{campaignResult}</p>}
+            </section>
+            <AlertDialog open={campaignConfirmOpen} onOpenChange={setCampaignConfirmOpen}>
+              <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Send this campaign?</AlertDialogTitle><AlertDialogDescription>The selected Contacts recipients will be resolved for the current event on the server. You cannot undo a send.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel disabled={campaignSending}>Cancel</AlertDialogCancel><AlertDialogAction onClick={(event) => { event.preventDefault(); void sendCampaign(); }} disabled={campaignSending}>{campaignSending ? "Sending…" : "Send campaign"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+            </AlertDialog>
           </TabsContent>
 
           <TabsContent value="test" className="space-y-4">
@@ -424,7 +559,10 @@ export default function Communications() {
                   <Send />
                   Preview confirmation
                 </Button>
-                <Button variant="outline" onClick={() => downloadInvite(activeEvent)}>
+                <Button
+                  variant="outline"
+                  onClick={() => downloadInvite(activeEvent)}
+                >
                   <CalendarDays />
                   Download .ics preview
                 </Button>
@@ -480,9 +618,27 @@ export default function Communications() {
               <div className={cardSurfaceClasses()}>
                 <EmptyState
                   icon={status === "all" ? Send : TriangleAlert}
-                  title={deliveries.length ? "No deliveries match this status" : "No delivery activity yet"}
-                  message={deliveries.length ? "Show all delivery attempts or choose another status." : "Confirmation, decision, reminder, and calendar deliveries will appear here after they run."}
-                  action={deliveries.length ? <Button variant="outline" size="sm" onClick={() => setStatus("all")}>Show all activity</Button> : undefined}
+                  title={
+                    deliveries.length
+                      ? "No deliveries match this status"
+                      : "No delivery activity yet"
+                  }
+                  message={
+                    deliveries.length
+                      ? "Show all delivery attempts or choose another status."
+                      : "Confirmation, decision, reminder, and calendar deliveries will appear here after they run."
+                  }
+                  action={
+                    deliveries.length ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setStatus("all")}
+                      >
+                        Show all activity
+                      </Button>
+                    ) : undefined
+                  }
                 />
               </div>
             )}

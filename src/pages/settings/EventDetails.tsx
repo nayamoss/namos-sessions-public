@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { useCurrentEvent } from "@/components/EventContext";
+import { useOptionalSettingsModal } from "@/components/settings/SettingsModalContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -45,6 +46,7 @@ const eventStatusLabels: Record<Event["status"], string> = {
 export default function EventDetails() {
   const repo = useRepo();
   const { event: activeEvent } = useCurrentEvent();
+  const settingsModal = useOptionalSettingsModal();
   const [event, setEvent] = useState<Omit<Event, "id"> & { id?: Event["id"] }>(
     blankEvent,
   );
@@ -54,6 +56,11 @@ export default function EventDetails() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  // What's currently persisted, so edits can be told apart from a fresh load/save. Nothing
+  // in this panel autosaves — Rooms/Tracks rows exist only in this component's state until
+  // Save is clicked — so without this, closing the settings modal (Escape, an outside click,
+  // switching tabs) silently threw away whatever the organizer had just typed.
+  const savedSnapshot = useRef("");
   const load = useCallback(async () => {
     setLoading(true);
     setError(undefined);
@@ -63,6 +70,7 @@ export default function EventDetails() {
         setEvent(blankEvent);
         setRooms([]);
         setTracks([]);
+        savedSnapshot.current = JSON.stringify([blankEvent, [], []]);
         return;
       }
       const [nextRooms, nextTracks] = await Promise.all([
@@ -72,6 +80,7 @@ export default function EventDetails() {
       setEvent(nextEvent);
       setRooms(nextRooms);
       setTracks(nextTracks);
+      savedSnapshot.current = JSON.stringify([nextEvent, nextRooms, nextTracks]);
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -85,6 +94,14 @@ export default function EventDetails() {
   useEffect(() => {
     void load();
   }, [load]);
+  useEffect(() => {
+    if (loading) return;
+    const dirty = JSON.stringify([event, rooms, tracks]) !== savedSnapshot.current;
+    settingsModal?.setHasUnsavedChanges(dirty);
+  }, [event, rooms, tracks, loading, settingsModal]);
+  // The panel can unmount (tab switch, modal close) without a render in between to report
+  // "clean" — clear the flag directly rather than relying on the effect above.
+  useEffect(() => () => settingsModal?.setHasUnsavedChanges(false), [settingsModal]);
   // Re-fetches only rooms/tracks (to pick up server-assigned ids for newly created rows).
   // Deliberately does NOT touch `event` — `save()` already holds the exact fields it just
   // persisted, and re-deriving `event` from `activeEvent` here would be wrong: that reactive
@@ -98,6 +115,7 @@ export default function EventDetails() {
       ]);
       setRooms(nextRooms);
       setTracks(nextTracks);
+      return { nextRooms, nextTracks };
     },
     [repo],
   );
@@ -117,6 +135,8 @@ export default function EventDetails() {
     try {
       await repo.events.save(next);
       setEvent(next);
+      savedSnapshot.current = JSON.stringify([next, rooms, tracks]);
+      settingsModal?.setHasUnsavedChanges(false);
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "Could not change this event's status.",
@@ -152,8 +172,11 @@ export default function EventDetails() {
           }),
         ),
       );
-      setEvent((current) => ({ ...current, id: eventId }));
-      await reloadCollections(eventId);
+      const savedEvent = { ...event, id: eventId };
+      setEvent(savedEvent);
+      const { nextRooms, nextTracks } = await reloadCollections(eventId);
+      savedSnapshot.current = JSON.stringify([savedEvent, nextRooms, nextTracks]);
+      settingsModal?.setHasUnsavedChanges(false);
       setError(undefined);
     } catch (error) {
       setError(
@@ -308,6 +331,20 @@ export default function EventDetails() {
                     }}
                   />
                 </FormField>
+                <FormField label="Schedule starts">
+                  <Input
+                    type="time"
+                    value={event.scheduleStartTime ?? "08:00"}
+                    onChange={(e) => update("scheduleStartTime", e.target.value)}
+                  />
+                </FormField>
+                <FormField label="Schedule ends">
+                  <Input
+                    type="time"
+                    value={event.scheduleEndTime ?? "18:00"}
+                    onChange={(e) => update("scheduleEndTime", e.target.value)}
+                  />
+                </FormField>
               </div>
               <FormField label="Theme">
                 <CharCounterInput
@@ -362,6 +399,14 @@ function Collection<Item extends EditableCollectionItem>({
   setItems: React.Dispatch<React.SetStateAction<Item[]>>;
   onRemove: (item: Item, index: number) => Promise<void>;
 }) {
+  const newestInputRef = useRef<HTMLInputElement>(null);
+  const focusNewestOnNextRender = useRef(false);
+  useEffect(() => {
+    if (focusNewestOnNextRender.current) {
+      focusNewestOnNextRender.current = false;
+      newestInputRef.current?.focus();
+    }
+  }, [items.length]);
   return (
     <section className={cardSurfaceClasses("default", "p-6")}>
       <div className="flex items-center justify-between">
@@ -369,7 +414,8 @@ function Collection<Item extends EditableCollectionItem>({
         <Button
           variant="outline"
           size="sm"
-          onClick={() =>
+          onClick={() => {
+            focusNewestOnNextRender.current = true;
             setItems((current) => [
               ...current,
               {
@@ -377,8 +423,8 @@ function Collection<Item extends EditableCollectionItem>({
                 name: "",
                 sortOrder: current.length,
               } as Item,
-            ])
-          }
+            ]);
+          }}
         >
           Add
         </Button>
@@ -387,6 +433,7 @@ function Collection<Item extends EditableCollectionItem>({
         {items.map((item, index) => (
           <div key={item.id ?? `new-${index}`} className="flex gap-2">
             <Input
+              ref={index === items.length - 1 ? newestInputRef : undefined}
               value={item.name}
               placeholder={`${title.slice(0, -1)} name`}
               onChange={(e) =>

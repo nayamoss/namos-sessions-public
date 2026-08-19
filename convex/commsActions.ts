@@ -17,6 +17,7 @@ import { calendarAttachment } from "../src/lib/calendar-invite-core.mjs";
 
 export type SendResult = { speakerId?: string; toEmail?: string; status: "sent" | "failed" | "skipped"; error?: string; reason?: string };
 export type SendBatch = { status: "sent" | "failed" | "skipped"; requested: number; sent: number; failed: number; skipped: number; results: SendResult[] };
+export type CrmCampaignSendBatch = { status: "sent" | "failed" | "skipped"; requested: number; sent: number; failed: number; skipped: number };
 
 function portalUrl(): string {
   const origin = process.env.PUBLIC_APP_ORIGIN;
@@ -33,6 +34,11 @@ function batch(results: SendResult[]): SendBatch {
   const failed = results.filter((result) => result.status === "failed").length;
   const skipped = results.filter((result) => result.status === "skipped").length;
   return { status: failed ? "failed" : sent ? "sent" : "skipped", requested: results.length, sent, failed, skipped, results };
+}
+
+function campaignHtml(body: string) {
+  const escape = (value: string) => value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
+  return body.split(/\r?\n/).map((line) => `<p>${escape(line) || "&nbsp;"}</p>`).join("");
 }
 
 function scheduleLabel(startTime: number | undefined, timeZone: string | undefined) {
@@ -171,6 +177,36 @@ export const sendConsolidatedDecision = action({
     await recordAttempt(ctx, { eventId: args.eventId, speakerId: speaker._id, templateId: template?._id, toEmail: speaker.email, subject, channel: "email", status: error ? "failed" : "sent", error });
     for (const item of agenda) await recordAttempt(ctx, { eventId: args.eventId, submissionId: item.submissionId, speakerId: speaker._id, templateId: template?._id, toEmail: speaker.email, subject, channel: "calendar_invite", status: error ? "failed" : "sent", error });
     return batch([error ? { speakerId: speaker._id, toEmail: speaker.email, status: "failed", error } : { speakerId: speaker._id, toEmail: speaker.email, status: "sent" }]);
+  },
+});
+
+export const sendCrmCampaign = action({
+  args: { eventId: v.id("events"), contactIds: v.array(v.id("crm_contacts")), subject: v.string(), body: v.string() },
+  handler: async (ctx, args): Promise<CrmCampaignSendBatch> => {
+    await assertEventOrganizerAction(ctx, args.eventId);
+    const subject = args.subject.trim();
+    const body = args.body.trim();
+    if (!subject || !body) throw new Error("A subject and message are required.");
+    if (subject.length > 200 || body.length > 20_000) throw new Error("Campaign content is too long.");
+    const contactIds = [...new Set(args.contactIds)];
+    if (!contactIds.length) throw new Error("Select at least one contact before sending.");
+    const recipients = await ctx.runQuery(internal.commsData.crmCampaignRecipients, { eventId: args.eventId, contactIds }) as Array<{ contactId: Id<"crm_contacts">; email: string }>;
+    const uniqueRecipients = [...new Map(recipients.map((recipient) => [recipient.email.toLowerCase(), recipient])).values()];
+    let sent = 0;
+    let failed = 0;
+    for (const recipient of uniqueRecipients) {
+      try {
+        await deliverEventEmail(ctx, args.eventId, { to: recipient.email, subject, text: body, html: campaignHtml(body) });
+        await recordAttempt(ctx, { eventId: args.eventId, toEmail: recipient.email, subject, channel: "email", status: "sent" });
+        sent += 1;
+      } catch (cause) {
+        const error = cause instanceof Error ? cause.message : "Email delivery failed.";
+        await recordAttempt(ctx, { eventId: args.eventId, toEmail: recipient.email, subject, channel: "email", status: "failed", error });
+        failed += 1;
+      }
+    }
+    const skipped = contactIds.length - uniqueRecipients.length;
+    return { status: failed ? "failed" : sent ? "sent" : "skipped", requested: contactIds.length, sent, failed, skipped };
   },
 });
 
