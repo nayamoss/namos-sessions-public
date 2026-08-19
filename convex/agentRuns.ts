@@ -69,6 +69,36 @@ export const list = query({
   },
 });
 
+export const suggestions = query({
+  args: { eventId: v.id("events") },
+  handler: async (ctx, args) => {
+    await assertEventOrganizerAccess(ctx, args.eventId);
+    const [event, submissions, speakers, tasks, assignments, evaluations, communications] = await Promise.all([
+      ctx.db.get(args.eventId),
+      ctx.db.query("submissions").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("speakers").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("onboarding_tasks").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("evaluation_assignments").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("evaluations").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("comms_log").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+    ]);
+    const completedAssignmentIds = new Set(evaluations.filter((row) => row.assignmentId && (row.score !== undefined || row.criteriaScores?.some((criterion) => criterion.value !== undefined || Boolean(criterion.text?.trim())))).map((row) => row.assignmentId));
+    const incompleteReviews = assignments.filter((row) => !completedAssignmentIds.has(row._id));
+    const notifiedSubmissionIds = new Set(communications.filter((row) => row.status === "sent" && row.submissionId).map((row) => row.submissionId));
+    const acceptedUnnotified = submissions.filter((row) => row.status === "accepted" && row.speakerId && !notifiedSubmissionIds.has(row._id));
+    const overdueTasks = tasks.filter((row) => row.status !== "completed" && row.dueDate !== undefined && row.dueDate < Date.now());
+    const unconfirmedSpeakers = speakers.filter((row) => row.confirmationStatus !== "confirmed");
+    const slug = event?.slug ?? "";
+    const base = `/events/${slug}`;
+    return [
+      ...(acceptedUnnotified.length ? [{ id: "accepted-unnotified", label: `${acceptedUnnotified.length} accepted speaker${acceptedUnnotified.length === 1 ? " has" : "s have"} not been notified`, objective: `Inspect the ${acceptedUnnotified.length} accepted submission${acceptedUnnotified.length === 1 ? "" : "s"} whose speakers have not been notified, then prepare exact acceptance message drafts for approval.`, evidenceCount: acceptedUnnotified.length, sourcePath: `${base}/program/communications` }] : []),
+      ...(incompleteReviews.length ? [{ id: "incomplete-reviews", label: `${incompleteReviews.length} review${incompleteReviews.length === 1 ? " is" : "s are"} incomplete`, objective: `Inspect the ${incompleteReviews.length} incomplete review assignment${incompleteReviews.length === 1 ? "" : "s"} and summarize the concrete coverage gaps.`, evidenceCount: incompleteReviews.length, sourcePath: `${base}/program/evaluation` }] : []),
+      ...(overdueTasks.length ? [{ id: "overdue-tasks", label: `${overdueTasks.length} speaker task${overdueTasks.length === 1 ? " is" : "s are"} overdue`, objective: `Inspect the ${overdueTasks.length} overdue speaker task${overdueTasks.length === 1 ? "" : "s"} and prepare targeted follow-up work for approval.`, evidenceCount: overdueTasks.length, sourcePath: `${base}/portals/tasks` }] : []),
+      ...(unconfirmedSpeakers.length ? [{ id: "unconfirmed-speakers", label: `${unconfirmedSpeakers.length} speaker${unconfirmedSpeakers.length === 1 ? " needs" : "s need"} confirmation`, objective: `Inspect the ${unconfirmedSpeakers.length} speakers awaiting confirmation and report the exact records that need organizer attention.`, evidenceCount: unconfirmedSpeakers.length, sourcePath: `${base}/program/speakers` }] : []),
+    ].slice(0, 4);
+  },
+});
+
 export const get = query({
   args: { eventId: v.id("events"), runId: v.id("agent_runs") },
   handler: async (ctx, args) => {
@@ -169,13 +199,14 @@ export const approveTaskProposal = mutation({
   handler: async (ctx, args) => {
     const identity = await assertEventOrganizerAccess(ctx, args.eventId);
     const proposal = await ctx.db.get(args.proposalId);
-    if (!proposal || proposal.eventId !== args.eventId) throw new Error("Task proposal not found for this event.");
+    if (!proposal || proposal.eventId !== args.eventId) throw new Error("Agent proposal not found for this event.");
     const run = await ctx.db.get(proposal.runId);
     if (!run || run.eventId !== args.eventId) throw new Error("Agent run not found for this event.");
     if (args.expectedPayloadHash !== proposal.payloadHash) throw new Error("This proposal changed. Reload before approving.");
     if (proposal.status === "applied") return { createdTaskIds: proposal.createdTaskIds ?? [] };
     if (proposal.status !== "pending" || run.status !== "needs_approval") throw new Error("This proposal is no longer pending approval.");
     const createdTaskIds: Id<"onboarding_tasks">[] = [];
+    if (proposal.kind !== "create_tasks" || !proposal.tasks) throw new Error("This is not a task proposal.");
     for (const task of proposal.tasks) {
       createdTaskIds.push(await validateAndCreateTask(ctx, {
         eventId: proposal.eventId,
@@ -194,6 +225,50 @@ export const approveTaskProposal = mutation({
     await ctx.db.patch(run._id, { status: "completed", completedAt: now, updatedAt: now });
     await appendEvent(ctx, run, "approval", `Approved and created ${createdTaskIds.length} task${createdTaskIds.length === 1 ? "" : "s"}.`);
     return { createdTaskIds };
+  },
+});
+
+export const approveMessageProposal = mutation({
+  args: { eventId: v.id("events"), proposalId: v.id("agent_action_proposals"), expectedPayloadHash: v.string() },
+  handler: async (ctx, args) => {
+    const identity = await assertEventOrganizerAccess(ctx, args.eventId);
+    const proposal = await ctx.db.get(args.proposalId);
+    if (!proposal || proposal.eventId !== args.eventId || proposal.kind !== "prepare_message_drafts" || !proposal.messages) throw new Error("Message proposal not found for this event.");
+    const run = await ctx.db.get(proposal.runId);
+    if (!run || run.eventId !== args.eventId) throw new Error("Agent run not found for this event.");
+    if (args.expectedPayloadHash !== proposal.payloadHash) throw new Error("This proposal changed. Reload before approving.");
+    if (proposal.status === "applied") return { createdDraftIds: proposal.createdDraftIds ?? [] };
+    if (proposal.status !== "pending" || run.status !== "needs_approval") throw new Error("This proposal is no longer pending approval.");
+    const now = Date.now();
+    const createdDraftIds: Id<"communication_drafts">[] = [];
+    for (const message of proposal.messages) {
+      const speaker = await ctx.db.get(message.speakerId);
+      if (!speaker || speaker.eventId !== args.eventId) throw new Error("A proposed recipient no longer belongs to this event.");
+      let submission: Doc<"submissions"> | null = null;
+      if (message.submissionId) {
+        submission = await ctx.db.get(message.submissionId);
+        if (!submission || submission.eventId !== args.eventId) throw new Error("A proposed submission no longer belongs to this event.");
+        const agenda = await ctx.db.query("agenda_items").withIndex("by_submission", (q) => q.eq("submissionId", submission!._id)).first();
+        if (submission.speakerId !== speaker._id && !agenda?.speakerIds.includes(speaker._id)) throw new Error("A proposed recipient is not attached to this submission.");
+      }
+      if ((message.kind === "acceptance" || message.kind === "rejection") && !submission) throw new Error("A decision draft must reference its submission.");
+      if (message.kind === "acceptance" && submission?.status !== "accepted") throw new Error("An acceptance draft requires an accepted submission.");
+      if (message.kind === "rejection" && submission?.status !== "declined") throw new Error("A rejection draft requires a declined submission.");
+      if (message.calendarAttached) {
+        if (!submission) throw new Error("A calendar attachment needs a scheduled submission.");
+        const agenda = await ctx.db.query("agenda_items").withIndex("by_submission", (q) => q.eq("submissionId", submission!._id)).first();
+        if (!agenda) throw new Error("A calendar attachment needs a scheduled submission.");
+      }
+      if (message.templateId) {
+        const template = await ctx.db.get(message.templateId);
+        if (!template || template.eventId !== args.eventId) throw new Error("A proposed template no longer belongs to this event.");
+      }
+      createdDraftIds.push(await ctx.db.insert("communication_drafts", { eventId: args.eventId, proposalId: proposal._id, runId: run._id, speakerId: speaker._id, submissionId: message.submissionId, templateId: message.templateId, kind: message.kind, toEmail: speaker.email, subject: message.subject, body: message.body, calendarAttached: message.calendarAttached, status: "draft", source: "agent", createdByUserId: identity.subject, createdAt: now, updatedAt: now }));
+    }
+    await ctx.db.patch(proposal._id, { status: "applied", decidedByUserId: identity.subject, decidedAt: now, appliedAt: now, createdDraftIds, updatedAt: now });
+    await ctx.db.patch(run._id, { status: "completed", completedAt: now, updatedAt: now });
+    await appendEvent(ctx, run, "approval", `Approved and prepared ${createdDraftIds.length} message draft${createdDraftIds.length === 1 ? "" : "s"}. Nothing was sent.`);
+    return { createdDraftIds };
   },
 });
 

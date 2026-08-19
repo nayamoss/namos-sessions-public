@@ -158,6 +158,11 @@ export const portalSpeakerIdentity = query({
         ? identity.email.trim().toLowerCase()
         : undefined;
     if (email) {
+      const directSpeaker = await ctx.db.query("speakers").withIndex("by_email", (q) => q.eq("email", email)).first();
+      if (directSpeaker) {
+        const directEvent = await ctx.db.get(directSpeaker.eventId);
+        if (directEvent) return { event: directEvent, speaker: directSpeaker, publishedEvents: directEvent.status === "published" ? [directEvent] : [] };
+      }
       for (const event of reachable) {
         // Compare lowercased rather than using the by_event_email index directly: stored
         // addresses are not normalized, so an index equality check would miss "Naya@..."

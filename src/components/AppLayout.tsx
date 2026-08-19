@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import {
   CalendarClock,
   CalendarDays,
+  BookOpen,
   ChevronDown,
   LayoutDashboard,
   ClipboardCheck,
@@ -85,6 +86,7 @@ const navSections: DashboardNavSection[] = [
     items: [
       { to: "/portals/forms", label: "Portal forms", icon: FileText },
       { to: "/portals/tasks", label: "Speaker tasks", icon: ListTodo },
+      { to: "/portals/resources", label: "Resources", icon: BookOpen },
     ],
   },
   // Running the event day-to-day, as opposed to configuring how it's set up

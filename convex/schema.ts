@@ -169,6 +169,41 @@ export default defineSchema({
     status: v.union(v.literal("draft"), v.literal("published"), v.literal("archived")),
     createdAt: v.number(), updatedAt: v.number(),
   }).index("by_slug", ["slug"]).index("by_organization", ["organizationId"]),
+  // Short-lived, isolated judge/demo tenants. Browser code never reads this table directly:
+  // lifecycle operations cross the secret-protected Worker -> Convex HTTP boundary.
+  demo_workspaces: defineTable({
+    workspaceId: v.string(),
+    organizationId: v.id("organizations"),
+    eventId: v.id("events"),
+    organizerUserId: v.string(),
+    reviewerUserId: v.string(),
+    speakerUserId: v.string(),
+    organizerEmail: v.string(),
+    reviewerEmail: v.string(),
+    speakerEmail: v.string(),
+    activeRole: v.union(v.literal("organizer"), v.literal("reviewer"), v.literal("speaker")),
+    createdAt: v.number(),
+    lastActiveAt: v.number(),
+    expiresAt: v.number(),
+    absoluteExpiresAt: v.number(),
+  })
+    .index("by_workspaceId", ["workspaceId"])
+    .index("by_event", ["eventId"])
+    .index("by_expiresAt", ["expiresAt"]),
+  // Captured outbound messages for demo tenants. These rows are the proof artifact; demo
+  // delivery paths must write here instead of contacting an email provider.
+  demo_deliveries: defineTable({
+    workspaceId: v.string(),
+    eventId: v.id("events"),
+    toEmail: v.string(),
+    subject: v.string(),
+    bodyHtml: v.string(),
+    attachmentName: v.optional(v.string()),
+    attachmentContent: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_workspace_createdAt", ["workspaceId", "createdAt"])
+    .index("by_event", ["eventId"]),
   api_tokens: defineTable({
     // A token is scoped to exactly one event — never a bare organizer-wide grant. Without
     // this, any organizer's token (or the organizer-session token routes) could read/act on
@@ -236,6 +271,18 @@ export default defineSchema({
   }).index("by_event", ["eventId"]),
   field_definitions: defineTable({ label: v.string(), type: v.union(v.literal("text"), v.literal("wysiwyg"), v.literal("dropdown"), v.literal("multiselect"), v.literal("email"), v.literal("phone"), v.literal("file"), v.literal("date"), v.literal("number")), maxChars: v.optional(v.number()), options: v.optional(v.array(v.string())), locked: v.boolean(), required: v.boolean(), showIf: v.optional(v.object({ fieldId: v.string(), equals: v.string() })), createdAt: v.number(), updatedAt: v.number() }),
   form_responses: defineTable({ eventId: v.id("events"), formId: v.id("submission_forms"), speakerId: v.id("speakers"), submissionId: v.optional(v.id("submissions")), answers: v.record(v.string(), v.string()), createdAt: v.number(), updatedAt: v.number() }).index("by_form_speaker", ["formId", "speakerId"]).index("by_event", ["eventId"]),
+  portal_resource_pages: defineTable({
+    eventId: v.id("events"),
+    title: v.string(),
+    slug: v.string(),
+    bodyHtml: v.string(),
+    status: v.union(v.literal("draft"), v.literal("published")),
+    sortOrder: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_event", ["eventId"])
+    .index("by_event_slug", ["eventId", "slug"]),
   // The organization directory is deliberately separate from the legacy event-scoped speaker
   // record. The optional contactId on speakers below permits a zero-downtime backfill and keeps
   // portal identity, agenda, and task links stable while one person appears in many events.
@@ -302,7 +349,7 @@ export default defineSchema({
     status: v.union(v.literal("invited"), v.literal("active"), v.literal("inactive")),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_event", ["eventId"]).index("by_event_email", ["eventId", "email"]).index("by_event_contact", ["eventId", "contactId"]).index("by_event_sourceRef", ["eventId", "sourceRef"]).index("by_event_checkedIn", ["eventId", "checkedInAt"]),
+  }).index("by_event", ["eventId"]).index("by_email", ["email"]).index("by_event_email", ["eventId", "email"]).index("by_event_contact", ["eventId", "contactId"]).index("by_event_sourceRef", ["eventId", "sourceRef"]).index("by_event_checkedIn", ["eventId", "checkedInAt"]),
   speaker_documents: defineTable({
     submissionId: v.id("submissions"),
     speakerId: v.id("speakers"),
@@ -547,8 +594,8 @@ export default defineSchema({
   agent_action_proposals: defineTable({
     eventId: v.id("events"),
     runId: v.id("agent_runs"),
-    kind: v.literal("create_tasks"),
-    tasks: v.array(v.object({
+    kind: v.union(v.literal("create_tasks"), v.literal("prepare_message_drafts")),
+    tasks: v.optional(v.array(v.object({
       title: v.string(),
       targetType: v.union(v.literal("contact"), v.literal("group"), v.literal("submission"), v.literal("sponsor")),
       speakerId: v.optional(v.id("speakers")),
@@ -557,7 +604,17 @@ export default defineSchema({
       linkedFormId: v.optional(v.id("submission_forms")),
       dueDate: v.optional(v.number()),
       reason: v.string(),
-    })),
+    }))),
+    messages: v.optional(v.array(v.object({
+      speakerId: v.id("speakers"),
+      submissionId: v.optional(v.id("submissions")),
+      templateId: v.optional(v.id("comms_templates")),
+      kind: v.union(v.literal("acceptance"), v.literal("rejection"), v.literal("reminder"), v.literal("custom")),
+      subject: v.string(),
+      body: v.string(),
+      calendarAttached: v.boolean(),
+      reason: v.string(),
+    }))),
     payloadHash: v.string(),
     summary: v.string(),
     status: v.union(v.literal("pending"), v.literal("rejected"), v.literal("applying"), v.literal("applied"), v.literal("failed"), v.literal("superseded")),
@@ -567,12 +624,31 @@ export default defineSchema({
     decidedAt: v.optional(v.number()),
     appliedAt: v.optional(v.number()),
     createdTaskIds: v.optional(v.array(v.id("onboarding_tasks"))),
+    createdDraftIds: v.optional(v.array(v.id("communication_drafts"))),
     error: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_run", ["runId"])
     .index("by_event_status", ["eventId", "status"]),
+  communication_drafts: defineTable({
+    eventId: v.id("events"),
+    proposalId: v.optional(v.id("agent_action_proposals")),
+    runId: v.optional(v.id("agent_runs")),
+    speakerId: v.id("speakers"),
+    submissionId: v.optional(v.id("submissions")),
+    templateId: v.optional(v.id("comms_templates")),
+    kind: v.union(v.literal("acceptance"), v.literal("rejection"), v.literal("reminder"), v.literal("custom")),
+    toEmail: v.string(),
+    subject: v.string(),
+    body: v.string(),
+    calendarAttached: v.boolean(),
+    status: v.union(v.literal("draft"), v.literal("sent"), v.literal("discarded")),
+    source: v.union(v.literal("agent"), v.literal("manual")),
+    createdByUserId: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_event", ["eventId"]).index("by_proposal", ["proposalId"]),
   task_templates: defineTable({
     eventId: v.id("events"), name: v.string(), description: v.optional(v.string()),
     items: v.array(v.object({ title: v.string(), description: v.optional(v.string()), targetType: v.union(v.literal("contact"), v.literal("group"), v.literal("submission"), v.literal("sponsor")), linkedFormId: v.optional(v.id("submission_forms")), dueDateOffsetDays: v.optional(v.number()) })),
@@ -756,13 +832,13 @@ export default defineSchema({
     eventId: v.id("events"), userId: v.string(), target: v.union(v.literal("speakers"), v.literal("submissions")),
     verifierEnvelope: v.optional(v.object({ version: v.literal(1), iv: v.string(), ciphertext: v.string(), tag: v.string() })),
     expiresAt: v.number(), createdAt: v.number(),
-  }).index("by_stateHash", ["stateHash"]),
+  }).index("by_stateHash", ["stateHash"]).index("by_event", ["eventId"]),
   content_oauth_pending: defineTable({
     pendingId: v.string(), provider: v.union(v.literal("notion"), v.literal("airtable")),
     eventId: v.id("events"), userId: v.string(), target: v.union(v.literal("speakers"), v.literal("submissions")),
     credentialEnvelope: v.object({ version: v.literal(1), iv: v.string(), ciphertext: v.string(), tag: v.string() }),
     oauthExpiresAt: v.optional(v.number()), expiresAt: v.number(), createdAt: v.number(),
-  }).index("by_pendingId", ["pendingId"]),
+  }).index("by_pendingId", ["pendingId"]).index("by_event", ["eventId"]),
   // A browser receives only this opaque capability after a public CFP submission. The
   // server-side email handler exchanges it for the linked records, so database ids never
   // have to travel through the public form or its confirmation request.
@@ -778,5 +854,5 @@ export default defineSchema({
     // attempted, even if every later step (secret config, provider config, the
     // send itself) fails. See #46.
     commsLogId: v.optional(v.id("comms_log")),
-  }).index("by_token", ["token"]),
+  }).index("by_token", ["token"]).index("by_event", ["eventId"]),
 });

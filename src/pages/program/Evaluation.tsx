@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";
 import { ListChecks } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
@@ -107,6 +108,8 @@ function isRecorded(review: Evaluation | undefined): boolean {
 export default function Evaluation() {
   const repo = useRepo();
   const { event: activeEvent } = useCurrentEvent();
+  const [searchParams] = useSearchParams();
+  const requestedAssignmentId = searchParams.get("assignment") ?? undefined;
   // Reviewer identity is the signed-in Clerk account's email — the same identifier the
   // organizer types when assigning reviewers, and the same one convex/evaluations.ts checks
   // assignment ownership against. There is no picker: you can only ever review as yourself.
@@ -371,6 +374,22 @@ export default function Evaluation() {
     queueRows[0];
   const queueBlinded = queueRows.some((row) => row.anonymized);
   const open = queueRows.filter((row) => !isScored(row));
+
+  useEffect(() => {
+    if (!requestedAssignmentId) return;
+    const queueRow = queueRows.find((row) => row.id === requestedAssignmentId);
+    if (queueRow) {
+      setSurface("queue");
+      setActiveAssignmentId(queueRow.id);
+      return;
+    }
+    const assignment = assignments.find((row) => row.id === requestedAssignmentId);
+    if (!assignment) return;
+    setSurface("plans");
+    setSelectedPlanId(assignment.evaluationPlanId);
+    setPlanWorkspaceTab("assignments");
+    setSelectedSubmissionIds([assignment.submissionId]);
+  }, [assignments, queueRows, requestedAssignmentId]);
 
   useEffect(() => {
     if (!active) {

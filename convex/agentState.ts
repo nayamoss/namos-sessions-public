@@ -14,6 +14,17 @@ export const proposedTaskValidator = v.object({
   reason: v.string(),
 });
 
+export const proposedMessageValidator = v.object({
+  speakerId: v.id("speakers"),
+  submissionId: v.optional(v.id("submissions")),
+  templateId: v.optional(v.id("comms_templates")),
+  kind: v.union(v.literal("acceptance"), v.literal("rejection"), v.literal("reminder"), v.literal("custom")),
+  subject: v.string(),
+  body: v.string(),
+  calendarAttached: v.boolean(),
+  reason: v.string(),
+});
+
 async function nextSequence(ctx: MutationCtx, runId: Id<"agent_runs">) {
   const latest = await ctx.db.query("agent_run_events").withIndex("by_run_sequence", (q) => q.eq("runId", runId)).order("desc").first();
   return (latest?.sequence ?? 0) + 1;
@@ -90,6 +101,20 @@ export const saveProposal = internalMutation({
     const now = Date.now();
     const proposalId = await ctx.db.insert("agent_action_proposals", { eventId: run.eventId, runId: run._id, kind: "create_tasks", tasks: args.tasks, payloadHash: args.payloadHash, summary: args.summary.trim().slice(0, 1000), status: "pending", proposedByToolCallId: args.toolCallId, createdAt: now, updatedAt: now });
     await ctx.db.insert("agent_run_events", { eventId: run.eventId, runId: run._id, sequence: await nextSequence(ctx, run._id), type: "proposal", message: `Proposed ${args.tasks.length} task${args.tasks.length === 1 ? "" : "s"} for approval.`, toolName: "propose_create_tasks", toolCallId: args.toolCallId, detailsJson: JSON.stringify({ proposalId, count: args.tasks.length, payloadHash: args.payloadHash }), createdAt: now });
+    await ctx.db.patch(run._id, { status: "needs_approval", updatedAt: now });
+    return proposalId;
+  },
+});
+
+export const saveMessageProposal = internalMutation({
+  args: { runId: v.id("agent_runs"), summary: v.string(), messages: v.array(proposedMessageValidator), payloadHash: v.string(), toolCallId: v.string() },
+  handler: async (ctx, args) => {
+    const run = await ctx.db.get(args.runId);
+    if (!run || run.status !== "running") throw new Error("This run cannot propose message drafts now.");
+    if (args.messages.length < 1 || args.messages.length > 50) throw new Error("A message proposal must contain between 1 and 50 drafts.");
+    const now = Date.now();
+    const proposalId = await ctx.db.insert("agent_action_proposals", { eventId: run.eventId, runId: run._id, kind: "prepare_message_drafts", messages: args.messages, payloadHash: args.payloadHash, summary: args.summary.trim().slice(0, 1000), status: "pending", proposedByToolCallId: args.toolCallId, createdAt: now, updatedAt: now });
+    await ctx.db.insert("agent_run_events", { eventId: run.eventId, runId: run._id, sequence: await nextSequence(ctx, run._id), type: "proposal", message: `Prepared ${args.messages.length} message draft${args.messages.length === 1 ? "" : "s"} for approval. Nothing has been sent.`, toolName: "propose_message_drafts", toolCallId: args.toolCallId, detailsJson: JSON.stringify({ proposalId, count: args.messages.length, payloadHash: args.payloadHash }), createdAt: now });
     await ctx.db.patch(run._id, { status: "needs_approval", updatedAt: now });
     return proposalId;
   },

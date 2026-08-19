@@ -19,6 +19,10 @@ body,
   min-height: 100%;
 }
 
+body.demo-workspace-active {
+  padding-bottom: 8rem;
+}
+
 @layer base {
   :root {
     color-scheme: light;

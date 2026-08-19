@@ -33,6 +33,8 @@
     "CFP_RATE_LIMIT_FORM_MAX": "300",
     "CFP_RATE_LIMIT_FORM_WINDOW_SECONDS": "3600",
     "CFP_RATE_LIMIT_EMAIL_MAX": "5",
-    "CFP_RATE_LIMIT_EMAIL_WINDOW_SECONDS": "3600"
-  }
+    "CFP_RATE_LIMIT_EMAIL_WINDOW_SECONDS": "3600",
+    "DEMO_ENABLED": "true"
+  },
+  "triggers": { "crons": ["*/15 * * * *"] }
 }

@@ -102,6 +102,7 @@ export interface SpeakerImportRow { firstName: string; lastName: string; email: 
 export interface SpeakerImportResult { importedSpeakers: number; importedTalks: number; skipped: Array<{ row: number; reason: string }>; }
 export type SpeakerDocumentKind = "slides" | "supporting_doc";
 export interface SpeakerDocument { id: string; submissionId: SubmissionId; speakerId: SpeakerId; kind: SpeakerDocumentKind; fileUrl: string; fileName: string; createdAt: number; }
+export interface PortalResourcePage { id: string; eventId: EventId; title: string; slug: string; bodyHtml: string; status: "draft" | "published"; sortOrder: number; createdAt: number; updatedAt: number; }
 // A named scoring dimension on an evaluation plan. `max`/`weight` apply to `number` criteria
 // only — a `text` criterion is a free response and is deliberately excluded from the total.
 export interface EvaluationCriterion { id: string; label: string; type: "number" | "text"; max?: number; weight?: number; required: boolean; }
@@ -146,11 +147,20 @@ export interface AgentRun { id: AgentRunId; eventId: EventId; threadId?: string;
 export type AgentRunEventType = "user_message" | "assistant_message" | "progress" | "tool_call" | "tool_result" | "clarification" | "proposal" | "approval" | "error";
 export interface AgentRunEvent { id: string; eventId: EventId; runId: AgentRunId; sequence: number; type: AgentRunEventType; message: string; toolName?: string; toolCallId?: string; detailsJson?: string; durationMs?: number; createdAt: number; }
 export interface AgentProposedTask { title: string; targetType: OnboardingTask["targetType"]; speakerId?: SpeakerId; submissionId?: SubmissionId; sponsorId?: SponsorId; linkedFormId?: FormId; dueDate?: number; reason: string; }
+export interface AgentProposedMessage { speakerId: SpeakerId; submissionId?: SubmissionId; templateId?: string; kind: "acceptance" | "rejection" | "reminder" | "custom"; subject: string; body: string; calendarAttached: boolean; reason: string; }
 export interface AgentTaskProposal { id: AgentProposalId; eventId: EventId; runId: AgentRunId; kind: "create_tasks"; tasks: AgentProposedTask[]; payloadHash: string; summary: string; status: "pending" | "rejected" | "applying" | "applied" | "failed" | "superseded"; proposedByToolCallId: string; decidedByUserId?: string; decisionReason?: string; decidedAt?: number; appliedAt?: number; createdTaskIds?: TaskId[]; error?: string; createdAt: number; updatedAt: number; }
-export interface AgentRunDetail { run: AgentRun; events: AgentRunEvent[]; proposals: AgentTaskProposal[]; }
+export interface AgentMessageProposal { id: AgentProposalId; eventId: EventId; runId: AgentRunId; kind: "prepare_message_drafts"; messages: AgentProposedMessage[]; payloadHash: string; summary: string; status: AgentTaskProposal["status"]; proposedByToolCallId: string; decidedByUserId?: string; decisionReason?: string; decidedAt?: number; appliedAt?: number; createdDraftIds?: string[]; error?: string; createdAt: number; updatedAt: number; }
+export type AgentActionProposal = AgentTaskProposal | AgentMessageProposal;
+export interface AgentSuggestion { id: string; label: string; objective: string; evidenceCount: number; sourcePath: string; }
+export interface AgentRunDetail { run: AgentRun; events: AgentRunEvent[]; proposals: AgentActionProposal[]; }
+export interface CommunicationDraft { id: string; eventId: EventId; proposalId?: AgentProposalId; runId?: AgentRunId; speakerId: SpeakerId; submissionId?: SubmissionId; templateId?: string; kind: AgentProposedMessage["kind"]; toEmail: string; subject: string; body: string; calendarAttached: boolean; status: "draft" | "sent" | "discarded"; source: "agent" | "manual"; createdByUserId: string; createdAt: number; updatedAt: number; }
 export type TaskTemplateItem = { title: string; description?: string; targetType: OnboardingTask["targetType"]; linkedFormId?: FormId; dueDateOffsetDays?: number };
 export interface TaskTemplate { id: string; eventId: EventId; name: string; description?: string; items: TaskTemplateItem[]; isSeeded: boolean; }
 export interface Comm { id: string; eventId: EventId; type: string; speakerId?: SpeakerId; status?: "queued" | "sent" | "failed"; sentAt?: number; createdAt?: number; }
+export type ControlRoomCategoryKind = "decisions" | "reviews" | "acceptance_emails" | "overdue_tasks" | "missing_assets" | "unscheduled" | "conflicts" | "publication_blockers";
+export interface ControlRoomItem { id: string; kind: ControlRoomCategoryKind; title: string; detail: string; href: string; severity: "attention" | "blocking"; }
+export interface ControlRoomWalkthroughStep { id: string; label: string; complete: boolean; href: string; }
+export interface ControlRoomState { generatedAt: number; categories: Record<ControlRoomCategoryKind, ControlRoomItem[]>; walkthrough: ControlRoomWalkthroughStep[]; }
 export interface EventAnalyticsSummary {
   version: 1;
   generatedAt: number;
@@ -305,7 +315,6 @@ export interface Embed { id: EmbedId; eventId: EventId; name: string; format: "s
 export type EmbedWrite = Omit<Embed, "id" | "createdAt" | "updatedAt"> & { id?: EmbedId };
 export interface PublicEmbedSession { key: string; title: string; startTime?: number; endTime?: number; roomName?: string; trackKey?: string; trackName?: string; speakerNames?: string[]; }
 export interface PublicEmbedView { name: string; view: EmbedView; theme: EmbedTheme; primaryColor: string; dateFormat: EmbedDateFormat; timeFormat: EmbedTimeFormat; event: { name: string; timezone: string }; tracks: Array<{ key: string; name: string }>; sessions: PublicEmbedSession[]; speakers: Array<{ key: string; name: string; headshotUrl?: string; bio?: string; links?: PublicEmbedSpeakerLink[]; sessions?: Array<{ title: string; startTime?: number; roomName?: string }> }>; }
-
 // These are deliberately projection-only types for unauthenticated embeds. They contain no
 // database record ids, email addresses, internal statuses, or draft data. `sessionKey` is an
 // opaque public keys derived server-side solely for shareable attendee URLs and DOM anchors.

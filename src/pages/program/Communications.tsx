@@ -21,14 +21,14 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useRepo } from "@/data/repo";
-import type { Comm, CommTemplate, Event } from "@/data/types";
+import type { Comm, CommTemplate, CommunicationDraft, Event } from "@/data/types";
 import { calendarInvite } from "@/lib/calendar-invite";
 import { submissionConfirmationEmail } from "@/lib/confirmation-email";
 import { templateKinds } from "./CommTemplateEditor";
 
 type DeliveryStatus = "queued" | "sent" | "failed";
 type DeliveryChannel = "email" | "calendar_invite";
-type CommTab = "templates" | "test" | "activity";
+type CommTab = "drafts" | "templates" | "test" | "activity";
 
 type Delivery = {
   id: string;
@@ -115,6 +115,7 @@ export default function Communications() {
   const selectedId = searchParams.get("selected");
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [templates, setTemplates] = useState<CommTemplate[]>([]);
+  const [drafts, setDrafts] = useState<CommunicationDraft[]>([]);
   const [eventName, setEventName] = useState("Your event");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string>();
@@ -133,12 +134,14 @@ export default function Communications() {
       if (!event) {
         setDeliveries([]);
         setTemplates([]);
+        setDrafts([]);
         setEventName("Your event");
         return;
       }
       setEventName(event.name);
-      const log = await repo.comms.list({ eventId: event.id });
+      const [log, preparedDrafts] = await Promise.all([repo.comms.list({ eventId: event.id }), repo.comms.listDrafts({ eventId: event.id })]);
       setDeliveries(createDeliveries(log as CommDocument[]));
+      setDrafts(preparedDrafts);
       try {
         const savedTemplates = await repo.comms.listTemplates({
           eventId: event.id,
@@ -168,14 +171,19 @@ export default function Communications() {
   // filter can't hide the row the link promised.
   useEffect(() => {
     if (!selectedId) return;
+    if (drafts.some((draft) => draft.id === selectedId)) {
+      setTab("drafts");
+      return;
+    }
     setTab("activity");
     const target = deliveries.find((delivery) => delivery.id === selectedId);
     if (target) setStatus(target.status);
-  }, [deliveries, selectedId]);
+  }, [deliveries, drafts, selectedId]);
 
   useEffect(() => {
     if (!selectedId) return;
     rowRefs.current.get(selectedId)?.scrollIntoView({ block: "center" });
+    document.getElementById(`draft-${selectedId}`)?.scrollIntoView({ block: "center" });
   }, [selectedId, deliveries, status]);
 
   const visibleDeliveries = useMemo(
@@ -296,10 +304,18 @@ export default function Communications() {
 
         <Tabs value={tab} onValueChange={(value) => setTab(value as CommTab)}>
           <TabsList>
+            <TabsTrigger value="drafts">Drafts{drafts.length ? ` (${drafts.length})` : ""}</TabsTrigger>
             <TabsTrigger value="templates">Templates</TabsTrigger>
             <TabsTrigger value="test">Test &amp; preview</TabsTrigger>
             <TabsTrigger value="activity">Activity log</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="drafts" className="space-y-4">
+            <section className={cardSurfaceClasses("default", "space-y-4 p-5")}>
+              <div><h2 className="font-semibold">Prepared drafts</h2><p className="mt-1 text-sm text-muted-foreground">Review agent-prepared copy here. Preparing a draft never sends it.</p></div>
+              {drafts.length ? <div className="space-y-3">{drafts.map((draft) => <article id={`draft-${draft.id}`} key={draft.id} className={`rounded-lg bg-background p-4 ${selectedId === draft.id ? "ring-2 ring-ring" : ""}`}><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-medium">{draft.subject}</h3><span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{draft.status}</span></div><p className="mt-1 text-xs text-muted-foreground">To {draft.toEmail} · {draft.kind}{draft.calendarAttached ? " · Calendar invite" : ""} · {draft.source === "agent" ? "Prepared by Operations Agent" : "Manual"}</p><p className="mt-3 whitespace-pre-wrap text-sm">{draft.body}</p></article>)}</div> : <EmptyState compact icon={Mail} title="No prepared drafts" message="Operations Agent proposals appear here only after organizer approval." />}
+            </section>
+          </TabsContent>
 
           <TabsContent value="templates" className="space-y-4">
             <section className={cardSurfaceClasses("default", "space-y-4 p-5")}>

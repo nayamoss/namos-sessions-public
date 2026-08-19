@@ -19,6 +19,7 @@ import type {
   CommSendResult,
   CommTemplate,
   CommTemplateWrite,
+  CommunicationDraft,
   CrossFieldLimit,
   AirtableConnectInput,
   AirtableImportResult,
@@ -54,6 +55,7 @@ import type {
   PublicEmbedView,
   PublicSubmissionFormConfig,
   PublicSubmissionFormSummary,
+  PortalResourcePage,
   ReviewerProgressRow,
   ReviewerQueueRow,
   ReviewerReminderBatch,
@@ -563,6 +565,7 @@ export interface TaskTemplatesRepo {
 }
 export interface CommsRepo {
   list(scope: EventScope): Promise<Comm[]>;
+  listDrafts(scope: EventScope): Promise<CommunicationDraft[]>;
   listTemplates(scope: EventScope): Promise<CommTemplate[]>;
   previewDecision(input: { eventId: EventId; submissionId: string }): Promise<CommPreview>;
   previewReminder(input: { eventId: EventId; speakerId: string; taskId?: string }): Promise<CommPreview>;
@@ -618,6 +621,13 @@ export interface PortalFormsRepo {
     taskId?: string;
     answers: Record<string, string>;
   }): Promise<string>;
+}
+export interface PortalResourcesRepo {
+  listAdmin(scope: EventScope): Promise<PortalResourcePage[]>;
+  listPublished(input: EventScope & { speakerId: SpeakerId }): Promise<PortalResourcePage[]>;
+  save(input: EventScope & { id?: string; title: string; bodyHtml: string; status: PortalResourcePage["status"] }): Promise<string>;
+  reorder(input: EventScope & { ids: string[] }): Promise<void>;
+  remove(input: EventScope & { id: string }): Promise<void>;
 }
 /**
  * Organizer role lives on a database row, never in an env var or hardcoded list, and every row
@@ -699,6 +709,7 @@ export interface ActivityRepo {
 }
 export interface AgentRunsRepo {
   canUse(scope: EventScope): Promise<boolean>;
+  suggestions(scope: EventScope): Promise<import("./types").AgentSuggestion[]>;
   list(scope: EventScope & { limit?: number }): Promise<AgentRun[]>;
   get(scope: EventScope & { runId: AgentRunId }): Promise<AgentRunDetail | null>;
   create(input: EventScope & { objective: string; idempotencyKey: string }): Promise<{ runId: AgentRunId }>;
@@ -706,6 +717,7 @@ export interface AgentRunsRepo {
   retry(input: EventScope & { runId: AgentRunId }): Promise<void>;
   cancel(input: EventScope & { runId: AgentRunId }): Promise<void>;
   approveTaskProposal(input: EventScope & { proposalId: AgentProposalId; expectedPayloadHash: string }): Promise<{ createdTaskIds: string[] }>;
+  approveMessageProposal(input: EventScope & { proposalId: AgentProposalId; expectedPayloadHash: string }): Promise<{ createdDraftIds: string[] }>;
   rejectProposal(input: EventScope & { proposalId: AgentProposalId; reason?: string }): Promise<void>;
 }
 export interface AgentProviderSettingsRepo {
@@ -743,6 +755,7 @@ export interface Repository {
   publicEmbeds: PublicEmbedsRepo;
   publicForms: PublicFormsRepo;
   portalForms: PortalFormsRepo;
+  portalResources: PortalResourcesRepo;
   organizers: OrganizersRepo;
   organizations: OrganizationsRepo;
   profiles: ProfilesRepo;
