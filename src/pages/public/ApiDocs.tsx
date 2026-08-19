@@ -8,6 +8,25 @@ const siteUrl = import.meta.env.VITE_CONVEX_SITE_URL
 const curl = `curl "${siteUrl}/api/v1/events" \\
   --header "Authorization: Bearer sk_live_YOUR_API_KEY"`; // gitleaks:allow — documentation placeholder, not a credential
 
+const mcpConfig = `{
+  "mcpServers": {
+    "namos-sessions": {
+      "command": "npx",
+      "args": ["-y", "@namos-sessions/mcp"],
+      "env": {
+        "NAMOS_SESSIONS_TOKEN": "ns_live_YOUR_API_KEY",
+        "NAMOS_SESSIONS_URL": "${siteUrl}"
+      }
+    }
+  }
+}`; // gitleaks:allow — documentation placeholder, not a credential
+
+const mcpCapabilities = [
+  ["Reads", "events, submissions, speakers, agenda, tasks — one resource per read scope the token actually holds"],
+  ["Writes", "update_submission_status, shown only to a token with submissions:write"],
+  ["Never", "email credentials, storage keys, or another event's data — the server calls the same scoped REST API as everyone else, never Convex directly"],
+] as const;
+
 const example = `{
   "data": [
     {
@@ -67,6 +86,7 @@ const navItems = [
   ["Overview", "#overview"],
   ["Authentication", "#authentication"],
   ["Routes & scopes", "#routes"],
+  ["Agent-first (MCP)", "#mcp"],
   ["Event object", "#event-object"],
   ["Errors", "#errors"],
 ] as const;
@@ -146,7 +166,23 @@ export function ApiDocsContent({ isSignedIn = false }: { isSignedIn?: boolean })
             <div className="mt-6 space-y-2 font-mono text-sm">
               {["GET /events — events:read", "GET /submissions?eventId=… — submissions:read", "GET /speakers?eventId=… — speakers:read", "GET /agenda?eventId=… — agenda:read", "GET /tasks?eventId=… — tasks:read", "POST /submissions/:id/status — submissions:write"].map((route) => <div key={route} className={cardSurfaceClasses("default", "bg-muted/50 px-4 py-3")}>{route}</div>)}
             </div>
-            <p className="mt-5 text-sm leading-6 text-muted-foreground">SDK, CLI, and MCP packages are planned for later phases: <code>npm install @namos-sessions/sdk</code>, <code>npx @namos-sessions/cli</code>, and <code>npx @namos-sessions/mcp</code>.</p>
+            <p className="mt-5 text-sm leading-6 text-muted-foreground">The same token works everywhere: <code>npm install @namos-sessions/sdk</code>, <code>npx @namos-sessions/cli</code>, and <code>npx @namos-sessions/mcp</code> — see <a className="font-medium text-foreground underline underline-offset-4" href="#mcp">Agent-first (MCP)</a> below.</p>
+          </section>
+
+          <section id="mcp" className="scroll-mt-20 py-12">
+            <p className="font-mono text-xs font-medium text-success">For organizers · Agent-first</p>
+            <SectionHeading description="Namos Sessions is built to be driven by an agent. Connect its MCP server and Claude or Codex can work the event directly: read the submissions, check the schedule, and move a proposal through its statuses, instead of you clicking through every page.">Let your agent handle the boring work</SectionHeading>
+            <div className="mt-7"><CodeBlock label="MCP client config" language="JSON">{mcpConfig}</CodeBlock></div>
+            <p className="mt-4 text-sm leading-6 text-muted-foreground">Runs locally over stdio using the same scoped API token as the REST API and CLI — it never connects to Convex directly, and it only exposes what that token is scoped for.</p>
+            <div className="mt-7 space-y-2">
+              {mcpCapabilities.map(([label, description]) => (
+                <div key={label} className={cardSurfaceClasses("default", "grid gap-1 bg-muted/50 px-4 py-4 sm:grid-cols-[6rem_minmax(0,1fr)] sm:gap-4")}>
+                  <span className="text-sm font-semibold">{label}</span>
+                  <span className="text-sm leading-5 text-muted-foreground">{description}</span>
+                </div>
+              ))}
+            </div>
+            <p className="mt-5 text-sm leading-6 text-muted-foreground">For Claude Desktop, add the config above to its MCP settings. For Claude Code, add it to <code>.mcp.json</code>. Generate the token first from <a className="font-medium text-foreground underline underline-offset-4" href="#authentication">Authentication</a> above.</p>
           </section>
 
           <section id="authentication" className="scroll-mt-20 py-12">
