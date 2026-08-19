@@ -15,6 +15,7 @@ const genericDocumentLists = new Set<ReadOperation>([
   "agenda.list", "agenda.listForSpeaker", "tasks.list", "availability.list", "organizers.list", "taskTemplates.list",
   "comms.templates.list", "apiKeys.list", "apiKeys.auditLog", "organizations.listMine",
   "sponsors.list", "sponsorTiers.list", "sponsorContacts.listBySponsor",
+  "comms.listDrafts", "portalResources.listAdmin", "portalResources.listPublished",
 ]);
 
 function fixtureFor(operation: ReadOperation): unknown {

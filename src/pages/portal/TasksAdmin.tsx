@@ -557,7 +557,7 @@ export default function TasksAdmin() {
           }
           loading={loading}
           skeletonRows={4}
-          rowActivation="none"
+          getRowLabel={(task) => task.title}
           ariaLabel="Onboarding tasks"
           minWidth={760}
         />

@@ -197,6 +197,22 @@ export async function resolveEventIntegration(ctx: ActionCtx, eventId: Id<"event
  * callers catch this and report it rather than failing the surrounding request.
  */
 export async function deliverEventEmail(ctx: ActionCtx, eventId: Id<"events">, email: EmailMessage): Promise<void> {
+  // Demo tenants are a hard delivery sink. This check occurs before integration resolution,
+  // so no Resend/SES credential is loaded and no external provider can be contacted.
+  const demo = await ctx.runQuery(internal.demoWorkspaces.getByEvent, { eventId });
+  if (demo) {
+    const attachment = email.attachments?.[0];
+    const escapedText = email.text.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]!);
+    await ctx.runMutation(internal.demoWorkspaces.captureDeliveryForEvent, {
+      eventId,
+      toEmail: email.to,
+      subject: email.subject,
+      bodyHtml: email.html ?? `<pre>${escapedText}</pre>`,
+      ...(attachment ? { attachmentName: attachment.filename, attachmentContent: Buffer.from(attachment.content, "base64").toString("utf8") } : {}),
+      now: Date.now(),
+    });
+    return;
+  }
   const integration = await resolveEventIntegration(ctx, eventId);
   if (!integration) throw new Error(providerNotConfigured);
   try {

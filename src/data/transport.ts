@@ -9,12 +9,14 @@ import type {
   AgendaItem,
   AgentRun,
   AgentRunDetail,
+  AgentSuggestion,
   AgentProviderSetting,
   Availability,
   Comm,
   CommPreview,
   CommSendResult,
   CommTemplate,
+  CommunicationDraft,
   AirtableConnectInput,
   AirtableImportResult,
   ContentIntegration,
@@ -42,6 +44,7 @@ import type {
   PublicEmbedView,
   PublicSubmissionFormConfig,
   PublicSubmissionFormSummary,
+  PortalResourcePage,
   ReviewerProgressRow,
   ReviewerQueueRow,
   ReviewerReminderBatch,
@@ -72,6 +75,7 @@ import { analyticsErrorCategory, track, type AnalyticsEventProperties } from "@/
 
 export const readOperations = [
   "analytics.summary",
+  "controlRoom.get",
   "events.list",
   "events.listMine",
   "events.listForPortal",
@@ -104,6 +108,7 @@ export const readOperations = [
   "tasks.list",
   "taskTemplates.list",
   "comms.list",
+  "comms.listDrafts",
   "comms.templates.list",
   "notifications.unreadCount",
   "availability.list",
@@ -115,6 +120,8 @@ export const readOperations = [
   "publicForms.listOpen",
   "publicForms.get",
   "portalForms.get",
+  "portalResources.listAdmin",
+  "portalResources.listPublished",
   "organizers.list",
   "organizers.getMine",
   "organizers.isCurrentUserOrganizer",
@@ -136,6 +143,7 @@ export const readOperations = [
   "sponsorTiers.list",
   "sponsorContacts.listBySponsor",
   "agentRuns.canUse",
+  "agentRuns.suggestions",
   "agentRuns.list",
   "agentRuns.get",
   "agentProviderSettings.status",
@@ -197,6 +205,9 @@ export type WriteOperation =
   | "publicEmbeds.duplicate"
   | "publicEmbeds.remove"
   | "portalForms.submit"
+  | "portalResources.save"
+  | "portalResources.reorder"
+  | "portalResources.remove"
   | "organizations.createForCurrentUser"
   | "organizations.rename"
   | "organizers.completeOnboarding"
@@ -248,6 +259,7 @@ export type WriteOperation =
   | "agentRuns.retry"
   | "agentRuns.cancel"
   | "agentRuns.approveTaskProposal"
+  | "agentRuns.approveMessageProposal"
   | "agentRuns.rejectProposal"
   | "agentProviderSettings.saveManaged"
   | "agentProviderSettings.saveByok"
@@ -394,6 +406,7 @@ export function createRepository(transport: DataTransport): Repository {
     },
     agentRuns: {
       canUse: ({ eventId }) => transport.read<boolean>("agentRuns.canUse", { eventId }),
+      suggestions: ({ eventId }) => transport.read<AgentSuggestion[]>("agentRuns.suggestions", { eventId }),
       list: ({ eventId, limit }) => transport.read<AgentRun[]>("agentRuns.list", { eventId, limit }),
       get: ({ eventId, runId }) => transport.read<AgentRunDetail | null>("agentRuns.get", { eventId, runId }),
       create: (input) => transport.write("agentRuns.create", input),
@@ -401,6 +414,7 @@ export function createRepository(transport: DataTransport): Repository {
       retry: (input) => transport.write<void>("agentRuns.retry", input),
       cancel: (input) => transport.write<void>("agentRuns.cancel", input),
       approveTaskProposal: (input) => transport.write<{ createdTaskIds: string[] }>("agentRuns.approveTaskProposal", input),
+      approveMessageProposal: (input) => transport.write<{ createdDraftIds: string[] }>("agentRuns.approveMessageProposal", input),
       rejectProposal: (input) => transport.write<void>("agentRuns.rejectProposal", input),
     },
     apiKeys: {
@@ -694,6 +708,7 @@ export function createRepository(transport: DataTransport): Repository {
     },
     comms: {
       list: ({ eventId }) => transport.read<Comm[]>("comms.list", { eventId }),
+      listDrafts: ({ eventId }) => transport.read<CommunicationDraft[]>("comms.listDrafts", { eventId }),
       listTemplates: ({ eventId }) =>
         transport.read<CommTemplate[]>("comms.templates.list", { eventId }),
       previewDecision: (input) =>
@@ -748,6 +763,13 @@ export function createRepository(transport: DataTransport): Repository {
     portalForms: {
       get: (input) => transport.read<PortalFormView>("portalForms.get", input),
       submit: (input) => transport.write<string>("portalForms.submit", input),
+    },
+    portalResources: {
+      listAdmin: ({ eventId }) => transport.read<PortalResourcePage[]>("portalResources.listAdmin", { eventId }),
+      listPublished: ({ eventId, speakerId }) => transport.read<PortalResourcePage[]>("portalResources.listPublished", { eventId, speakerId }),
+      save: (input) => transport.write<string>("portalResources.save", input),
+      reorder: (input) => transport.write<void>("portalResources.reorder", input),
+      remove: (input) => transport.write<void>("portalResources.remove", input),
     },
     organizers: {
       list: (organizationId) =>

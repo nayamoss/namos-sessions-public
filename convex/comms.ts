@@ -81,6 +81,14 @@ export const listLog = query({
 
 export const list = listLog;
 
+export const listDrafts = query({
+  args: { eventId: v.id("events") },
+  handler: async (ctx, args) => {
+    await assertEventOrganizerAccess(ctx, args.eventId);
+    return ctx.db.query("communication_drafts").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).order("desc").collect();
+  },
+});
+
 const nameOf = (speaker: { firstName: string; lastName: string }) => `${speaker.firstName} ${speaker.lastName}`.trim();
 const scheduleOf = (time: number | undefined, timeZone: string | undefined) => time ? new Intl.DateTimeFormat("en-US", { dateStyle: "long", timeStyle: "short", timeZone: timeZone || "UTC" }).format(time) : undefined;
 

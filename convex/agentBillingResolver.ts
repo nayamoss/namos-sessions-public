@@ -21,6 +21,10 @@ export async function resolveManagedAllowance(billingOwnerUserId: string): Promi
   const secretKey = process.env.CLERK_SECRET_KEY;
   if (!secretKey) throw new Error("Namos-managed AI billing is not configured.");
   const clerk = createClerkClient({ secretKey });
+  const user = await clerk.users.getUser(billingOwnerUserId);
+  if (user.privateMetadata.namosDemoRole === "organizer" && typeof user.privateMetadata.namosDemoWorkspaceId === "string") {
+    return { planSlug: "demo", runLimit: 3, tokenLimit: 30_000, reserveTokens: 10_000 };
+  }
   const subscription = await clerk.billing.getUserBillingSubscription(billingOwnerUserId);
   const item = subscription.subscriptionItems.find((candidate) => candidate.status === "active" && candidate.plan);
   const plan = item?.plan;

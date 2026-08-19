@@ -123,6 +123,65 @@ http.route({
   }),
 });
 
+// The public browser never receives DEMO_EDGE_SECRET. The Cloudflare Worker validates the
+// signed workspace cookie and CSRF proof, then uses this one narrow server-to-server boundary.
+http.route({
+  path: "/internal/demo-workspaces",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    if (!(await secretsMatch(request.headers.get("x-namos-demo-secret"), process.env.DEMO_EDGE_SECRET))) {
+      return internalError(401, "unauthorized");
+    }
+    const text = await request.text();
+    if (new TextEncoder().encode(text).byteLength > 64 * 1024) return internalError(413, "payload_too_large");
+    let body: Record<string, unknown>;
+    try { body = JSON.parse(text) as Record<string, unknown>; }
+    catch { return internalError(400, "invalid_request"); }
+    const action = body.action;
+    const workspaceId = typeof body.workspaceId === "string" ? body.workspaceId : "";
+    const now = typeof body.now === "number" && Number.isFinite(body.now) ? body.now : Date.now();
+    try {
+      if (action === "provision") {
+        if (!workspaceId || typeof body.organizerUserId !== "string" || typeof body.reviewerUserId !== "string" || typeof body.speakerUserId !== "string" || typeof body.organizerEmail !== "string" || typeof body.reviewerEmail !== "string" || typeof body.speakerEmail !== "string") return internalError(400, "invalid_request");
+        return json(await ctx.runMutation(internal.demoWorkspaces.provision, {
+          workspaceId,
+          organizerUserId: body.organizerUserId,
+          reviewerUserId: body.reviewerUserId,
+          speakerUserId: body.speakerUserId,
+          organizerEmail: body.organizerEmail,
+          reviewerEmail: body.reviewerEmail,
+          speakerEmail: body.speakerEmail,
+          now,
+        }), 201);
+      }
+      if (action === "get") return json({ workspace: workspaceId ? await ctx.runQuery(internal.demoWorkspaces.get, { workspaceId, now }) : null });
+      if (action === "switch") {
+        if (!workspaceId || !["organizer", "reviewer", "speaker"].includes(String(body.role))) return internalError(400, "invalid_request");
+        return json({ workspace: await ctx.runMutation(internal.demoWorkspaces.switchRole, { workspaceId, activeRole: body.role as never, now }) });
+      }
+      if (action === "reset") return json({ workspace: workspaceId ? await ctx.runMutation(internal.demoWorkspaces.reset, { workspaceId, now }) : null });
+      if (action === "inbox") return json({ deliveries: workspaceId ? await ctx.runQuery(internal.demoWorkspaces.listDeliveries, { workspaceId, now }) : null });
+      if (action === "capture") {
+        if (!workspaceId || typeof body.toEmail !== "string" || typeof body.subject !== "string" || typeof body.bodyHtml !== "string") return internalError(400, "invalid_request");
+        if (body.toEmail.length > 320 || body.subject.length > 500 || body.bodyHtml.length > 50_000 || (typeof body.attachmentContent === "string" && body.attachmentContent.length > 500_000)) return internalError(400, "invalid_request");
+        return json(await ctx.runMutation(internal.demoWorkspaces.captureDelivery, {
+          workspaceId,
+          toEmail: body.toEmail,
+          subject: body.subject,
+          bodyHtml: body.bodyHtml,
+          ...(typeof body.attachmentName === "string" ? { attachmentName: body.attachmentName } : {}),
+          ...(typeof body.attachmentContent === "string" ? { attachmentContent: body.attachmentContent } : {}),
+          now,
+        }), 201);
+      }
+      if (action === "cleanup") return json(await ctx.runMutation(internal.demoWorkspaces.cleanupExpired, { now, limit: 100 }));
+      return internalError(400, "invalid_request");
+    } catch {
+      return internalError(422, "operation_rejected");
+    }
+  }),
+});
+
 // Provider-specific adapters (Resend or SES/SNS) must validate their own signed webhook before
 // handing its normalized, attachment-free envelope to this endpoint. Keeping this boundary
 // separate makes the Convex deployment safe even when verification lives at the mail edge.

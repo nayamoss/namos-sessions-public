@@ -26,6 +26,12 @@ describe("Operations Agent data boundary", () => {
     ]);
   });
 
+  it("normalizes prepared communication drafts without Convex system fields", () => {
+    expect(normalize("comms.listDrafts", [{ _id: "draft-1", _creationTime: 1, eventId, status: "draft", source: "agent" }])).toEqual([
+      { id: "draft-1", eventId, status: "draft", source: "agent" },
+    ]);
+  });
+
   it("fails explicitly in Airtable mode without making a network request", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     const repo = createAirtableRepo();
@@ -50,5 +56,16 @@ describe("Operations Agent runtime durability", () => {
     const inspector = readFileSync("src/components/agent/AgentRunInspector.tsx", "utf8");
     expect(page).toContain("repo.agentRuns.retry");
     expect(inspector).toContain("Retry run");
+  });
+
+  it("keeps message preparation approval-gated and send-free", () => {
+    const runtime = readFileSync("convex/agentRuntime.ts", "utf8");
+    const runs = readFileSync("convex/agentRuns.ts", "utf8");
+    expect(runtime).toContain("propose_message_drafts");
+    expect(runtime).toContain("sendsPerformed: 0");
+    expect(runs).toContain("export const approveMessageProposal = mutation");
+    expect(runs).toContain("assertEventOrganizerAccess(ctx, args.eventId)");
+    expect(runs).toContain('status: "draft", source: "agent"');
+    expect(runs).not.toContain("approveMessageProposal = action");
   });
 });

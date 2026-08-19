@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { AlignLeft, ArrowRight, ArrowUp, CalendarDays, ChevronDown, ClipboardCheck, ClipboardList, Layers3, Loader2, Mail, Megaphone, Mic, PanelRight, PenLine, Puzzle, Square, UserRoundX, Users } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
@@ -18,10 +18,10 @@ import { useRepoQuery } from "@/data/reactive";
 import { useDictation } from "@/lib/voice/use-dictation";
 import { VoiceChatButton } from "@/components/voice/VoiceChatButton";
 import { VoiceSessionPanel } from "@/components/voice/VoiceSessionPanel";
-import type { AgendaItem, AgentRun, AgentRunDetail, AgentRunId, Comm, OnboardingTask, Speaker, Submission, SubmissionForm } from "@/data/types";
+import { ProgramControlRoom } from "@/components/dashboard/ProgramControlRoom";
+import type { AgendaItem, AgentRun, AgentRunDetail, AgentRunId, Comm, ControlRoomState, OnboardingTask, Speaker, Submission, SubmissionForm } from "@/data/types";
 import { projectSpeakerOperationsRows, summarizeSpeakerOperations } from "@/lib/speaker-operations";
 
-const suggestions = ["Check whether this event is ready to publish", "Find accepted speakers who still need attention", "Review failed communications and overdue tasks"];
 // Shared empty fallback: a fresh `[]` per render would give every dependent
 // useMemo a new identity each pass and recompute the whole dashboard.
 const EMPTY: readonly unknown[] = [];
@@ -33,13 +33,6 @@ const RAIL_ROW = cn("flex items-center rounded-lg p-2 transition-colors", "hover
 const RAIL_STORAGE_KEY = "namos-dashboard-right-collapsed";
 type SidebarTab = "action-items" | "voice-agent";
 const newKey = () => typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
-
-function greeting() {
-  const hour = new Date().getHours();
-  if (hour < 12) return "Good morning";
-  if (hour < 18) return "Good afternoon";
-  return "Good evening";
-}
 
 // Ported from Imori's composer (components/AgentChat.tsx). "Depth" is the
 // concise→deep axis: Deep means more reasoning, not just more words.
@@ -138,6 +131,7 @@ export default function DashboardHome() {
   const access = useRepoQuery<boolean>("agentRuns.canUse", { eventId: event.id });
   const history = useRepoQuery<AgentRun[]>("agentRuns.list", access.data ? { eventId: event.id, limit: 30 } : "skip");
   const detail = useRepoQuery<AgentRunDetail | null>("agentRuns.get", access.data && selectedRunId ? { eventId: event.id, runId: selectedRunId } : "skip");
+  const controlRoom = useRepoQuery<ControlRoomState>("controlRoom.get", { eventId: event.id });
   const [value, setValue] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>();
@@ -177,11 +171,11 @@ export default function DashboardHome() {
   }, []);
   useEffect(() => { try { localStorage.setItem(RAIL_STORAGE_KEY, String(railCollapsed)); } catch { /* preference is optional */ } }, [railCollapsed]);
 
-  const closeSidebar = () => {
+  const closeSidebar = useCallback(() => {
     setRailCollapsed(true);
     setVoiceOpen(false);
-  };
-  const toggleActionItems = () => {
+  }, []);
+  const toggleActionItems = useCallback(() => {
     if (railCollapsed) {
       setSidebarTab("action-items");
       setRailCollapsed(false);
@@ -190,8 +184,8 @@ export default function DashboardHome() {
     } else {
       setSidebarTab("action-items");
     }
-  };
-  const toggleVoiceAgent = () => {
+  }, [closeSidebar, railCollapsed, sidebarTab]);
+  const toggleVoiceAgent = useCallback(() => {
     if (busy) return;
     if (railCollapsed) {
       setSidebarTab("voice-agent");
@@ -203,7 +197,7 @@ export default function DashboardHome() {
       setSidebarTab("voice-agent");
       setVoiceOpen(true);
     }
-  };
+  }, [busy, closeSidebar, railCollapsed, sidebarTab]);
 
   // Alt+V (GlobalKeyboardShortcuts, mounted in AppLayout) fans this event out
   // to every page hosting a composer. It cooperates with the rail shortcut:
@@ -212,7 +206,7 @@ export default function DashboardHome() {
   useEffect(() => {
     window.addEventListener(VOICE_TOGGLE_EVENT, toggleVoiceAgent);
     return () => window.removeEventListener(VOICE_TOGGLE_EVENT, toggleVoiceAgent);
-  }, [busy, railCollapsed, sidebarTab]);
+  }, [toggleVoiceAgent]);
 
   // Owned here rather than in GlobalKeyboardShortcuts because the rail is this
   // page's state — the same way DesktopSidebar owns its own toggle. Deliberately
@@ -226,7 +220,7 @@ export default function DashboardHome() {
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [railCollapsed, sidebarTab]);
+  }, [toggleActionItems]);
 
   const submit = async () => {
     setSubmitting(true); setError(undefined);
@@ -410,9 +404,9 @@ export default function DashboardHome() {
     </Tabs>
   );
 
-  if (access.error?.message.includes("Convex backend")) return <AppLayout title="Dashboard"><p className="text-sm text-muted-foreground">Dashboard currently requires the Convex backend.</p></AppLayout>;
+  if (access.error?.message.includes("Convex backend")) return <AppLayout title="Program Control Room"><p className="text-sm text-muted-foreground">The Program Control Room currently requires the Convex backend.</p></AppLayout>;
 
-  return <AppLayout title="Dashboard" utility={railCollapsed ? undefined : sidebarDetail}><div className="h-full min-h-0 flex flex-col gap-1.5 overflow-hidden">
+  return <AppLayout title="Program Control Room" utility={railCollapsed ? undefined : sidebarDetail}><div className="h-full min-h-0 flex flex-col gap-1.5 overflow-hidden">
     <div className="min-h-0 flex-1 flex gap-2 overflow-hidden">
 
       {/* Center: agent chat — the page's card surface, on the page background.
@@ -450,44 +444,7 @@ export default function DashboardHome() {
         <div className="flex-1 overflow-y-auto px-3 py-3">
           {selectedRunId ? (
             <AgentTimeline events={selected?.events ?? []} isLoading={detail.isLoading} />
-          ) : (
-            <div className="flex h-full min-h-full flex-col items-center justify-center gap-6 px-0 py-4 text-center">
-              <div className="space-y-1.5">
-                <h2 className="text-xl font-semibold tracking-normal text-foreground">{greeting()}</h2>
-                <p className="text-base text-muted-foreground">What should we work on?</p>
-              </div>
-              {/* Before a CFP exists the agent suggestions are dead ends —
-                  there is no program to check yet. Point at the three jobs
-                  that actually have to happen first. */}
-              {cfpCount === 0 && !dataPending ? (
-                <div className="flex flex-wrap justify-center gap-2">
-                  {setupSteps.map((step) => (
-                    <Link
-                      key={step.to}
-                      to={step.to}
-                      className={cn("group inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors", "bg-muted/40 hover:bg-muted")}
-                    >
-                      <step.icon className="h-4 w-4 text-muted-foreground" />
-                      <span className="font-medium text-foreground/80 group-hover:text-foreground">{step.label}</span>
-                    </Link>
-                  ))}
-                </div>
-              ) : access.data !== false && (
-                <div className="flex flex-wrap justify-center gap-2">
-                  {suggestions.map((suggestion) => (
-                    <button
-                      key={suggestion}
-                      type="button"
-                      onClick={() => setValue(suggestion)}
-                      className={cn("group rounded-lg px-3 py-1.5 text-sm text-muted-foreground transition-colors", "bg-muted/40 hover:bg-muted hover:text-foreground")}
-                    >
-                      <span className="font-medium text-foreground/80 group-hover:text-foreground">{suggestion}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+          ) : <ProgramControlRoom state={controlRoom.data} loading={controlRoom.isLoading} error={controlRoom.error?.message} />}
         </div>
         {/* Render unless access is *definitively* denied. `agentRuns.canUse` is a reactive
             subscription, and this app's reactive transport has a known, still-unresolved
@@ -499,7 +456,7 @@ export default function DashboardHome() {
             `undefined` now means "show it": this is a UI affordance, not a security boundary.
             Every mutation behind it still calls assertEventOrganizerAccess server-side, so a
             user who genuinely lacks access gets a real error on submit instead of a blank page. */}
-        {access.data !== false && (
+        {selectedRunId && access.data !== false && (
           <div className="p-3">
             <form onSubmit={(e) => { e.preventDefault(); if (!busy && value.trim()) void submit(); }} className="mx-auto w-full">
               {/* The field is defined by background contrast, not a border. The

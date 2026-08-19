@@ -317,6 +317,7 @@ export default function Agenda() {
   const [trackFilters, setTrackFilters] = useState<string[]>([]);
   const [publicationFilter, setPublicationFilter] = useState<"all" | "published" | "draft">("all");
   const [detailMode, setDetailMode] = useState<DetailMode>();
+  const requestedSubmissionId = params.get("submission") ?? undefined;
   const [announcement, setAnnouncement] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
@@ -451,11 +452,17 @@ export default function Agenda() {
     return byItem;
   }, [blockingConflicts]);
   const selectedItem = params.get("selected") ? itemById.get(params.get("selected")!) : undefined;
+  const requestedSubmission = submissions.find((submission) => submission.id === requestedSubmissionId);
+  useEffect(() => {
+    if (params.get("mode") === "add" && requestedSubmission) setDetailMode("create");
+  }, [params, requestedSubmission]);
   const closeDetail = () => {
     setDetailMode(undefined);
     setParams((current) => {
       const next = new URLSearchParams(current);
       next.delete("selected");
+      next.delete("submission");
+      next.delete("mode");
       return next;
     });
   };
@@ -764,7 +771,7 @@ export default function Agenda() {
   ];
   const detail = event && detailMode === "create" ? (
     <DetailPane title="Add session" onClose={closeDetail}>
-      <AgendaSessionForm event={event} rooms={rooms} tracks={tracks} speakers={speakers} submissions={submissions} onSave={saveSession} onCancel={closeDetail} />
+      <AgendaSessionForm event={event} rooms={rooms} tracks={tracks} speakers={speakers} submissions={submissions} initial={requestedSubmission ? { title: requestedSubmission.title ?? "Untitled accepted submission", submissionId: requestedSubmission.id, speakerIds: requestedSubmission.speakerIds, trackId: requestedSubmission.trackId, roomId: rooms[0]?.id ?? "", startTime: event.startDate + 9 * 60 * 60_000, endTime: event.startDate + 9 * 60 * 60_000 + 45 * 60_000, isPublished: false } : undefined} onSave={saveSession} onCancel={closeDetail} />
     </DetailPane>
   ) : event && detailMode === "duplicate" ? (
     <DetailPane title="Duplicate day" onClose={closeDetail}>

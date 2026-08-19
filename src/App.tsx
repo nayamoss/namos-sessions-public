@@ -30,6 +30,7 @@ import { useRepo } from "@/data/repo";
 import { resolveOnboardingStatus } from "@/lib/onboarding-status";
 import { AnalyticsRuntime } from "@/components/AnalyticsConsent";
 import { track } from "@/lib/analytics";
+import { DemoWorkspaceBar } from "@/components/demo/DemoWorkspaceBar";
 // EventDetails/Library/Integrations/TaskTemplates are no longer standalone routed pages —
 // they render as tab panels inside SettingsModal instead (see settings-modal-refactor).
 import type { Event } from "@/data/types";
@@ -45,6 +46,7 @@ const SubmissionFormBuilder = lazy(
 );
 const PortalForms = lazy(() => import("@/pages/portal/PortalForms"));
 const TasksAdmin = lazy(() => import("@/pages/portal/TasksAdmin"));
+const PortalResourcesAdmin = lazy(() => import("@/pages/portal/PortalResourcesAdmin"));
 const Communications = lazy(() => import("@/pages/program/Communications"));
 const CommTemplateEditor = lazy(
   () => import("@/pages/program/CommTemplateEditor"),
@@ -67,6 +69,9 @@ const ApiDocs = lazy(() => import("@/pages/public/ApiDocs"));
 const EventsLanding = lazy(() => import("@/pages/events/EventsLanding"));
 const ComponentShowcase = lazy(() => import("@/pages/settings/ComponentShowcase"));
 const Updates = lazy(() => import("@/pages/Updates"));
+const DemoLandingPage = lazy(() => import("@/pages/public/DemoLandingPage"));
+const DemoProofPage = lazy(() => import("@/pages/public/DemoProofPage"));
+const DemoInboxPage = lazy(() => import("@/pages/public/DemoInboxPage"));
 
 function FeaturePlaceholder({ title }: { title: string }) {
   return (
@@ -256,12 +261,16 @@ export default function App() {
         <Sonner />
         <BrowserRouter>
           <AnalyticsRuntime />
+          <DemoWorkspaceBar />
           <Suspense
             fallback={
               <p className="p-6 text-sm text-muted-foreground">Loading…</p>
             }
           >
             <Routes>
+              <Route path="/demo" element={<DemoLandingPage />} />
+              <Route path="/demo/proof" element={<DemoProofPage />} />
+              <Route path="/demo/inbox" element={<DemoInboxPage />} />
               <Route path="/updates" element={<Updates />} />
               <Route
                 path="/sign-in/*"
@@ -439,6 +448,7 @@ export default function App() {
                     />
                     <Route path="portals/forms" element={<PortalForms />} />
                     <Route path="portals/tasks" element={<TasksAdmin />} />
+                    <Route path="portals/resources" element={<PortalResourcesAdmin />} />
                     <Route path="settings/event" element={<DashboardHome />} />
                     <Route path="settings/team" element={<DashboardHome />} />
                     <Route path="settings/library" element={<DashboardHome />} />

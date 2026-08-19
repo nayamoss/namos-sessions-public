@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
-import { CalendarClock, CalendarDays, FileText, Home, Paperclip, UserRound } from "lucide-react";
+import { BookOpen, CalendarClock, CalendarDays, FileText, Home, Paperclip, UserRound } from "lucide-react";
 import { DashboardLayout, type DashboardNavSection } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { SkeletonList } from "@/components/shared/SkeletonList";
@@ -16,6 +16,7 @@ const portalNavigation: DashboardNavSection[] = [
       { to: "/portal/availability", label: "Availability", icon: CalendarClock },
       { to: "/portal/schedule", label: "Schedule", icon: CalendarDays },
       { to: "/portal/files", label: "Files", icon: Paperclip },
+      { to: "/portal/resources", label: "Resources", icon: BookOpen },
     ],
   },
 ];
@@ -27,6 +28,7 @@ function portalTitle(pathname: string) {
   if (pathname.startsWith("/portal/availability")) return "Availability";
   if (pathname.startsWith("/portal/schedule")) return "Schedule";
   if (pathname.startsWith("/portal/files")) return "Files";
+  if (pathname.startsWith("/portal/resources")) return "Resources";
   if (pathname.startsWith("/portal/forms")) return "Task form";
   return "Home";
 }

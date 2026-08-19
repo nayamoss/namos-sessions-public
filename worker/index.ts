@@ -1,7 +1,8 @@
 import { DurableObject } from "cloudflare:workers";
 import { handlePublicCfpSubmission } from "./public-cfp";
+import { cleanupDemoWorkspaces, handleDemoRequest } from "./demo";
 
-const commonCsp = "default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self' https://clerk.your-project.example https://challenges.cloudflare.com https://browser.sentry-cdn.com; connect-src 'self' https://clerk.your-project.example https://your-project.convex.cloud https://your-project.convex.site https://sentry-org.ingest.us.sentry.io; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; frame-src https://clerk.your-project.example https://challenges.cloudflare.com; worker-src 'self' blob:";
+const commonCsp = "default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self' https://clerk.your-project.example https://challenges.cloudflare.com https://browser.sentry-cdn.com; connect-src 'self' https://clerk.your-project.example https://your-project.convex.cloud wss://your-project.convex.cloud https://your-project.convex.site https://sentry-org.ingest.us.sentry.io; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; frame-src https://clerk.your-project.example https://challenges.cloudflare.com; worker-src 'self' blob:";
 
 function withSecurityHeaders(response: Response, pathname: string) {
   const headers = new Headers(response.headers);
@@ -54,9 +55,14 @@ export default {
     const url = new URL(request.url);
     const response = url.pathname === "/api/public/cfp-submissions"
       ? await handlePublicCfpSubmission(request, env)
+      : url.pathname.startsWith("/api/demo/")
+        ? await handleDemoRequest(request, env)
       : url.pathname.startsWith("/api/")
         ? Response.json({ error: "not_found" }, { status: 404, headers: { "cache-control": "no-store" } })
         : await env.ASSETS.fetch(request);
     return withSecurityHeaders(response, url.pathname);
+  },
+  async scheduled(_controller: ScheduledController, env: Env) {
+    await cleanupDemoWorkspaces(env);
   },
 } satisfies ExportedHandler<Env>;
