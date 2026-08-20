@@ -1,3 +1,55 @@
+# Sync namos-sessions-public from private main (RUN 8 — 2026-08-19)
+
+## Why
+
+Requested explicitly: bring the Speaker CRM work (Contacts page, contact
+stages/scores, lifecycle history, segments, event/speaker linking,
+Airtable/Notion CRM sources, campaign sending, analytics), the Airtable
+integration (Settings → Integrations import + Contacts workspace org CRM
+sync), the expanded speaker detail workspace, and related
+dashboard/agenda data-layer work over to public. This turned out to already
+be in flight: PR #38 (`sync/private-main-delta-2026-08-19`) had been opened
+earlier in the same day by a prior session, branched off public's tip at the
+time (`5901360`), and its file list already covered exactly this feature
+set (`convex/crm.ts`, `crmSourceActions.ts`, `crmSources.ts`, `crons.ts`,
+`taskTemplates.ts`; `src/pages/program/Contacts.tsx` + tests;
+`Speakers.tsx`, `Agenda.tsx`, `EventAnalytics.tsx` and the `src/data/*`
+data-layer updates). Run 7 (PR #34) had already landed on `main` the same
+day and was never logged in this doc — noting it here retroactively too.
+
+This run finished and finalized PR #38 rather than opening a duplicate PR
+(see the "second concurrent sync" guidance in `SKILL.md` step 8) — a
+redundant second PR against the same delta would only create merge
+conflicts with no added value.
+
+## What this run did
+
+Public's `main` had moved past PR #38's branch point in the meantime (PR
+#39 dompurify fix, PR #40 CSP-derivation-from-runtime-config refactor). Refetched
+`origin/main` and `private-webapp/main`, confirmed private's tip
+(`b3ffb2a`) had no new application-code delta beyond what PR #38 already
+carried (its only new commit was a docs-only entry logging PR #38 itself
+in private's own copy of this file). Rebased PR #38's branch onto public's
+current `main` (`8241862`); one conflict in `worker/index.ts` between PR
+#40's new `security-headers.ts`-based CSP structure and PR #38's addition
+of the `/demo/schedule-studio` route to the demo-request match — resolved
+by keeping PR #40's structure and re-adding the route match on top.
+
+Re-ran the full scrub (`git diff origin/main...HEAD` grepped for
+`sk_live_`, `sk_test_`, `pk_live_`, `pastel-mosquito-479`,
+`calculating-loris-761`, `clerk.namos-sessions.xyz` — zero matches; no
+`.env*` files touched; `convex/seed.ts`, `wrangler.jsonc`, `netlify.toml`,
+`README.md`, `worker-configuration.d.ts` all confirmed zero-diff against
+`origin/main`). Spot-checked `convex/crm.ts`, `src/pages/program/Contacts.tsx`,
+`convex/crmSourceActions.ts` byte-for-byte against private's copies —
+identical. Re-ran verification on the rebased branch: `typecheck` clean,
+`lint` 0 errors (35 pre-existing warnings), `test` 711/711 passing
+(125/125 files), `build` succeeds.
+
+PR: https://github.com/nayamoss/namos-sessions-public/pull/38, branch
+`sync/private-main-delta-2026-08-19`, now rebased onto public's tip
+`8241862`.
+
 # Sync namos-sessions-public from private main (RUN 6 — 2026-08-18)
 
 ## Why
