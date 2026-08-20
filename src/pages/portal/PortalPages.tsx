@@ -18,9 +18,8 @@ import { Input } from "@/components/ui/input";
 import { FilterMenu } from "@/components/shared/StatusTabs";
 import { SkeletonList } from "@/components/shared/SkeletonList";
 import {
-  loadPortalProfile,
+  defaultPortalProfile,
   portalSubmissionStatusLabel,
-  savePortalProfile,
   type PortalProfile,
   type PortalProfileScope,
 } from "./portal-data";
@@ -270,7 +269,9 @@ export function PortalDashboard() {
           speakerName: selectedSpeaker.name,
         }
       : undefined;
-  const profile = loadPortalProfile(scope);
+  const profile = selectedSpeaker
+    ? profileFromSpeaker(selectedSpeaker)
+    : defaultPortalProfile();
   const { submissions, loading, error } = usePortalSubmissions();
   if (!scope) return <PortalAccessRequired />;
   return (
@@ -565,10 +566,12 @@ export function PortalProfilePage() {
           speakerName: selectedSpeaker.name,
         }
       : undefined;
+  const profileEventId = scope?.eventId;
+  const profileSpeakerId = scope?.speakerId;
   const [profile, setProfile] = useState<PortalProfile>(() =>
     selectedSpeaker
       ? profileFromSpeaker(selectedSpeaker)
-      : loadPortalProfile(scope),
+      : defaultPortalProfile(),
   );
   const [saved, setSaved] = useState<string>();
   const [saveError, setSaveError] = useState<string>();
@@ -579,16 +582,16 @@ export function PortalProfilePage() {
     setProfile(
       selectedSpeaker
         ? profileFromSpeaker(selectedSpeaker)
-        : loadPortalProfile(scope),
+        : defaultPortalProfile(),
     );
     setSaved(undefined);
     setSaveError(undefined);
     setHeadshotUrl(undefined);
-    if (scope)
+    if (profileEventId && profileSpeakerId)
       void repo.speakers
         .getHeadshotUrl({
-          eventId: scope.eventId as never,
-          speakerId: scope.speakerId as never,
+          eventId: profileEventId as never,
+          speakerId: profileSpeakerId as never,
         })
         .then((url) => {
           if (active) setHeadshotUrl(url);
@@ -599,7 +602,7 @@ export function PortalProfilePage() {
     return () => {
       active = false;
     };
-  }, [repo, scope?.eventId, scope?.speakerId, selectedSpeaker]);
+  }, [profileEventId, profileSpeakerId, repo, selectedSpeaker]);
   const update = <K extends keyof PortalProfile>(
     key: K,
     value: PortalProfile[K],
@@ -629,9 +632,10 @@ export function PortalProfilePage() {
       setSaved("Profile saved.");
     } catch (error) {
       if (backendUnavailable(error)) {
-        savePortalProfile(scope, profile);
-        setSaved(
-          "Profile saved locally until this backend supports speaker profiles.",
+        // A speaker profile contains sensitive personal data. Keep the unsaved
+        // edits in component state instead of persisting them in Web Storage.
+        setSaveError(
+          "Profile changes could not be saved because this backend does not support speaker profiles.",
         );
       } else
         setSaveError(
