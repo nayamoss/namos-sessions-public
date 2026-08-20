@@ -1,6 +1,7 @@
 import { v } from "convex/values";
+import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, assertEventAccess, assertEventOrganizerAccess } from "./functions";
-import { internalMutation, internalQuery } from "./_generated/server";
+import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { recordAgendaItemAudit } from "./agendaAudit";
 import { assertOrganizerOrOwnsSpeaker } from "./speakers";
 
@@ -19,6 +20,16 @@ const agendaItemFields = {
 };
 
 type ConflictReason = "room_overlap" | "speaker_overlap" | "speaker_unavailable" | "track_overlap";
+type PlacementConflict = { reason: ConflictReason; blocking: boolean; message: string };
+type PlacementInput = {
+  id?: Id<"agenda_items">;
+  eventId: Id<"events">;
+  roomId: Id<"rooms">;
+  trackId?: Id<"tracks">;
+  startTime: number;
+  endTime: number;
+  speakerIds: Id<"speakers">[];
+};
 
 function isPublishedAgendaItem<T extends { isPublished: boolean }>(item: T) {
   return item.isPublished;
@@ -91,6 +102,40 @@ function unavailableSlotKeys(
     values.add(`${date}:part:${hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening"}`);
   }
   return values;
+}
+
+async function placementConflicts(
+  ctx: QueryCtx | MutationCtx,
+  args: PlacementInput,
+) : Promise<PlacementConflict[]> {
+  const [items, event, availability] = await Promise.all([
+    ctx.db.query("agenda_items").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+    ctx.db.get(args.eventId),
+    ctx.db.query("speaker_availability").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+  ]);
+  const candidate = { _id: "candidate", roomId: args.roomId, trackId: args.trackId, speakerIds: [...new Set(args.speakerIds)], startTime: args.startTime, endTime: args.endTime };
+  const overlapRows = conflictRows([...items.filter((item) => item._id !== args.id), candidate]);
+  const results: PlacementConflict[] = overlapRows
+    .filter((row) => row.itemA === "candidate" || row.itemB === "candidate")
+    .map((row) => ({
+      reason: row.reason,
+      blocking: row.reason === "room_overlap" || row.reason === "speaker_overlap",
+      message: row.reason === "room_overlap" ? "That room already has a session at this time."
+        : row.reason === "speaker_overlap" ? "A speaker is already booked at this time."
+          : "This track overlaps another session.",
+    }));
+  const eventDoc = event as Doc<"events"> | null;
+  if (!eventDoc) return results;
+  const blocked = unavailableSlotKeys(args.startTime, args.endTime, eventDoc.timezone);
+  for (const speakerId of candidate.speakerIds) {
+    const record = availability.find((entry) => entry.speakerId === speakerId);
+    if (record?.unavailable.some((entry) => entry.hour !== undefined
+      ? blocked.has(`${entry.date}:hour:${entry.hour}`)
+      : entry.part !== undefined && blocked.has(`${entry.date}:part:${entry.part}`))) {
+      results.push({ reason: "speaker_unavailable", blocking: false, message: "This speaker is marked unavailable at this time." });
+    }
+  }
+  return results;
 }
 
 export const list = query({
@@ -200,6 +245,14 @@ export const detectConflicts = query({
   },
 });
 
+export const checkPlacement = query({
+  args: { id: v.optional(v.id("agenda_items")), ...agendaItemFields },
+  handler: async (ctx, args) => {
+    await assertEventOrganizerAccess(ctx, args.eventId);
+    return placementConflicts(ctx, args);
+  },
+});
+
 export const save = mutation({
   args: { id: v.optional(v.id("agenda_items")), ...agendaItemFields },
   handler: async (ctx, args) => {
@@ -237,6 +290,10 @@ export const save = mutation({
       videoUrl: fields.videoUrl?.trim() || undefined,
       locationDetails: fields.locationDetails?.trim() || undefined,
     };
+    const conflicts = await placementConflicts(ctx, { ...normalizedFields, id });
+    const blocking = conflicts.filter((conflict) => conflict.blocking);
+    if (blocking.length > 0)
+      throw new Error(blocking[0].message);
     if (id) {
       const existing = await ctx.db.get(id);
       if (!existing || existing.eventId !== args.eventId) throw new Error("Agenda item not found for this event.");

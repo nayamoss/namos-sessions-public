@@ -7,6 +7,11 @@ import { useOptionalCurrentEvent } from "@/components/EventContext";
 type SettingsModalContextValue = {
   openSettings: (tab: SettingsTabId) => void;
   closeSettings: () => void;
+  // Lets the active settings panel (e.g. Event details' Rooms/Tracks editors) report
+  // that it holds edits the Save button hasn't persisted yet. Nothing here autosaves —
+  // Escape, an outside click, or switching tabs would otherwise discard those edits
+  // with no warning at all.
+  setHasUnsavedChanges: (value: boolean) => void;
 };
 
 const SettingsModalContext = createContext<SettingsModalContextValue | undefined>(undefined);
@@ -39,6 +44,21 @@ export function SettingsModalProvider({ children }: { children: ReactNode }) {
   const [tab, setTab] = useState<SettingsTabId>(initialTab ?? "event");
   const [open, setOpen] = useState(Boolean(initialTab));
   const returnPath = useRef<string>();
+  const hasUnsavedChanges = useRef(false);
+  const setHasUnsavedChanges = useCallback((value: boolean) => {
+    hasUnsavedChanges.current = value;
+  }, []);
+  // True if the caller should stop (the user chose not to discard). Every path that can
+  // make the modal disappear or swap panels — Escape, an outside click, the visible Save
+  // dialog's own close button, and switching tabs — routes through here first.
+  const confirmDiscardIfDirty = useCallback(() => {
+    if (!hasUnsavedChanges.current) return true;
+    const discard = window.confirm(
+      "You have unsaved changes. Discard them?",
+    );
+    if (discard) hasUnsavedChanges.current = false;
+    return discard;
+  }, []);
 
   useEffect(() => {
     const nextTab = settingsTabFromPath(location.pathname);
@@ -49,13 +69,14 @@ export function SettingsModalProvider({ children }: { children: ReactNode }) {
   }, [location.pathname]);
 
   const closeSettings = useCallback(() => {
+    if (!confirmDiscardIfDirty()) return;
     setOpen(false);
     const stored = sessionStorage.getItem(RETURN_PATH_KEY) ?? undefined;
     const fallback = eventSlug ? `/events/${eventSlug}/dashboard` : "/events";
     navigate(returnPath.current ?? stored ?? fallback, { replace: true });
     returnPath.current = undefined;
     sessionStorage.removeItem(RETURN_PATH_KEY);
-  }, [eventSlug, navigate]);
+  }, [confirmDiscardIfDirty, eventSlug, navigate]);
 
   const openSettings = useCallback((nextTab: SettingsTabId) => {
     if (!open) {
@@ -69,12 +90,13 @@ export function SettingsModalProvider({ children }: { children: ReactNode }) {
   }, [eventSlug, location.hash, location.pathname, location.search, navigate, open]);
 
   const changeTab = useCallback((nextTab: SettingsTabId) => {
+    if (!confirmDiscardIfDirty()) return;
     setTab(nextTab);
     navigate(settingsPath(nextTab, eventSlug), { replace: true });
-  }, [eventSlug, navigate]);
+  }, [confirmDiscardIfDirty, eventSlug, navigate]);
 
   return (
-    <SettingsModalContext.Provider value={{ openSettings, closeSettings }}>
+    <SettingsModalContext.Provider value={{ openSettings, closeSettings, setHasUnsavedChanges }}>
       {children}
       <SettingsModal open={open} activeTab={tab} onOpenChange={(nextOpen) => nextOpen ? setOpen(true) : closeSettings()} onTabChange={changeTab} />
     </SettingsModalContext.Provider>

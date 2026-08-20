@@ -580,7 +580,11 @@ function AppearanceStep({ event, onUpdate }: { event: Event; onUpdate: (patch: P
       const { storageId } = await response.json() as { storageId?: string };
       if (!storageId) throw new Error("Missing storage id");
       await onUpdate({ logoStorageKey: storageId });
-      setLogoUrl(URL.createObjectURL(file));
+      // Render the canonical backend URL instead of deriving img.src directly
+      // from a DOM-sourced File. This keeps untrusted DOM input out of URL sinks.
+      const storedLogoUrl = await repo.files.getUrl(storageId);
+      if (!storedLogoUrl) throw new Error("Missing logo URL");
+      setLogoUrl(storedLogoUrl);
     } catch { setUploadError("Couldn't upload image — try again"); }
     finally { setUploading(false); }
   };

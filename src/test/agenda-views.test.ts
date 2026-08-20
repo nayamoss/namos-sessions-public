@@ -61,6 +61,11 @@ describe("agenda view grouping", () => {
     expect(slots[1] - slots[0]).toBe(15 * 60_000);
   });
 
+  it("uses configured schedule working hours when the grid is empty", () => {
+    const slots = agendaRoomSlots("2026-09-15", [], timeZone, "09:00", "17:00");
+    expect(slots).toHaveLength(32);
+  });
+
   it("snaps drag targets to the nearest 15-minute event-timezone interval", () => {
     const value = Date.UTC(2026, 8, 15, 13, 22);
     const snapped = snapToAgendaInterval(value, timeZone);

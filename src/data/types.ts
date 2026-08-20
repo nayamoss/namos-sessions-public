@@ -11,13 +11,14 @@ export type SponsorTierId = Brand<string, "SponsorTierId">;
 export type AgentRunId = Brand<string, "AgentRunId">;
 export type AgentProposalId = Brand<string, "AgentProposalId">;
 export type EmbedId = Brand<string, "EmbedId">;
+export type CrmContactId = Brand<string, "CrmContactId">;
 
 export type SubmissionStatus =
   | "draft" | "pending" | "accept_queue" | "accepted"
   | "maybe" | "decline_queue" | "declined" | "withdrawn";
 
 export type EventStatus = "draft" | "published" | "archived";
-export interface Event { id: EventId; name: string; slug: string; type?: string; websiteUrl?: string; location?: string; timezone: string; startDate: number; endDate: number; description?: string; contactEmail?: string; logoFileId?: string; programPublishedAt?: number; theme?: string; logoStorageKey?: string; accentColor?: string; backgroundStorageKey?: string; exhibitorsEnabled: boolean; sponsorsEnabled: boolean; defaultOnboardingTemplateId?: string; status: EventStatus; }
+export interface Event { id: EventId; name: string; slug: string; type?: string; websiteUrl?: string; location?: string; timezone: string; startDate: number; endDate: number; description?: string; contactEmail?: string; logoFileId?: string; programPublishedAt?: number; scheduleStartTime?: string; scheduleEndTime?: string; theme?: string; logoStorageKey?: string; accentColor?: string; backgroundStorageKey?: string; industry?: string; exhibitorsEnabled: boolean; sponsorsEnabled: boolean; defaultOnboardingTemplateId?: string; status: EventStatus; }
 
 export type ApiScope = "events:read" | "submissions:read" | "submissions:write" | "speakers:read" | "agenda:read" | "tasks:read";
 export interface ApiKey { id: string; label: string; keyPrefix: string; scopes: ApiScope[]; createdAt: number; lastUsedAt?: number; revokedAt?: number; }
@@ -42,6 +43,11 @@ export interface SponsorContact { id: string; eventId: EventId; sponsorId: Spons
 export type SponsorStatus = "prospect" | "confirmed" | "declined";
 export interface Sponsor { id: SponsorId; eventId: EventId; name: string; tierId?: SponsorTierId; tier?: SponsorTier; status: SponsorStatus; website?: string; notes?: string; primaryContact?: SponsorContact; openTaskCount: number; }
 export interface SponsorDetail extends Sponsor { contacts: SponsorContact[]; tasks: OnboardingTask[]; submissions: Submission[]; }
+export type CrmStage = "prospect" | "contacted" | "qualified" | "invited" | "negotiating" | "confirmed" | "declined" | "archived";
+export interface CrmContact { id: CrmContactId; organizationId: string; email: string; firstName: string; lastName: string; stage: CrmStage; score: number; eventId?: EventId; speakerId?: SpeakerId; createdAt: number; updatedAt: number; }
+export interface CrmSegment { id: string; organizationId: string; name: string; stage?: CrmStage; minScore?: number; maxScore?: number; eventId?: EventId; createdAt: number; updatedAt: number; }
+export type CrmSourceProvider = "notion" | "airtable";
+export interface CrmSource { id: string; eventId: EventId; provider: CrmSourceProvider; config: { notionDatabaseId?: string; airtableBaseId?: string; airtableTableName?: string; emailField: string; fullNameField?: string; firstNameField?: string; lastNameField?: string }; credentialHint: string; status: "connected" | "error"; lastSyncedAt?: number; lastRun?: { created: number; updated: number; skipped: number }; lastError?: string; createdAt: number; updatedAt: number; }
 export interface SubmissionForm { id: FormId; eventId: EventId; name: string; isOpen: boolean; sections?: SubmissionFormSection[]; pages?: FormPage[]; }
 export interface FieldDefinition { id: string; label: string; type: string; required: boolean; maxChars?: number; options?: string[]; showIf?: { fieldId: string; equals: string }; }
 export type SubmissionFormKind = "abstract" | "session" | "contact" | "group" | "submission_task";
@@ -140,6 +146,7 @@ export interface ReviewerReminderBatch { status: "sent" | "failed" | "skipped"; 
 export interface AgendaItem { id: AgendaItemId; eventId: EventId; title: string; roomId: string; trackId?: string; submissionId?: SubmissionId; speakerIds: SpeakerId[]; startTime: number; endTime: number; videoUrl?: string; locationDetails?: string; calendarUid?: string; calendarSequence?: number; isPublished: boolean; }
 export interface SpeakerAgendaItem extends AgendaItem { roomName: string; trackName?: string; }
 export interface AgendaConflict { itemA: AgendaItemId; itemB: AgendaItemId; reason: "room_overlap" | "speaker_overlap" | "speaker_unavailable" | "track_overlap"; speakerId?: SpeakerId; }
+export interface AgendaPlacementConflict { reason: "room_overlap" | "speaker_overlap" | "speaker_unavailable" | "track_overlap"; blocking: boolean; message: string; }
 export interface OnboardingTask { id: TaskId; eventId: EventId; speakerId?: SpeakerId; submissionId?: SubmissionId; sponsorId?: SponsorId; linkedFormId?: FormId; targetType: "contact" | "group" | "submission" | "sponsor"; title: string; source: "manual" | "auto" | "agent"; status: "pending" | "in_progress" | "completed"; dueDate?: number; completedAt?: number; createdAt?: number; updatedAt?: number; }
 export type AgentRunStatus = "queued" | "running" | "needs_input" | "needs_approval" | "completed" | "failed" | "cancelled";
 export type AgentProviderMode = "managed" | "bring_your_own";
@@ -164,12 +171,13 @@ export interface ControlRoomState { generatedAt: number; categories: Record<Cont
 export interface EventAnalyticsSummary {
   version: 1;
   generatedAt: number;
-  submissions: { total: number; draft: number; pending: number; inReview: number; accepted: number; declined: number; withdrawn: number; acceptanceRate: number };
-  reviews: { assigned: number; completed: number; completionRate: number };
+  submissions: { total: number; draft: number; pending: number; inReview: number; accepted: number; declined: number; withdrawn: number; undecided: number; acceptanceRate: number };
+  reviews: { assigned: number; completed: number; unassigned: number; completionRate: number; workload: { reviewers: number; min: number; max: number; average: number; light: number; balanced: number; heavy: number } };
   speakers: { total: number; awaiting: number; confirmed: number; declined: number; profileComplete: number };
   agenda: { total: number; published: number; acceptedSessions: number; scheduledAccepted: number; scheduleRate: number };
   communications: { total: number; queued: number; sent: number; failed: number };
   tasks: { total: number; pending: number; inProgress: number; completed: number; overdue: number; completionRate: number };
+  crm: { total: number; prospect: number; contacted: number; qualified: number; invited: number; negotiating: number; confirmed: number; declined: number; archived: number };
   history: { available: false; daily: [] };
 }
 export type CommTemplateKind = "submission_confirmation" | "acceptance" | "rejection" | "consolidated_decision" | "reminder" | "calendar_invite" | "custom";
@@ -178,6 +186,7 @@ export interface CommTemplateWrite { id?: string; eventId: EventId; name: string
 export interface CommPreview { kind: "acceptance" | "rejection" | "consolidated_decision" | "reminder"; templateId?: string; templateName?: string; subject: string; body: string; recipients: Array<{ speakerId: string; name: string; email?: string }>; calendarAttached: boolean; attachmentCount?: number; scheduleTime?: string; location?: string; }
 export interface CommSendRecipientResult { speakerId?: string; toEmail?: string; status: "sent" | "failed" | "skipped"; error?: string; reason?: string; }
 export interface CommSendResult { status: "sent" | "failed" | "skipped"; requested: number; sent: number; failed: number; skipped: number; results: CommSendRecipientResult[]; }
+export interface CrmCampaignSendResult { status: "sent" | "failed" | "skipped"; requested: number; sent: number; failed: number; skipped: number; }
 // Role lives on this row, never in an env var or hardcoded list — see convex/organizers.ts.
 export interface Organizer { id: string; organizationId?: string; userId: string; email: string; role: "owner" | "admin"; onboardingCompletedAt?: number; createdAt: number; }
 /** The tenant boundary. Every event and every Organizer row belongs to exactly one. */

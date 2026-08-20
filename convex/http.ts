@@ -60,6 +60,30 @@ function oauthCallback(provider: "notion" | "airtable") {
 http.route({ path: "/oauth/notion/callback", method: "GET", handler: oauthCallback("notion") });
 http.route({ path: "/oauth/airtable/callback", method: "GET", handler: oauthCallback("airtable") });
 
+function crmOauthCallback(provider: "notion" | "airtable") {
+  return httpAction(async (ctx, request) => {
+    const url = new URL(request.url);
+    const code = url.searchParams.get("code");
+    const state = url.searchParams.get("state");
+    const error = url.searchParams.get("error");
+    const origin = process.env.PUBLIC_APP_ORIGIN?.replace(/\/$/, "");
+    if (!origin) return new Response("OAuth callback is not configured.", { status: 500 });
+    const destination = new URL("/events", origin);
+    if (error || !code || !state) { destination.searchParams.set("crm_oauth_error", error ?? "authorization_failed"); return Response.redirect(destination, 302); }
+    try {
+      const result = await ctx.runAction(internal.crmSourceActions.completeOAuthCallback, { provider, state, code });
+      if (result.eventSlug) destination.pathname = `/events/${result.eventSlug}/program/contacts`;
+      destination.searchParams.set("crm_oauth", result.pendingId);
+      destination.searchParams.set("provider", provider);
+    } catch {
+      destination.searchParams.set("crm_oauth_error", "authorization_failed");
+    }
+    return Response.redirect(destination, 302);
+  });
+}
+http.route({ path: "/oauth/crm/notion/callback", method: "GET", handler: crmOauthCallback("notion") });
+http.route({ path: "/oauth/crm/airtable/callback", method: "GET", handler: crmOauthCallback("airtable") });
+
 // Every route below scopes strictly to auth.eventId (the event the *token* was minted for),
 // never to a client-supplied eventId query param or path segment. A token only ever grants
 // access to the one event it was issued against — see convex/schema.ts's api_tokens comment

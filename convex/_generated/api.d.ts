@@ -43,6 +43,9 @@ import type * as contentIntegrationsActions from "../contentIntegrationsActions.
 import type * as controlRoom from "../controlRoom.js";
 import type * as credentialEncryption from "../credentialEncryption.js";
 import type * as crm from "../crm.js";
+import type * as crmSourceActions from "../crmSourceActions.js";
+import type * as crmSources from "../crmSources.js";
+import type * as crons from "../crons.js";
 import type * as demoWorkspaces from "../demoWorkspaces.js";
 import type * as deviceTokens from "../deviceTokens.js";
 import type * as emailDelivery from "../emailDelivery.js";
@@ -136,6 +139,9 @@ declare const fullApi: ApiFromModules<{
   controlRoom: typeof controlRoom;
   credentialEncryption: typeof credentialEncryption;
   crm: typeof crm;
+  crmSourceActions: typeof crmSourceActions;
+  crmSources: typeof crmSources;
+  crons: typeof crons;
   demoWorkspaces: typeof demoWorkspaces;
   deviceTokens: typeof deviceTokens;
   emailDelivery: typeof emailDelivery;

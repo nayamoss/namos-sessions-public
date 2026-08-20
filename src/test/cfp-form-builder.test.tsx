@@ -65,12 +65,17 @@ const fields = [
   { id: abstractFieldId, formId, label: "Abstract", type: "wysiwyg", required: true },
 ];
 
-function renderBuilder(status: "draft" | "open" | "closed", write = vi.fn()) {
+function renderBuilder(
+  status: "draft" | "open" | "closed",
+  write = vi.fn(),
+  storedFileUrl?: string,
+) {
   const transport: DataTransport = {
     read: vi.fn(async (operation) => {
       if (operation === "events.list") return [event];
       if (operation === "forms.list") return [storedForm(status)];
       if (operation === "forms.fields") return fields;
+      if (operation === "files.getUrl") return storedFileUrl ?? null;
       return [];
     }) as DataTransport["read"],
     write: write as DataTransport["write"],
@@ -187,5 +192,40 @@ describe("CFP form builder", () => {
     fireEvent.blur(hexInput);
     await waitFor(() => expect(write).toHaveBeenCalledWith("events.save", expect.objectContaining({ id: eventId, accentColor: "#FFFFFF" })));
     expect(screen.getByRole("button", { name: "Reset to default" })).toBeInTheDocument();
+  });
+
+  it("renders an uploaded logo from its canonical storage URL", async () => {
+    const canonicalLogoUrl = "https://storage.example.test/logo.png";
+    const write = vi.fn(async (operation) =>
+      operation === "files.generateUploadUrl"
+        ? { uploadUrl: "https://uploads.example.test/logo" }
+        : undefined,
+    );
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({ storageId: "storage-logo" }),
+    } as Response);
+    renderBuilder("draft", write, canonicalLogoUrl);
+    await loaded();
+
+    fireEvent.click(screen.getByRole("button", { name: /Appearance/ }));
+    const uploadInput = document.querySelector<HTMLInputElement>("#cfp-logo-upload");
+    expect(uploadInput).not.toBeNull();
+    fireEvent.change(uploadInput!, {
+      target: {
+        files: [new File(["logo"], "logo.png", { type: "image/png" })],
+      },
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole("img", { name: "Wizard QA Summit logo" })).toHaveAttribute(
+        "src",
+        canonicalLogoUrl,
+      ),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://uploads.example.test/logo",
+      expect.objectContaining({ method: "POST" }),
+    );
   });
 });

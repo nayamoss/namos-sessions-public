@@ -28,10 +28,20 @@ describe("demo workspace server boundary", () => {
     expect(fixture).toContain("reviewerUserIds: [reviewerUserId]");
     expect(fixture).toContain('sourceRef: "demo:seed:pending"');
     expect(fixture).toContain('status: "accepted"');
+    expect(fixture).toContain('name: "Workshop Studio"');
+    expect(fixture).toContain('scheduleStartTime: "08:00"');
     expect(fixture).toContain('title: "Upload final slides"');
     expect(fixture).toContain('name: "Reviewed acceptance"');
     expect(fixture).toContain("await deleteDemoFixture(ctx, workspace.eventId, workspace.organizerUserId)");
     expect(fixture).toContain("await seedDemoFixture(ctx, { eventId: workspace.eventId");
+  });
+
+  it("keeps the one-click judge entry capability scoped and rate limited", () => {
+    const worker = readFileSync(resolve(process.cwd(), "worker/demo.ts"), "utf8");
+    expect(worker).toContain('pathname === "/demo/schedule-studio"');
+    expect(worker).toContain("DEMO_JUDGE_ACCESS_KEY");
+    expect(worker).toContain('judge-entry');
+    expect(worker).toContain("/program/agenda");
   });
 
   it("captures all demo email before integration resolution and grants only a bounded agent allowance", () => {

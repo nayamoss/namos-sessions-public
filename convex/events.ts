@@ -12,7 +12,11 @@ import {
   requireIdentity,
 } from "./functions";
 import { assertEventSchedule } from "./eventValidation";
-import { EVENT_TEAM_MEMBER_LIMIT, normalizeEventTeamEmail } from "../src/lib/event-team";
+import {
+  EVENT_TEAM_MEMBER_LIMIT,
+  normalizeEventTeamEmail,
+} from "../src/lib/event-team";
+import { ensureSpeakerStarterTemplates } from "./taskTemplates";
 
 const eventFields = {
   name: v.string(),
@@ -27,10 +31,13 @@ const eventFields = {
   contactEmail: v.optional(v.string()),
   logoFileId: v.optional(v.string()),
   programPublishedAt: v.optional(v.number()),
+  scheduleStartTime: v.optional(v.string()),
+  scheduleEndTime: v.optional(v.string()),
   theme: v.optional(v.string()),
   logoStorageKey: v.optional(v.string()),
   accentColor: v.optional(v.string()),
   backgroundStorageKey: v.optional(v.string()),
+  industry: v.optional(v.string()),
   exhibitorsEnabled: v.boolean(),
   sponsorsEnabled: v.boolean(),
   defaultOnboardingTemplateId: v.optional(v.id("task_templates")),
@@ -51,7 +58,9 @@ async function organizationEvents(
     organizationIds.map((organizationId) =>
       ctx.db
         .query("events")
-        .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
+        .withIndex("by_organization", (q) =>
+          q.eq("organizationId", organizationId),
+        )
         .collect(),
     ),
   );
@@ -158,10 +167,19 @@ export const portalSpeakerIdentity = query({
         ? identity.email.trim().toLowerCase()
         : undefined;
     if (email) {
-      const directSpeaker = await ctx.db.query("speakers").withIndex("by_email", (q) => q.eq("email", email)).first();
+      const directSpeaker = await ctx.db
+        .query("speakers")
+        .withIndex("by_email", (q) => q.eq("email", email))
+        .first();
       if (directSpeaker) {
         const directEvent = await ctx.db.get(directSpeaker.eventId);
-        if (directEvent) return { event: directEvent, speaker: directSpeaker, publishedEvents: directEvent.status === "published" ? [directEvent] : [] };
+        if (directEvent)
+          return {
+            event: directEvent,
+            speaker: directSpeaker,
+            publishedEvents:
+              directEvent.status === "published" ? [directEvent] : [],
+          };
       }
       for (const event of reachable) {
         // Compare lowercased rather than using the by_event_email index directly: stored
@@ -171,7 +189,9 @@ export const portalSpeakerIdentity = query({
           .query("speakers")
           .withIndex("by_event", (q) => q.eq("eventId", event._id))
           .collect();
-        const speaker = speakers.find((row) => row.email.trim().toLowerCase() === email);
+        const speaker = speakers.find(
+          (row) => row.email.trim().toLowerCase() === email,
+        );
         if (speaker) return { event, speaker, publishedEvents: published };
       }
     }
@@ -248,13 +268,21 @@ export const save = mutation({
       await ctx.db.patch(eventId, { ...fields, updatedAt: now });
       return eventId;
     }
-    const creatorEmail = typeof creator?.email === "string" ? normalizeEventTeamEmail(creator.email) : "";
-    if (!creator || !creatorEmail) throw new Error("Your account needs an email address before it can create an event.");
+    const creatorEmail =
+      typeof creator?.email === "string"
+        ? normalizeEventTeamEmail(creator.email)
+        : "";
+    if (!creator || !creatorEmail)
+      throw new Error(
+        "Your account needs an email address before it can create an event.",
+      );
     // An event must belong to a tenant from the moment it exists — an unstamped event would be
     // invisible to its own creator, since every guard treats a missing organizationId as deny.
     const [organizationId] = await organizationIdsForUser(ctx, creator);
     if (!organizationId)
-      throw new Error("You need an organization before you can create an event.");
+      throw new Error(
+        "You need an organization before you can create an event.",
+      );
     const newEventId = await ctx.db.insert("events", {
       ...fields,
       billingOwnerUserId: creator?.subject,
@@ -262,6 +290,7 @@ export const save = mutation({
       createdAt: now,
       updatedAt: now,
     });
+    await ensureSpeakerStarterTemplates(ctx, newEventId, now);
     await ctx.db.insert("event_members", {
       eventId: newEventId,
       userId: creator.subject,
@@ -280,10 +309,14 @@ export const save = mutation({
         .withIndex("by_event", (q) => q.eq("eventId", pullTeamFromEventId))
         .collect();
       const copiedMembers = members.filter(
-        (member) => member.userId !== creator.subject && normalizeEventTeamEmail(member.email) !== creatorEmail,
+        (member) =>
+          member.userId !== creator.subject &&
+          normalizeEventTeamEmail(member.email) !== creatorEmail,
       );
       if (copiedMembers.length + 1 > EVENT_TEAM_MEMBER_LIMIT)
-        throw new Error(`This event team is limited to ${EVENT_TEAM_MEMBER_LIMIT} people.`);
+        throw new Error(
+          `This event team is limited to ${EVENT_TEAM_MEMBER_LIMIT} people.`,
+        );
       for (const member of copiedMembers) {
         await ctx.db.insert("event_members", {
           eventId: newEventId,
@@ -312,8 +345,14 @@ export const duplicate = mutation({
     const creator = await assertEventOrganizerAccess(ctx, args.sourceEventId);
     const source = await ctx.db.get(args.sourceEventId);
     if (!source) throw new Error("Source event not found.");
-    const creatorEmail = typeof creator.email === "string" ? normalizeEventTeamEmail(creator.email) : "";
-    if (!creatorEmail) throw new Error("Your account needs an email address before it can create an event.");
+    const creatorEmail =
+      typeof creator.email === "string"
+        ? normalizeEventTeamEmail(creator.email)
+        : "";
+    if (!creatorEmail)
+      throw new Error(
+        "Your account needs an email address before it can create an event.",
+      );
     assertEventSchedule(source.timezone, args.startDate, args.endDate);
     if (
       await ctx.db
@@ -363,10 +402,14 @@ export const duplicate = mutation({
         : Promise.resolve([]),
     ]);
     const copiedMembers = members.filter(
-      (member) => member.userId !== creator.subject && normalizeEventTeamEmail(member.email) !== creatorEmail,
+      (member) =>
+        member.userId !== creator.subject &&
+        normalizeEventTeamEmail(member.email) !== creatorEmail,
     );
     if (copiedMembers.length + 1 > EVENT_TEAM_MEMBER_LIMIT)
-      throw new Error(`This event team is limited to ${EVENT_TEAM_MEMBER_LIMIT} people.`);
+      throw new Error(
+        `This event team is limited to ${EVENT_TEAM_MEMBER_LIMIT} people.`,
+      );
     await ctx.db.insert("event_members", {
       eventId,
       userId: creator.subject,
@@ -440,56 +483,214 @@ export const remove = mutation({
     const event = await ctx.db.get(args.eventId);
     if (!event) throw new Error("Event not found.");
     if (event.status !== "draft")
-      throw new Error("Only draft events can be deleted. Archive this event instead.");
+      throw new Error(
+        "Only draft events can be deleted. Archive this event instead.",
+      );
 
     const [
-      forms, formResponses, speakers, submissions, evaluations, evaluationPlans,
-      evaluationAssignments, sponsorTiers, sponsors, sponsorContacts, tasks,
-      taskTemplates, availability, embeds, agendaItems, agendaAudit, commsTemplates,
-      commsLog, emailIntegrations, eventMembers, rooms, tracks, tags, agentRuns,
-      agentUsage, agentRunEvents, agentSettings,
+      forms,
+      formResponses,
+      speakers,
+      submissions,
+      evaluations,
+      evaluationPlans,
+      evaluationAssignments,
+      sponsorTiers,
+      sponsors,
+      sponsorContacts,
+      tasks,
+      taskTemplates,
+      availability,
+      embeds,
+      agendaItems,
+      agendaAudit,
+      commsTemplates,
+      commsLog,
+      emailIntegrations,
+      eventMembers,
+      rooms,
+      tracks,
+      tags,
+      agentRuns,
+      agentUsage,
+      agentRunEvents,
+      agentSettings,
     ] = await Promise.all([
-      ctx.db.query("submission_forms").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
-      ctx.db.query("form_responses").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
-      ctx.db.query("speakers").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
-      ctx.db.query("submissions").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
-      ctx.db.query("evaluations").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
-      ctx.db.query("evaluation_plans").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
-      ctx.db.query("evaluation_assignments").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
-      ctx.db.query("sponsor_tiers").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
-      ctx.db.query("sponsors").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
-      ctx.db.query("sponsor_contacts").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
-      ctx.db.query("onboarding_tasks").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
-      ctx.db.query("task_templates").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
-      ctx.db.query("speaker_availability").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
-      ctx.db.query("embeds").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
-      ctx.db.query("agenda_items").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
-      ctx.db.query("agenda_items_audit").withIndex("by_event_createdAt", (q) => q.eq("eventId", args.eventId)).collect(),
-      ctx.db.query("comms_templates").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
-      ctx.db.query("comms_log").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
-      ctx.db.query("email_integrations").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
-      ctx.db.query("event_members").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
-      ctx.db.query("rooms").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
-      ctx.db.query("tracks").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
-      ctx.db.query("tags").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
-      ctx.db.query("agent_runs").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
-      ctx.db.query("agent_usage_records").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
-      ctx.db.query("agent_run_events").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
-      ctx.db.query("agent_provider_settings").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db
+        .query("submission_forms")
+        .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+        .collect(),
+      ctx.db
+        .query("form_responses")
+        .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+        .collect(),
+      ctx.db
+        .query("speakers")
+        .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+        .collect(),
+      ctx.db
+        .query("submissions")
+        .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+        .collect(),
+      ctx.db
+        .query("evaluations")
+        .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+        .collect(),
+      ctx.db
+        .query("evaluation_plans")
+        .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+        .collect(),
+      ctx.db
+        .query("evaluation_assignments")
+        .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+        .collect(),
+      ctx.db
+        .query("sponsor_tiers")
+        .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+        .collect(),
+      ctx.db
+        .query("sponsors")
+        .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+        .collect(),
+      ctx.db
+        .query("sponsor_contacts")
+        .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+        .collect(),
+      ctx.db
+        .query("onboarding_tasks")
+        .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+        .collect(),
+      ctx.db
+        .query("task_templates")
+        .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+        .collect(),
+      ctx.db
+        .query("speaker_availability")
+        .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+        .collect(),
+      ctx.db
+        .query("embeds")
+        .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+        .collect(),
+      ctx.db
+        .query("agenda_items")
+        .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+        .collect(),
+      ctx.db
+        .query("agenda_items_audit")
+        .withIndex("by_event_createdAt", (q) => q.eq("eventId", args.eventId))
+        .collect(),
+      ctx.db
+        .query("comms_templates")
+        .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+        .collect(),
+      ctx.db
+        .query("comms_log")
+        .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+        .collect(),
+      ctx.db
+        .query("email_integrations")
+        .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+        .collect(),
+      ctx.db
+        .query("event_members")
+        .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+        .collect(),
+      ctx.db
+        .query("rooms")
+        .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+        .collect(),
+      ctx.db
+        .query("tracks")
+        .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+        .collect(),
+      ctx.db
+        .query("tags")
+        .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+        .collect(),
+      ctx.db
+        .query("agent_runs")
+        .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+        .collect(),
+      ctx.db
+        .query("agent_usage_records")
+        .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+        .collect(),
+      ctx.db
+        .query("agent_run_events")
+        .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+        .collect(),
+      ctx.db
+        .query("agent_provider_settings")
+        .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+        .collect(),
     ]);
     const [confirmationRequests, proposals] = await Promise.all([
-      ctx.db.query("submission_confirmation_requests").filter((q) => q.eq(q.field("eventId"), args.eventId)).collect(),
-      ctx.db.query("agent_action_proposals").filter((q) => q.eq(q.field("eventId"), args.eventId)).collect(),
+      ctx.db
+        .query("submission_confirmation_requests")
+        .filter((q) => q.eq(q.field("eventId"), args.eventId))
+        .collect(),
+      ctx.db
+        .query("agent_action_proposals")
+        .filter((q) => q.eq(q.field("eventId"), args.eventId))
+        .collect(),
     ]);
-    const documents = (await Promise.all(submissions.map((submission) => ctx.db.query("speaker_documents").withIndex("by_submission", (q) => q.eq("submissionId", submission._id)).collect()))).flat();
+    const documents = (
+      await Promise.all(
+        submissions.map((submission) =>
+          ctx.db
+            .query("speaker_documents")
+            .withIndex("by_submission", (q) =>
+              q.eq("submissionId", submission._id),
+            )
+            .collect(),
+        ),
+      )
+    ).flat();
 
     await Promise.all([
       ...documents.map(async (document) => {
         await ctx.db.delete(document._id);
         await ctx.storage.delete(document.fileUrl as Id<"_storage">);
       }),
-      ...speakers.flatMap((speaker) => speaker.headshotStorageKey ? [ctx.storage.delete(speaker.headshotStorageKey as Id<"_storage">)] : []),
-      ...[formResponses, evaluations, evaluationAssignments, evaluationPlans, sponsorContacts, sponsors, sponsorTiers, tasks, taskTemplates, availability, embeds, agendaItems, agendaAudit, commsTemplates, commsLog, emailIntegrations, confirmationRequests, proposals, agentUsage, agentRunEvents, agentSettings, agentRuns, forms, submissions, speakers, eventMembers, rooms, tracks, tags].flat().map((row) => ctx.db.delete(row._id)),
+      ...speakers.flatMap((speaker) =>
+        speaker.headshotStorageKey
+          ? [ctx.storage.delete(speaker.headshotStorageKey as Id<"_storage">)]
+          : [],
+      ),
+      ...[
+        formResponses,
+        evaluations,
+        evaluationAssignments,
+        evaluationPlans,
+        sponsorContacts,
+        sponsors,
+        sponsorTiers,
+        tasks,
+        taskTemplates,
+        availability,
+        embeds,
+        agendaItems,
+        agendaAudit,
+        commsTemplates,
+        commsLog,
+        emailIntegrations,
+        confirmationRequests,
+        proposals,
+        agentUsage,
+        agentRunEvents,
+        agentSettings,
+        agentRuns,
+        forms,
+        submissions,
+        speakers,
+        eventMembers,
+        rooms,
+        tracks,
+        tags,
+      ]
+        .flat()
+        .map((row) => ctx.db.delete(row._id)),
     ]);
     await ctx.db.delete(args.eventId);
   },

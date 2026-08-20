@@ -2,7 +2,7 @@ type SubmissionStatus = "draft" | "pending" | "accept_queue" | "accepted" | "may
 
 type SubmissionMetricRow = { id: string; status: SubmissionStatus };
 type EvaluationMetricRow = { assignmentId?: string };
-type AssignmentMetricRow = { id: string };
+type AssignmentMetricRow = { id: string; submissionId?: string; reviewerUserId?: string };
 type SpeakerMetricRow = {
   confirmationStatus?: "awaiting" | "confirmed" | "declined";
   bio?: string;
@@ -14,6 +14,7 @@ type TaskMetricRow = {
   status: "pending" | "in_progress" | "completed";
   dueDate?: number;
 };
+type CrmMetricRow = { stage: "prospect" | "contacted" | "qualified" | "invited" | "negotiating" | "confirmed" | "declined" | "archived" };
 
 export type EventAnalyticsRows = {
   submissions: SubmissionMetricRow[];
@@ -23,6 +24,7 @@ export type EventAnalyticsRows = {
   agenda: AgendaMetricRow[];
   communications: CommunicationMetricRow[];
   tasks: TaskMetricRow[];
+  crmContacts: CrmMetricRow[];
 };
 
 const ratio = (numerator: number, denominator: number) =>
@@ -58,6 +60,16 @@ export function buildEventAnalyticsSummary(
     ),
   );
   const completedTasks = rows.tasks.filter((task) => task.status === "completed").length;
+  const undecided = rows.submissions.filter((submission) => !["accepted", "declined", "withdrawn"].includes(submission.status)).length;
+  const assignedSubmissionIds = new Set(rows.assignments.flatMap((assignment) => assignment.submissionId ? [assignment.submissionId] : []));
+  const unassigned = rows.submissions.filter((submission) => !["draft", "withdrawn", "accepted", "declined"].includes(submission.status) && !assignedSubmissionIds.has(submission.id)).length;
+  const reviewerLoads = new Map<string, number>();
+  for (const assignment of rows.assignments) {
+    if (assignment.reviewerUserId) reviewerLoads.set(assignment.reviewerUserId, (reviewerLoads.get(assignment.reviewerUserId) ?? 0) + 1);
+  }
+  const loads = [...reviewerLoads.values()];
+  const averageLoad = loads.length === 0 ? 0 : Math.round((loads.reduce((total, value) => total + value, 0) / loads.length) * 10) / 10;
+  const crmCount = (stage: CrmMetricRow["stage"]) => rows.crmContacts.filter((contact) => contact.stage === stage).length;
 
   return {
     version: 1,
@@ -73,12 +85,23 @@ export function buildEventAnalyticsSummary(
       accepted,
       declined,
       withdrawn: statusCount("withdrawn"),
+      undecided,
       acceptanceRate: ratio(accepted, accepted + declined),
     },
     reviews: {
       assigned: assignedIds.size,
       completed: completedReviews,
+      unassigned,
       completionRate: ratio(completedReviews, assignedIds.size),
+      workload: {
+        reviewers: loads.length,
+        min: loads.length ? Math.min(...loads) : 0,
+        max: loads.length ? Math.max(...loads) : 0,
+        average: averageLoad,
+        light: loads.filter((load) => load <= 2).length,
+        balanced: loads.filter((load) => load >= 3 && load <= 5).length,
+        heavy: loads.filter((load) => load >= 6).length,
+      },
     },
     speakers: {
       total: rows.speakers.length,
@@ -120,6 +143,10 @@ export function buildEventAnalyticsSummary(
           task.dueDate < now,
       ).length,
       completionRate: ratio(completedTasks, rows.tasks.length),
+    },
+    crm: {
+      total: rows.crmContacts.length,
+      prospect: crmCount("prospect"), contacted: crmCount("contacted"), qualified: crmCount("qualified"), invited: crmCount("invited"), negotiating: crmCount("negotiating"), confirmed: crmCount("confirmed"), declined: crmCount("declined"), archived: crmCount("archived"),
     },
     history: { available: false, daily: [] },
   };

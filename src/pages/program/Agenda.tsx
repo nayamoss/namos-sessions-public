@@ -55,10 +55,21 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useRepo } from "@/data/repo";
-import type { AgendaConflict, Event, Room, Speaker, SpeakerId, Submission, Track } from "@/data/types";
+import type {
+  AgendaConflict,
+  Event,
+  Room,
+  Speaker,
+  SpeakerId,
+  Submission,
+  Track,
+} from "@/data/types";
 import { toast } from "@/components/ui/sonner";
 import { AgendaMoveControl } from "./AgendaMoveControl";
-import { AgendaSessionForm, type AgendaSessionValue } from "./AgendaSessionForm";
+import {
+  AgendaSessionForm,
+  type AgendaSessionValue,
+} from "./AgendaSessionForm";
 import {
   eventDateTime,
   eventDateTimeToEpoch,
@@ -80,26 +91,20 @@ export type AgendaItem = {
   submissionId?: string;
 };
 type AgendaView =
-  | "list"
-  | "day"
-  | "week"
-  | "month"
-  | "track"
-  | "rooms"
-  | "conflicts";
+  "list" | "day" | "week" | "month" | "track" | "rooms" | "conflicts";
 const agendaViews: { value: AgendaView; label: string }[] = [
-  { value: "list", label: "List" },
+  { value: "rooms", label: "Schedule Studio" },
+  { value: "list", label: "Session list" },
+  { value: "conflicts", label: "Conflicts" },
   { value: "day", label: "Day" },
   { value: "week", label: "Week" },
   { value: "month", label: "Month" },
   { value: "track", label: "Tracks" },
-  { value: "rooms", label: "Rooms" },
-  { value: "conflicts", label: "Conflicts" },
 ];
 function parseAgendaView(value: string | null): AgendaView {
   return agendaViews.some((view) => view.value === value)
     ? (value as AgendaView)
-    : "list";
+    : "rooms";
 }
 type SortKey = "time" | "title" | "room";
 type DetailMode = "create" | "duplicate" | undefined;
@@ -303,7 +308,7 @@ export default function Agenda() {
     (next: AgendaView) => {
       setParams((current) => {
         const nextParams = new URLSearchParams(current);
-        if (next === "list") nextParams.delete("view");
+        if (next === "rooms") nextParams.delete("view");
         else nextParams.set("view", next);
         return nextParams;
       });
@@ -315,7 +320,9 @@ export default function Agenda() {
   const [sortKey, setSortKey] = useState<SortKey>("time");
   const [roomFilters, setRoomFilters] = useState<string[]>([]);
   const [trackFilters, setTrackFilters] = useState<string[]>([]);
-  const [publicationFilter, setPublicationFilter] = useState<"all" | "published" | "draft">("all");
+  const [publicationFilter, setPublicationFilter] = useState<
+    "all" | "published" | "draft"
+  >("all");
   const [detailMode, setDetailMode] = useState<DetailMode>();
   const requestedSubmissionId = params.get("submission") ?? undefined;
   const [announcement, setAnnouncement] = useState("");
@@ -326,6 +333,7 @@ export default function Agenda() {
   const [publishError, setPublishError] = useState<string>();
   const [pendingDelete, setPendingDelete] = useState<AgendaItem>();
   const [deleting, setDeleting] = useState(false);
+  const [undo, setUndo] = useState<{ previous?: AgendaItem; createdId?: string; title: string }>();
   const selectSession = useCallback(
     (id: string) => {
       setParams((current) => {
@@ -350,15 +358,21 @@ export default function Agenda() {
         return;
       }
       const scope = { eventId: nextEvent.id };
-      const [agenda, conflicts, nextRooms, nextTracks, nextSpeakers, nextSubmissions] =
-        await Promise.all([
-          repo.agenda.list(scope),
-          repo.agenda.detectConflicts(scope),
-          repo.events.listRooms(scope),
-          repo.events.listTracks(scope),
-          repo.speakers.list(scope),
-          repo.submissions.list(scope),
-        ]);
+      const [
+        agenda,
+        conflicts,
+        nextRooms,
+        nextTracks,
+        nextSpeakers,
+        nextSubmissions,
+      ] = await Promise.all([
+        repo.agenda.list(scope),
+        repo.agenda.detectConflicts(scope),
+        repo.events.listRooms(scope),
+        repo.events.listTracks(scope),
+        repo.speakers.list(scope),
+        repo.submissions.list(scope),
+      ]);
       const roomNames = new Map(nextRooms.map((room) => [room.id, room.name]));
       const trackNames = new Map(
         nextTracks.map((track) => [track.id, track.name]),
@@ -407,15 +421,24 @@ export default function Agenda() {
     void load();
   }, [load]);
   const visibleItems = useMemo(() => {
-    const filtered = items.filter((item) =>
+    const filtered = items.filter(
+      (item) =>
         `${item.title} ${item.speaker} ${item.track} ${item.room}`
           .toLowerCase()
           .includes(query.toLowerCase()) &&
         (roomFilters.length === 0 || roomFilters.includes(item.roomId)) &&
-        (trackFilters.length === 0 || Boolean(item.trackId && trackFilters.includes(item.trackId))) &&
-        (publicationFilter === "all" || item.isPublished === (publicationFilter === "published")),
-      );
-    return [...filtered].sort((first, second) => sortKey === "time" ? first.startTime - second.startTime : sortKey === "title" ? first.title.localeCompare(second.title) : first.room.localeCompare(second.room));
+        (trackFilters.length === 0 ||
+          Boolean(item.trackId && trackFilters.includes(item.trackId))) &&
+        (publicationFilter === "all" ||
+          item.isPublished === (publicationFilter === "published")),
+    );
+    return [...filtered].sort((first, second) =>
+      sortKey === "time"
+        ? first.startTime - second.startTime
+        : sortKey === "title"
+          ? first.title.localeCompare(second.title)
+          : first.room.localeCompare(second.room),
+    );
   }, [items, publicationFilter, query, roomFilters, sortKey, trackFilters]);
   const dayGroups = useMemo(
     () => agendaDayGroups(items, timeZone),
@@ -451,10 +474,15 @@ export default function Agenda() {
         byItem.set(item.id, [...(byItem.get(item.id) ?? []), conflict.title]);
     return byItem;
   }, [blockingConflicts]);
-  const selectedItem = params.get("selected") ? itemById.get(params.get("selected")!) : undefined;
-  const requestedSubmission = submissions.find((submission) => submission.id === requestedSubmissionId);
+  const selectedItem = params.get("selected")
+    ? itemById.get(params.get("selected")!)
+    : undefined;
+  const requestedSubmission = submissions.find(
+    (submission) => submission.id === requestedSubmissionId,
+  );
   useEffect(() => {
-    if (params.get("mode") === "add" && requestedSubmission) setDetailMode("create");
+    if (params.get("mode") === "add" && requestedSubmission)
+      setDetailMode("create");
   }, [params, requestedSubmission]);
   const closeDetail = () => {
     setDetailMode(undefined);
@@ -595,6 +623,7 @@ export default function Agenda() {
       const message = `${next.title} moved to ${next.room} at ${formatTime(next.startTime, timeZone)}.`;
       setAnnouncement(message);
       toast.success("Session moved", { description: message });
+      setUndo({ previous: current, title: next.title });
     } catch (cause) {
       setItems((previous) =>
         previous.map((item) => (item.id === id ? current : item)),
@@ -604,11 +633,44 @@ export default function Agenda() {
           ? cause.message
           : "Could not move the session. Its previous room and time were restored.",
       );
-      const message = cause instanceof Error ? cause.message : "Could not move the session. Its previous room and time were restored.";
+      const message =
+        cause instanceof Error
+          ? cause.message
+          : "Could not move the session. Its previous room and time were restored.";
       setAnnouncement(message);
       toast.error("Move failed", { description: message });
       throw cause;
     }
+  };
+  const scheduleSubmission = async (submission: Submission, roomId: string, startTime: number) => {
+    if (!event) return;
+    const endTime = startTime + 45 * 60_000;
+    const input = {
+      eventId: event.id,
+      title: submission.title ?? "Untitled accepted session",
+      roomId,
+      trackId: submission.trackId,
+      submissionId: submission.id,
+      speakerIds: submission.speakerIds as SpeakerId[],
+      startTime,
+      endTime,
+      isPublished: false,
+    };
+    const conflicts = await repo.agenda.checkPlacement(input);
+    const blocking = conflicts.find((conflict) => conflict.blocking);
+    if (blocking) throw new Error(blocking.message);
+    const id = await repo.agenda.save(input);
+    setUndo({ createdId: id, title: input.title });
+    await load();
+    toast.success("Session scheduled", { description: `${input.title} was added to the schedule.` });
+  };
+  const undoLastPlacement = async () => {
+    if (!event || !undo) return;
+    if (undo.createdId) await repo.agenda.remove({ eventId: event.id, id: undo.createdId });
+    else if (undo.previous) await persist(undo.previous);
+    await load();
+    toast.success("Schedule change undone", { description: `${undo.title} was restored.` });
+    setUndo(undefined);
   };
   const deleteSession = async () => {
     if (!event || !pendingDelete) return;
@@ -667,7 +729,11 @@ export default function Agenda() {
     URL.revokeObjectURL(url);
   };
   const exportCsv = () => {
-    downloadBlob(Papa.unparse(exportRows), "text/csv;charset=utf-8", "agenda.csv");
+    downloadBlob(
+      Papa.unparse(exportRows),
+      "text/csv;charset=utf-8",
+      "agenda.csv",
+    );
     toast.success("Agenda CSV exported");
   };
   const exportPdf = () => {
@@ -677,8 +743,14 @@ export default function Agenda() {
     pdf.setFontSize(9);
     let y = 28;
     for (const row of exportRows) {
-      const lines = pdf.splitTextToSize(`${row.Date} ${row.Start}–${row.End}  ${row.Session} — ${row.Speakers} · ${row.Room}`, 180);
-      if (y + lines.length * 5 > 285) { pdf.addPage(); y = 18; }
+      const lines = pdf.splitTextToSize(
+        `${row.Date} ${row.Start}–${row.End}  ${row.Session} — ${row.Speakers} · ${row.Room}`,
+        180,
+      );
+      if (y + lines.length * 5 > 285) {
+        pdf.addPage();
+        y = 18;
+      }
       pdf.text(lines, 14, y);
       y += lines.length * 5 + 2;
     }
@@ -686,20 +758,47 @@ export default function Agenda() {
     toast.success("Agenda PDF exported");
   };
   const duplicateDay = async (sourceDate: string, targetDate: string) => {
-    if (!event || sourceDate === targetDate) throw new Error("Choose two different event days.");
-    const sourceItems = items.filter((item) => eventDateTime(item.startTime, timeZone).date === sourceDate);
-    if (sourceItems.length === 0) throw new Error("The source day has no sessions to duplicate.");
-    await Promise.all(sourceItems.map((item) => {
-      const localStart = eventDateTime(item.startTime, timeZone);
-      const localEnd = eventDateTime(item.endTime, timeZone);
-      const startTime = eventDateTimeToEpoch(targetDate, localStart.time, timeZone);
-      const endTime = eventDateTimeToEpoch(targetDate, localEnd.time, timeZone);
-      if (startTime === undefined || endTime === undefined) throw new Error("Could not map a session into the target day.");
-      return repo.agenda.save({ eventId: event.id, title: item.title, roomId: item.roomId, trackId: item.trackId, submissionId: item.submissionId, speakerIds: item.speakerIds as SpeakerId[], startTime, endTime, isPublished: false });
-    }));
+    if (!event || sourceDate === targetDate)
+      throw new Error("Choose two different event days.");
+    const sourceItems = items.filter(
+      (item) => eventDateTime(item.startTime, timeZone).date === sourceDate,
+    );
+    if (sourceItems.length === 0)
+      throw new Error("The source day has no sessions to duplicate.");
+    await Promise.all(
+      sourceItems.map((item) => {
+        const localStart = eventDateTime(item.startTime, timeZone);
+        const localEnd = eventDateTime(item.endTime, timeZone);
+        const startTime = eventDateTimeToEpoch(
+          targetDate,
+          localStart.time,
+          timeZone,
+        );
+        const endTime = eventDateTimeToEpoch(
+          targetDate,
+          localEnd.time,
+          timeZone,
+        );
+        if (startTime === undefined || endTime === undefined)
+          throw new Error("Could not map a session into the target day.");
+        return repo.agenda.save({
+          eventId: event.id,
+          title: item.title,
+          roomId: item.roomId,
+          trackId: item.trackId,
+          submissionId: item.submissionId,
+          speakerIds: item.speakerIds as SpeakerId[],
+          startTime,
+          endTime,
+          isPublished: false,
+        });
+      }),
+    );
     await load();
     closeDetail();
-    toast.success(`${sourceItems.length} ${sourceItems.length === 1 ? "session" : "sessions"} duplicated as drafts`);
+    toast.success(
+      `${sourceItems.length} ${sourceItems.length === 1 ? "session" : "sessions"} duplicated as drafts`,
+    );
   };
   const columns: DataGridColumn<AgendaItem>[] = [
     {
@@ -732,7 +831,10 @@ export default function Agenda() {
             <p className="text-xs text-muted-foreground">{item.track}</p>
             {itemConflicts.length > 0 && (
               <p className="mt-1 inline-flex items-center gap-1.5 rounded-md bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200">
-                <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden="true" />
+                <AlertTriangle
+                  className="h-3 w-3 shrink-0"
+                  aria-hidden="true"
+                />
                 {[...new Set(itemConflicts)].join(" · ")}
               </p>
             )}
@@ -766,26 +868,87 @@ export default function Agenda() {
       key: "move",
       header: "",
       align: "right",
-      cell: (item) => <AgendaMoveControl id={item.id} title={item.title} roomId={item.roomId} startTime={item.startTime} rooms={rooms} timeZone={timeZone} onMove={moveSession} />,
+      cell: (item) => (
+        <AgendaMoveControl
+          id={item.id}
+          title={item.title}
+          roomId={item.roomId}
+          startTime={item.startTime}
+          rooms={rooms}
+          timeZone={timeZone}
+          onMove={moveSession}
+        />
+      ),
     },
   ];
-  const detail = event && detailMode === "create" ? (
-    <DetailPane title="Add session" onClose={closeDetail}>
-      <AgendaSessionForm event={event} rooms={rooms} tracks={tracks} speakers={speakers} submissions={submissions} initial={requestedSubmission ? { title: requestedSubmission.title ?? "Untitled accepted submission", submissionId: requestedSubmission.id, speakerIds: requestedSubmission.speakerIds, trackId: requestedSubmission.trackId, roomId: rooms[0]?.id ?? "", startTime: event.startDate + 9 * 60 * 60_000, endTime: event.startDate + 9 * 60 * 60_000 + 45 * 60_000, isPublished: false } : undefined} onSave={saveSession} onCancel={closeDetail} />
-    </DetailPane>
-  ) : event && detailMode === "duplicate" ? (
-    <DetailPane title="Duplicate day" onClose={closeDetail}>
-      <DuplicateDayForm days={agendaEventDays(event.startDate, event.endDate)} timeZone={timeZone} onDuplicate={duplicateDay} onCancel={closeDetail} />
-    </DetailPane>
-  ) : event && selectedItem ? (
-    <DetailPane title="Edit session" onClose={closeDetail}>
-      <AgendaSessionForm event={event} rooms={rooms} tracks={tracks} speakers={speakers} submissions={submissions} initial={{ id: selectedItem.id, title: selectedItem.title, submissionId: selectedItem.submissionId, speakerIds: selectedItem.speakerIds, trackId: selectedItem.trackId, roomId: selectedItem.roomId, startTime: selectedItem.startTime, endTime: selectedItem.endTime, isPublished: selectedItem.isPublished }} onSave={saveSession} onCancel={closeDetail} onDelete={() => setPendingDelete(selectedItem)} />
-    </DetailPane>
-  ) : undefined;
+  const detail =
+    event && detailMode === "create" ? (
+      <DetailPane title="Add session" onClose={closeDetail}>
+        <AgendaSessionForm
+          event={event}
+          rooms={rooms}
+          tracks={tracks}
+          speakers={speakers}
+          submissions={submissions}
+          initial={
+            requestedSubmission
+              ? {
+                  title:
+                    requestedSubmission.title ?? "Untitled accepted submission",
+                  submissionId: requestedSubmission.id,
+                  speakerIds: requestedSubmission.speakerIds,
+                  trackId: requestedSubmission.trackId,
+                  roomId: rooms[0]?.id ?? "",
+                  startTime: event.startDate + 9 * 60 * 60_000,
+                  endTime: event.startDate + 9 * 60 * 60_000 + 45 * 60_000,
+                  isPublished: false,
+                }
+              : undefined
+          }
+          onSave={saveSession}
+          onCancel={closeDetail}
+        />
+      </DetailPane>
+    ) : event && detailMode === "duplicate" ? (
+      <DetailPane title="Duplicate day" onClose={closeDetail}>
+        <DuplicateDayForm
+          days={agendaEventDays(event.startDate, event.endDate)}
+          timeZone={timeZone}
+          onDuplicate={duplicateDay}
+          onCancel={closeDetail}
+        />
+      </DetailPane>
+    ) : event && selectedItem ? (
+      <DetailPane title="Edit session" onClose={closeDetail}>
+        <AgendaSessionForm
+          event={event}
+          rooms={rooms}
+          tracks={tracks}
+          speakers={speakers}
+          submissions={submissions}
+          initial={{
+            id: selectedItem.id,
+            title: selectedItem.title,
+            submissionId: selectedItem.submissionId,
+            speakerIds: selectedItem.speakerIds,
+            trackId: selectedItem.trackId,
+            roomId: selectedItem.roomId,
+            startTime: selectedItem.startTime,
+            endTime: selectedItem.endTime,
+            isPublished: selectedItem.isPublished,
+          }}
+          onSave={saveSession}
+          onCancel={closeDetail}
+          onDelete={() => setPendingDelete(selectedItem)}
+        />
+      </DetailPane>
+    ) : undefined;
   return (
     <AppLayout title="Schedule" detail={detail}>
       <div className="space-y-5">
-        <p className="sr-only" aria-live="polite">{announcement}</p>
+        <p className="sr-only" aria-live="polite">
+          {announcement}
+        </p>
         {error && (
           <p role="alert" className="text-sm text-destructive">
             {error}
@@ -845,22 +1008,184 @@ export default function Agenda() {
               >
                 {publishing ? "Publishing…" : "Publish schedule"}
               </Button>
-              <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" size="sm"><ArrowUpDown className="mr-1 h-4 w-4" />Sort</Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuRadioGroup value={sortKey} onValueChange={(value) => setSortKey(value as SortKey)}><DropdownMenuRadioItem value="time">Time</DropdownMenuRadioItem><DropdownMenuRadioItem value="title">Title</DropdownMenuRadioItem><DropdownMenuRadioItem value="room">Room</DropdownMenuRadioItem></DropdownMenuRadioGroup></DropdownMenuContent></DropdownMenu>
-              <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" size="sm"><Filter className="mr-1 h-4 w-4" />Filter{roomFilters.length + trackFilters.length + (publicationFilter === "all" ? 0 : 1) > 0 ? ` (${roomFilters.length + trackFilters.length + (publicationFilter === "all" ? 0 : 1)})` : ""}</Button></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-56"><p className="px-2 py-1 text-xs font-medium text-muted-foreground">Rooms</p>{rooms.map((room) => <DropdownMenuCheckboxItem key={room.id} checked={roomFilters.includes(room.id)} onCheckedChange={(checked) => setRoomFilters((current) => checked ? [...current, room.id] : current.filter((id) => id !== room.id))}>{room.name}</DropdownMenuCheckboxItem>)}<p className="px-2 py-1 text-xs font-medium text-muted-foreground">Tracks</p>{tracks.map((track) => <DropdownMenuCheckboxItem key={track.id} checked={trackFilters.includes(track.id)} onCheckedChange={(checked) => setTrackFilters((current) => checked ? [...current, track.id] : current.filter((id) => id !== track.id))}>{track.name}</DropdownMenuCheckboxItem>)}<p className="px-2 py-1 text-xs font-medium text-muted-foreground">Status</p><DropdownMenuRadioGroup value={publicationFilter} onValueChange={(value) => setPublicationFilter(value as typeof publicationFilter)}><DropdownMenuRadioItem value="all">All</DropdownMenuRadioItem><DropdownMenuRadioItem value="published">Published</DropdownMenuRadioItem><DropdownMenuRadioItem value="draft">Draft</DropdownMenuRadioItem></DropdownMenuRadioGroup></DropdownMenuContent></DropdownMenu>
-              <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" size="icon" aria-label="More agenda options"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onSelect={exportCsv}><Download className="mr-2 h-4 w-4" />Export as CSV</DropdownMenuItem><DropdownMenuItem onSelect={exportPdf}><Download className="mr-2 h-4 w-4" />Export as PDF</DropdownMenuItem><DropdownMenuItem onSelect={() => window.print()}><Printer className="mr-2 h-4 w-4" />Print schedule</DropdownMenuItem><DropdownMenuItem onSelect={() => { setDetailMode("duplicate"); setParams((current) => { const next = new URLSearchParams(current); next.delete("selected"); return next; }); }}><Copy className="mr-2 h-4 w-4" />Duplicate day…</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <ArrowUpDown className="mr-1 h-4 w-4" />
+                    Sort
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuRadioGroup
+                    value={sortKey}
+                    onValueChange={(value) => setSortKey(value as SortKey)}
+                  >
+                    <DropdownMenuRadioItem value="time">
+                      Time
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="title">
+                      Title
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="room">
+                      Room
+                    </DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <Filter className="mr-1 h-4 w-4" />
+                    Filter
+                    {roomFilters.length +
+                      trackFilters.length +
+                      (publicationFilter === "all" ? 0 : 1) >
+                    0
+                      ? ` (${roomFilters.length + trackFilters.length + (publicationFilter === "all" ? 0 : 1)})`
+                      : ""}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <p className="px-2 py-1 text-xs font-medium text-muted-foreground">
+                    Rooms
+                  </p>
+                  {rooms.map((room) => (
+                    <DropdownMenuCheckboxItem
+                      key={room.id}
+                      checked={roomFilters.includes(room.id)}
+                      onCheckedChange={(checked) =>
+                        setRoomFilters((current) =>
+                          checked
+                            ? [...current, room.id]
+                            : current.filter((id) => id !== room.id),
+                        )
+                      }
+                    >
+                      {room.name}
+                    </DropdownMenuCheckboxItem>
+                  ))}
+                  <p className="px-2 py-1 text-xs font-medium text-muted-foreground">
+                    Tracks
+                  </p>
+                  {tracks.map((track) => (
+                    <DropdownMenuCheckboxItem
+                      key={track.id}
+                      checked={trackFilters.includes(track.id)}
+                      onCheckedChange={(checked) =>
+                        setTrackFilters((current) =>
+                          checked
+                            ? [...current, track.id]
+                            : current.filter((id) => id !== track.id),
+                        )
+                      }
+                    >
+                      {track.name}
+                    </DropdownMenuCheckboxItem>
+                  ))}
+                  <p className="px-2 py-1 text-xs font-medium text-muted-foreground">
+                    Status
+                  </p>
+                  <DropdownMenuRadioGroup
+                    value={publicationFilter}
+                    onValueChange={(value) =>
+                      setPublicationFilter(value as typeof publicationFilter)
+                    }
+                  >
+                    <DropdownMenuRadioItem value="all">
+                      All
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="published">
+                      Published
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="draft">
+                      Draft
+                    </DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    aria-label="More agenda options"
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={exportCsv}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Export as CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={exportPdf}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Export as PDF
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => window.print()}>
+                    <Printer className="mr-2 h-4 w-4" />
+                    Print schedule
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      setDetailMode("duplicate");
+                      setParams((current) => {
+                        const next = new URLSearchParams(current);
+                        next.delete("selected");
+                        return next;
+                      });
+                    }}
+                  >
+                    <Copy className="mr-2 h-4 w-4" />
+                    Duplicate day…
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </>
           }
           primaryAction={
-            <Button type="button" variant="accent" size="sm" title={event && !rooms.length ? "Add a room in Event settings before scheduling sessions." : undefined} onClick={() => { setDetailMode("create"); setParams((current) => { const next = new URLSearchParams(current); next.delete("selected"); return next; }); }} disabled={!event || !rooms.length}>
+            <Button
+              type="button"
+              variant="accent"
+              size="sm"
+              title={
+                event && !rooms.length
+                  ? "Add a room in Event settings before scheduling sessions."
+                  : undefined
+              }
+              onClick={() => {
+                setDetailMode("create");
+                setParams((current) => {
+                  const next = new URLSearchParams(current);
+                  next.delete("selected");
+                  return next;
+                });
+              }}
+              disabled={!event || !rooms.length}
+            >
               Add Session
             </Button>
           }
         />
         {event && !rooms.length && (
-          <section className={cardSurfaceClasses("default", "flex flex-wrap items-center gap-x-2 gap-y-1 bg-muted p-4 text-sm")}>
-            <Info className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            <span>Sessions need somewhere to happen. Add at least one room before scheduling.</span>
-            <Link to={`/events/${event.slug}/settings/event`} className="font-medium underline underline-offset-4">
+          <section
+            className={cardSurfaceClasses(
+              "default",
+              "flex flex-wrap items-center gap-x-2 gap-y-1 bg-muted p-4 text-sm",
+            )}
+          >
+            <Info
+              className="h-4 w-4 shrink-0 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <span>
+              Sessions need somewhere to happen. Add at least one room before
+              scheduling.
+            </span>
+            <Link
+              to={`/events/${event.slug}/settings/event`}
+              className="font-medium underline underline-offset-4"
+            >
               Add rooms in Event settings
             </Link>
           </section>
@@ -868,15 +1193,30 @@ export default function Agenda() {
         {view !== "conflicts" && blockingConflicts.length > 0 && (
           <section
             aria-label="Scheduling conflicts"
-            className={cardSurfaceClasses("default", "flex flex-wrap items-center gap-x-3 gap-y-2 bg-amber-500/10 p-4 text-sm")}
+            className={cardSurfaceClasses(
+              "default",
+              "flex flex-wrap items-center gap-x-3 gap-y-2 bg-amber-500/10 p-4 text-sm",
+            )}
           >
-            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300" aria-hidden="true" />
+            <AlertTriangle
+              className="h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300"
+              aria-hidden="true"
+            />
             <span>
               {blockingConflicts.length}{" "}
-              {blockingConflicts.length === 1 ? "session conflict" : "session conflicts"} —
-              two sessions share a room or a speaker at the same time. This blocks publishing.
+              {blockingConflicts.length === 1
+                ? "session conflict"
+                : "session conflicts"}{" "}
+              — two sessions share a room or a speaker at the same time. This
+              blocks publishing.
             </span>
-            <Button type="button" variant="outline" size="sm" className="ml-auto" onClick={() => setView("conflicts")}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="ml-auto"
+              onClick={() => setView("conflicts")}
+            >
               Review conflicts
             </Button>
           </section>
@@ -964,6 +1304,10 @@ export default function Agenda() {
             event={event}
             timeZone={timeZone}
             onMove={moveSession}
+            submissions={submissions}
+            onSchedule={scheduleSubmission}
+            undoLabel={undo?.title}
+            onUndo={() => void undoLastPlacement()}
           />
         ) : view === "day" ? (
           <DayView
@@ -1000,14 +1344,19 @@ export default function Agenda() {
         >
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Delete “{pendingDelete?.title}”?</AlertDialogTitle>
+              <AlertDialogTitle>
+                Delete “{pendingDelete?.title}”?
+              </AlertDialogTitle>
               <AlertDialogDescription>
                 This removes the session from the schedule. Its submission and
                 speakers are not affected, and it can be scheduled again later.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel className={buttonVariants({ variant: "ghost" })} disabled={deleting}>
+              <AlertDialogCancel
+                className={buttonVariants({ variant: "ghost" })}
+                disabled={deleting}
+              >
                 Keep session
               </AlertDialogCancel>
               <AlertDialogAction
@@ -1049,7 +1398,12 @@ function DayView({
   }
   return (
     <section className="space-y-4">
-      <div className={cardSurfaceClasses("default", "flex items-center gap-4 bg-muted/40 p-4")}>
+      <div
+        className={cardSurfaceClasses(
+          "default",
+          "flex items-center gap-4 bg-muted/40 p-4",
+        )}
+      >
         <Label htmlFor="agenda-day" className="text-sm font-medium">
           Event day
         </Label>
@@ -1151,7 +1505,8 @@ function WeekView({
 export function agendaMonthGrid(monthKey: string) {
   const firstOfMonth = Date.parse(`${monthKey}-01T00:00:00Z`);
   if (Number.isNaN(firstOfMonth)) return [];
-  const gridStart = firstOfMonth - new Date(firstOfMonth).getUTCDay() * 86_400_000;
+  const gridStart =
+    firstOfMonth - new Date(firstOfMonth).getUTCDay() * 86_400_000;
   const cells: { date: string; inMonth: boolean }[] = [];
   for (let index = 0; index < 42; index += 1) {
     const date = new Date(gridStart + index * 86_400_000)
@@ -1193,7 +1548,9 @@ function MonthView({
   const eventDaySet = useMemo(() => new Set(eventDays), [eventDays]);
   const cells = agendaMonthGrid(month);
   if (cells.length === 0)
-    return <EmptyAgenda message="The event does not have a valid date range." />;
+    return (
+      <EmptyAgenda message="The event does not have a valid date range." />
+    );
   const monthLabel = new Intl.DateTimeFormat("en-US", {
     timeZone: "UTC",
     month: "long",
@@ -1201,7 +1558,12 @@ function MonthView({
   }).format(Date.parse(`${month}-01T00:00:00Z`));
   return (
     <section className="space-y-3">
-      <div className={cardSurfaceClasses("default", "flex flex-wrap items-center gap-3 bg-muted/40 p-3")}>
+      <div
+        className={cardSurfaceClasses(
+          "default",
+          "flex flex-wrap items-center gap-3 bg-muted/40 p-3",
+        )}
+      >
         <Label htmlFor="agenda-month" className="text-sm font-medium">
           Month
         </Label>
@@ -1213,7 +1575,11 @@ function MonthView({
             <SelectContent>
               {months.map((value) => (
                 <SelectItem key={value} value={value}>
-                  {new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "long", year: "numeric" }).format(Date.parse(`${value}-01T00:00:00Z`))}
+                  {new Intl.DateTimeFormat("en-US", {
+                    timeZone: "UTC",
+                    month: "long",
+                    year: "numeric",
+                  }).format(Date.parse(`${value}-01T00:00:00Z`))}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -1228,7 +1594,10 @@ function MonthView({
       <div className={cardSurfaceClasses("default", "overflow-x-auto p-3")}>
         <div className="grid min-w-[640px] grid-cols-7 gap-1">
           {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((weekday) => (
-            <div key={weekday} className="px-2 py-1 text-xs font-medium text-muted-foreground">
+            <div
+              key={weekday}
+              className="px-2 py-1 text-xs font-medium text-muted-foreground"
+            >
               {weekday}
             </div>
           ))}
@@ -1253,12 +1622,16 @@ function MonthView({
                 </span>
                 {dayItems.length > 0 && (
                   <span className="mt-1 block text-xs text-muted-foreground">
-                    {dayItems.length} {dayItems.length === 1 ? "session" : "sessions"}
+                    {dayItems.length}{" "}
+                    {dayItems.length === 1 ? "session" : "sessions"}
                   </span>
                 )}
                 <span className="mt-1 block space-y-0.5">
                   {dayItems.slice(0, 2).map((item) => (
-                    <span key={item.id} className="block truncate rounded-sm bg-primary/10 px-1.5 py-0.5 text-xs">
+                    <span
+                      key={item.id}
+                      className="block truncate rounded-sm bg-primary/10 px-1.5 py-0.5 text-xs"
+                    >
                       {formatTime(item.startTime, timeZone)} {item.title}
                     </span>
                   ))}
@@ -1327,23 +1700,74 @@ function RoomsView({
   event,
   timeZone,
   onMove,
+  submissions,
+  onSchedule,
+  undoLabel,
+  onUndo,
 }: {
   items: AgendaItem[];
   rooms: Room[];
   event: Event;
   timeZone: string;
   onMove: (id: string, roomId: string, startTime: number) => Promise<void>;
+  submissions: Submission[];
+  onSchedule: (submission: Submission, roomId: string, startTime: number) => Promise<void>;
+  undoLabel?: string;
+  onUndo: () => void;
 }) {
   const days = agendaEventDays(event.startDate, event.endDate);
   const [roomDay, setRoomDay] = useState(days[0] ?? "");
-  const [draggedSessionId, setDraggedSessionId] = useState<string>();
+  const [dragged, setDragged] = useState<{ kind: "session" | "submission"; id: string }>();
   const [dragTarget, setDragTarget] = useState<string>();
-  const dayItems = items.filter((item) => eventDateTime(item.startTime, timeZone).date === roomDay);
-  const slots = agendaRoomSlots(roomDay, dayItems, timeZone);
-  if (rooms.length === 0 || days.length === 0) return <EmptyAgenda message="Add rooms and an event date range to build the room grid." />;
+  const dayItems = items.filter(
+    (item) => eventDateTime(item.startTime, timeZone).date === roomDay,
+  );
+  const slots = agendaRoomSlots(roomDay, dayItems, timeZone, event.scheduleStartTime, event.scheduleEndTime);
+  const unscheduled = submissions.filter((submission) =>
+    submission.status === "accepted" && !items.some((item) => item.submissionId === submission.id),
+  );
+  const source = dragged?.kind === "session"
+    ? items.find((item) => item.id === dragged.id)
+    : undefined;
+  const sourceSubmission = dragged?.kind === "submission"
+    ? unscheduled.find((submission) => submission.id === dragged.id)
+    : undefined;
+  const targetBlocked = (roomId: string, startTime: number) => {
+    const speakerIds = source?.speakerIds ?? sourceSubmission?.speakerIds ?? [];
+    const duration = source ? source.endTime - source.startTime : 45 * 60_000;
+    const endTime = startTime + duration;
+    return items.some((item) => item.id !== source?.id && item.startTime < endTime && startTime < item.endTime
+      && (item.roomId === roomId || item.speakerIds.some((id) => speakerIds.includes(id))));
+  };
+  const place = async (roomId: string, startTime: number) => {
+    if (!dragged) return;
+    if (targetBlocked(roomId, startTime)) {
+      toast.error("That slot is unavailable", { description: "A room or speaker is already booked at that time." });
+      return;
+    }
+    const current = dragged;
+    setDragged(undefined);
+    setDragTarget(undefined);
+    try {
+      if (current.kind === "session") await onMove(current.id, roomId, startTime);
+      else {
+        const submission = unscheduled.find((candidate) => candidate.id === current.id);
+        if (submission) await onSchedule(submission, roomId, startTime);
+      }
+    } catch (cause) {
+      toast.error("Session could not be scheduled", {
+        description: cause instanceof Error ? cause.message : "The schedule was not changed.",
+      });
+    }
+  };
+  if (rooms.length === 0 || days.length === 0)
+    return (
+      <EmptyAgenda message="Add rooms and an event date range to build the room grid." />
+    );
   return (
-    <section className="space-y-4">
-      <div className="flex flex-col items-start gap-3 px-1 sm:flex-row sm:items-center sm:gap-4">
+    <section className="space-y-4" aria-label="Schedule Studio">
+      <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-3">
         <Label className="text-sm text-muted-foreground">Event day</Label>
         <Select value={roomDay} onValueChange={setRoomDay}>
           <SelectTrigger className="h-8 w-full bg-muted/50 sm:w-52">
@@ -1358,127 +1782,206 @@ function RoomsView({
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">
-          Drag sessions between rooms and 15-minute time slots.
+          Drag, or press Enter to lift a session and Enter again to place it.
         </p>
+        </div>
+        {undoLabel && <Button variant="outline" size="sm" onClick={onUndo}>Undo {undoLabel}</Button>}
       </div>
-      <div className={cardSurfaceClasses("default", "overflow-x-auto")}>
-        <div className="min-w-[760px] p-3">
-        <div
-          className="grid auto-rows-[28px] gap-x-px overflow-hidden rounded-md bg-muted/60 text-sm"
-          style={{
-            gridTemplateColumns: `96px repeat(${Math.max(rooms.length, 1)}, minmax(190px, 1fr))`,
-          }}
-        >
-          <div className="sticky top-0 z-20 flex items-center bg-card px-3 py-2 text-xs font-medium text-muted-foreground">
-            Time
+      <div className="grid gap-4 xl:grid-cols-[17rem_minmax(0,1fr)]">
+        <aside className="rounded-md bg-muted/50 p-3" aria-label="Accepted sessions ready to schedule">
+          <div className="flex items-center justify-between gap-2"><h2 className="text-sm font-semibold">Ready to schedule</h2><span className="text-xs text-muted-foreground">{unscheduled.length}</span></div>
+          <p className="mt-1 text-xs text-muted-foreground">Accepted sessions appear here until they have a room and time.</p>
+          <div className="mt-3 space-y-2">
+            {unscheduled.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">Everything accepted is scheduled.</p> : unscheduled.map((submission) => {
+              const active = dragged?.kind === "submission" && dragged.id === submission.id;
+              return <button key={submission.id} draggable onDragStart={(event) => { event.dataTransfer.setData("text/plain", `submission:${submission.id}`); setDragged({ kind: "submission", id: submission.id }); }} onClick={() => setDragged({ kind: "submission", id: submission.id })} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setDragged({ kind: "submission", id: submission.id }); } }} className={`w-full rounded-md p-3 text-left transition-colors ${active ? "bg-primary text-primary-foreground" : "bg-card hover:bg-accent"}`}><span className="block text-sm font-semibold">{submission.title ?? "Untitled accepted session"}</span><span className="mt-1 block text-xs opacity-75">{submission.speakerIds.length ? "Speaker attached" : "No speaker assigned"}</span></button>;
+            })}
           </div>
-          {rooms.map((room, roomIndex) => (
-            <div
-              key={room.id}
-              className="sticky top-0 z-20 flex items-center bg-card px-3 py-2 text-xs font-semibold text-foreground"
-              style={{ gridColumn: roomIndex + 2 }}
-            >
-              <span className="truncate">{room.name}</span>
+        </aside>
+      <div className={cardSurfaceClasses("default", "overflow-x-auto")}>
+        <div className="min-w-[700px] p-3">
+          <div
+            className="grid auto-rows-[28px] gap-x-px overflow-hidden rounded-md bg-muted/60 text-sm"
+            style={{
+              gridTemplateColumns: `96px repeat(${Math.max(rooms.length, 1)}, minmax(190px, 1fr))`,
+            }}
+          >
+            <div className="sticky top-0 z-20 flex items-center bg-card px-3 py-2 text-xs font-medium text-muted-foreground">
+              Time
             </div>
-          ))}
-          {slots.map((slot, slotIndex) => {
-            const isHour = slotIndex % 4 === 0;
-            return (
-              <Fragment key={slot}>
-                <div
-                  className={isHour ? "flex items-start gap-1.5 bg-muted/60 px-3 pt-1 text-sm font-semibold text-foreground" : "bg-card"}
-                  style={{ gridColumn: 1, gridRow: slotIndex + 2 }}
-                >
-                  {isHour && (
-                    <>
-                      <Clock3 className="mt-px h-3 w-3 shrink-0" />
-                      <span className="whitespace-nowrap">{formatTime(slot, timeZone)}</span>
-                    </>
-                  )}
-                </div>
-                {rooms.map((room, roomIndex) => {
-                  const targetId = `${slot}-${room.id}`;
-                  const isActiveTarget = draggedSessionId && dragTarget === targetId;
-                  return (
-                    <div
-                      key={targetId}
-                      className={isActiveTarget
-                        ? "min-h-7 bg-accent/70 transition-colors"
-                        : isHour
-                          ? "min-h-7 bg-muted/60 transition-colors hover:bg-muted/80"
-                          : "min-h-7 bg-card transition-colors hover:bg-muted/40"}
-                      style={{ gridColumn: roomIndex + 2, gridRow: slotIndex + 2 }}
-                      aria-label={`${room.name} at ${formatDay(roomDay, timeZone)} ${formatTime(slot, timeZone)}`}
-                      onDragEnter={() => setDragTarget(targetId)}
-                      onDragOver={(dragEvent) => {
-                        dragEvent.preventDefault();
-                        dragEvent.dataTransfer.dropEffect = "move";
-                        setDragTarget(targetId);
-                      }}
-                      onDrop={(dropEvent) => {
-                        dropEvent.preventDefault();
-                        const sessionId =
-                          dropEvent.dataTransfer.getData("text/plain");
-                        setDraggedSessionId(undefined);
-                        setDragTarget(undefined);
-                        if (sessionId) void onMove(sessionId, room.id, slot).catch(() => undefined);
-                      }}
-                    />
-                  );
-                })}
-              </Fragment>
-            );
-          })}
-          {dayItems.map((session) => {
-            const roomIndex = rooms.findIndex((room) => room.id === session.roomId);
-            const slotIndex = slots.findIndex((slot) => slot === snapToAgendaInterval(session.startTime, timeZone));
-            if (roomIndex < 0 || slotIndex < 0) return null;
-            const durationRows = Math.max(1, Math.round((session.endTime - session.startTime) / (15 * 60_000)));
-            const isDragging = draggedSessionId === session.id;
-            return (
-              <article
-                key={session.id}
-                draggable
-                aria-label={`${session.title}, ${formatTime(session.startTime, timeZone)} to ${formatTime(session.endTime, timeZone)}`}
-                onDragStart={(dragEvent) => {
-                  dragEvent.dataTransfer.effectAllowed = "move";
-                  dragEvent.dataTransfer.setData("text/plain", session.id);
-                  setDraggedSessionId(session.id);
-                }}
-                onDragEnd={() => {
-                  setDraggedSessionId(undefined);
-                  setDragTarget(undefined);
-                }}
-                className={`group relative z-10 m-1 cursor-grab overflow-hidden rounded-md bg-primary/10 py-1.5 pl-2 pr-7 text-xs text-foreground transition-colors hover:bg-primary/15 active:cursor-grabbing ${isDragging ? "opacity-50" : ""}`}
-                style={{ gridColumn: roomIndex + 2, gridRow: `${slotIndex + 2} / span ${durationRows}` }}
+            {rooms.map((room, roomIndex) => (
+              <div
+                key={room.id}
+                className="sticky top-0 z-20 flex items-center bg-card px-3 py-2 text-xs font-semibold text-foreground"
+                style={{ gridColumn: roomIndex + 2 }}
               >
-                <p className="truncate font-semibold">{session.title}</p>
-                <p className="truncate font-medium text-primary">
-                  {formatTime(session.startTime, timeZone)}–{formatTime(session.endTime, timeZone)}
-                </p>
-                {durationRows >= 4 && session.track && (
-                  <p className="truncate text-muted-foreground">{session.track}</p>
-                )}
-                <AgendaMoveControl id={session.id} title={session.title} roomId={session.roomId} startTime={session.startTime} rooms={rooms} timeZone={timeZone} onMove={onMove} compact={durationRows < 3} />
-              </article>
-            );
-          })}
+                <span className="truncate">{room.name}</span>
+              </div>
+            ))}
+            {slots.map((slot, slotIndex) => {
+              const isHour = slotIndex % 4 === 0;
+              return (
+                <Fragment key={slot}>
+                  <div
+                    className={
+                      isHour
+                        ? "flex items-start gap-1.5 bg-muted/60 px-3 pt-1 text-sm font-semibold text-foreground"
+                        : "bg-card"
+                    }
+                    style={{ gridColumn: 1, gridRow: slotIndex + 2 }}
+                  >
+                    {isHour && (
+                      <>
+                        <Clock3 className="mt-px h-3 w-3 shrink-0" />
+                        <span className="whitespace-nowrap">
+                          {formatTime(slot, timeZone)}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                  {rooms.map((room, roomIndex) => {
+                    const targetId = `${slot}-${room.id}`;
+                    const isActiveTarget = dragged && dragTarget === targetId;
+                    const blocked = Boolean(dragged && targetBlocked(room.id, slot));
+                    return (
+                      <div
+                        key={targetId}
+                        className={
+                          blocked
+                            ? "min-h-7 bg-destructive/10"
+                            : isActiveTarget
+                            ? "min-h-7 bg-accent/70 transition-colors"
+                            : isHour
+                              ? "min-h-7 bg-muted/60 transition-colors hover:bg-muted/80"
+                              : "min-h-7 bg-card transition-colors hover:bg-muted/40"
+                        }
+                        style={{
+                          gridColumn: roomIndex + 2,
+                          gridRow: slotIndex + 2,
+                        }}
+                        aria-label={`${room.name} at ${formatDay(roomDay, timeZone)} ${formatTime(slot, timeZone)}`}
+                        aria-disabled={blocked}
+                        tabIndex={dragged ? 0 : -1}
+                        onClick={() => { if (dragged) void place(room.id, slot).catch(() => undefined); }}
+                        onDragEnter={() => setDragTarget(targetId)}
+                        onDragOver={(dragEvent) => {
+                          dragEvent.preventDefault();
+                          dragEvent.dataTransfer.dropEffect = "move";
+                          setDragTarget(targetId);
+                        }}
+                        onDrop={(dropEvent) => {
+                          dropEvent.preventDefault();
+                          const payload = dropEvent.dataTransfer.getData("text/plain");
+                          if (payload) {
+                            const [kind, id] = payload.split(":");
+                            if ((kind === "session" || kind === "submission") && id) setDragged({ kind, id });
+                          }
+                          void place(room.id, slot).catch(() => undefined);
+                        }}
+                        onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); void place(room.id, slot).catch(() => undefined); } if (event.key === "Escape") { setDragged(undefined); setDragTarget(undefined); } }}
+                      />
+                    );
+                  })}
+                </Fragment>
+              );
+            })}
+            {dayItems.map((session) => {
+              const roomIndex = rooms.findIndex(
+                (room) => room.id === session.roomId,
+              );
+              const slotIndex = slots.findIndex(
+                (slot) =>
+                  slot === snapToAgendaInterval(session.startTime, timeZone),
+              );
+              if (roomIndex < 0 || slotIndex < 0) return null;
+              const durationRows = Math.max(
+                1,
+                Math.round(
+                  (session.endTime - session.startTime) / (15 * 60_000),
+                ),
+              );
+              const isDragging = dragged?.kind === "session" && dragged.id === session.id;
+              return (
+                <article
+                  key={session.id}
+                  draggable
+                  aria-label={`${session.title}, ${formatTime(session.startTime, timeZone)} to ${formatTime(session.endTime, timeZone)}`}
+                  onDragStart={(dragEvent) => {
+                    dragEvent.dataTransfer.effectAllowed = "move";
+                    dragEvent.dataTransfer.setData("text/plain", `session:${session.id}`);
+                    setDragged({ kind: "session", id: session.id });
+                  }}
+                  onDragEnd={() => {
+                    setDragged(undefined);
+                    setDragTarget(undefined);
+                  }}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setDragged({ kind: "session", id: session.id }); } if (event.key === "Escape") setDragged(undefined); }}
+                  tabIndex={0}
+                  className={`group relative z-10 m-1 cursor-grab overflow-hidden rounded-md bg-primary/10 py-1.5 pl-2 pr-7 text-xs text-foreground transition-colors hover:bg-primary/15 active:cursor-grabbing ${isDragging ? "opacity-50" : ""}`}
+                  style={{
+                    gridColumn: roomIndex + 2,
+                    gridRow: `${slotIndex + 2} / span ${durationRows}`,
+                  }}
+                >
+                  <p className="truncate font-semibold">{session.title}</p>
+                  <p className="truncate font-medium text-primary">
+                    {formatTime(session.startTime, timeZone)}–
+                    {formatTime(session.endTime, timeZone)}
+                  </p>
+                  {durationRows >= 4 && session.track && (
+                    <p className="truncate text-muted-foreground">
+                      {session.track}
+                    </p>
+                  )}
+                  <AgendaMoveControl
+                    id={session.id}
+                    title={session.title}
+                    roomId={session.roomId}
+                    startTime={session.startTime}
+                    rooms={rooms}
+                    timeZone={timeZone}
+                    onMove={onMove}
+                    compact={durationRows < 3}
+                  />
+                </article>
+              );
+            })}
+          </div>
         </div>
-        </div>
+      </div>
       </div>
     </section>
   );
 }
 
-export function agendaRoomSlots(date: string, items: Pick<AgendaItem, "startTime" | "endTime">[], timeZone: string) {
-  const defaultStart = eventDateTimeToEpoch(date, "08:00", timeZone);
-  const defaultEnd = eventDateTimeToEpoch(date, "18:00", timeZone);
+export function agendaRoomSlots(
+  date: string,
+  items: Pick<AgendaItem, "startTime" | "endTime">[],
+  timeZone: string,
+  scheduleStartTime = "08:00",
+  scheduleEndTime = "18:00",
+) {
+  const defaultStart = eventDateTimeToEpoch(date, scheduleStartTime, timeZone);
+  const defaultEnd = eventDateTimeToEpoch(date, scheduleEndTime, timeZone);
   if (defaultStart === undefined || defaultEnd === undefined) return [];
   const interval = 15 * 60_000;
-  const earliest = items.length ? Math.min(defaultStart, ...items.map((item) => Math.floor(item.startTime / interval) * interval)) : defaultStart;
-  const latest = items.length ? Math.max(defaultEnd, ...items.map((item) => Math.ceil(item.endTime / interval) * interval)) : defaultEnd;
+  const earliest = items.length
+    ? Math.min(
+        defaultStart,
+        ...items.map(
+          (item) => Math.floor(item.startTime / interval) * interval,
+        ),
+      )
+    : defaultStart;
+  const latest = items.length
+    ? Math.max(
+        defaultEnd,
+        ...items.map((item) => Math.ceil(item.endTime / interval) * interval),
+      )
+    : defaultEnd;
   const values: number[] = [];
-  for (let cursor = earliest; cursor < latest; cursor += interval) values.push(cursor);
+  for (let cursor = earliest; cursor < latest; cursor += interval)
+    values.push(cursor);
   return values;
 }
 
@@ -1510,7 +2013,12 @@ function AgendaSessionCard({
 function EmptyAgenda({ message }: { message: string }) {
   return (
     <div className={cardSurfaceClasses("default")}>
-      <EmptyState compact icon={CalendarDays} title="No sessions to show" message={message} />
+      <EmptyState
+        compact
+        icon={CalendarDays}
+        title="No sessions to show"
+        message={message}
+      />
     </div>
   );
 }
@@ -1538,9 +2046,16 @@ function ConflictsView({
         </div>
       ) : (
         valid.map((conflict) => (
-          <article key={conflict.id} className={cardSurfaceClasses("default", "p-5")}>
+          <article
+            key={conflict.id}
+            className={cardSurfaceClasses("default", "p-5")}
+          >
             <div className="flex gap-3">
-              {conflict.title.includes("Informational") ? <Info className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" /> : <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />}
+              {conflict.title.includes("Informational") ? (
+                <Info className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
+              ) : (
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
+              )}
               <div>
                 <p className="font-medium">{conflict.title}</p>
                 <p className="mt-1 text-sm text-muted-foreground">
@@ -1590,11 +2105,93 @@ function SessionLink({
   );
 }
 
-function DuplicateDayForm({ days, timeZone, onDuplicate, onCancel }: { days: string[]; timeZone: string; onDuplicate: (source: string, target: string) => Promise<void>; onCancel: () => void }) {
+function DuplicateDayForm({
+  days,
+  timeZone,
+  onDuplicate,
+  onCancel,
+}: {
+  days: string[];
+  timeZone: string;
+  onDuplicate: (source: string, target: string) => Promise<void>;
+  onCancel: () => void;
+}) {
   const [source, setSource] = useState(days[0] ?? "");
   const [target, setTarget] = useState(days[1] ?? days[0] ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
-  return <form className="space-y-5" onSubmit={async (event) => { event.preventDefault(); setError(undefined); setSaving(true); try { await onDuplicate(source, target); } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not duplicate the day."); } finally { setSaving(false); } }}><p className="text-sm text-muted-foreground">Copies every source session to the same local times on the target day as drafts. Existing target sessions stay unchanged.</p><div className="space-y-2"><Label>Source day</Label><Select value={source} onValueChange={setSource}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{days.map((day) => <SelectItem key={day} value={day}>{formatDay(day, timeZone, "long")}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>Target day</Label><Select value={target} onValueChange={setTarget}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{days.map((day) => <SelectItem key={day} value={day}>{formatDay(day, timeZone, "long")}</SelectItem>)}</SelectContent></Select></div>{error && <p role="alert" className="text-sm text-destructive">{error}</p>}<div className="flex gap-2"><Button type="submit" variant="accent" disabled={saving || !source || !target || source === target}>{saving ? "Duplicating…" : "Duplicate as drafts"}</Button><Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button></div></form>;
+  return (
+    <form
+      className="space-y-5"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        setError(undefined);
+        setSaving(true);
+        try {
+          await onDuplicate(source, target);
+        } catch (cause) {
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "Could not duplicate the day.",
+          );
+        } finally {
+          setSaving(false);
+        }
+      }}
+    >
+      <p className="text-sm text-muted-foreground">
+        Copies every source session to the same local times on the target day as
+        drafts. Existing target sessions stay unchanged.
+      </p>
+      <div className="space-y-2">
+        <Label>Source day</Label>
+        <Select value={source} onValueChange={setSource}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {days.map((day) => (
+              <SelectItem key={day} value={day}>
+                {formatDay(day, timeZone, "long")}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-2">
+        <Label>Target day</Label>
+        <Select value={target} onValueChange={setTarget}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {days.map((day) => (
+              <SelectItem key={day} value={day}>
+                {formatDay(day, timeZone, "long")}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+      <div className="flex gap-2">
+        <Button
+          type="submit"
+          variant="accent"
+          disabled={saving || !source || !target || source === target}
+        >
+          {saving ? "Duplicating…" : "Duplicate as drafts"}
+        </Button>
+        <Button type="button" variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
 }
 import { cardSurfaceClasses } from "@/components/ui/card";

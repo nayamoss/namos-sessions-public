@@ -6,7 +6,7 @@ describe("analytics backend contract", () => {
   it("keeps the Convex summary organizer-gated and event-indexed", () => {
     const source = readFileSync(join(process.cwd(), "convex/analytics.ts"), "utf8");
     expect(source).toContain("assertEventOrganizerAccess(ctx, eventId)");
-    expect(source.match(/withIndex\("by_event"/g)).toHaveLength(7);
+    expect(source.match(/withIndex\("by_event"/g)).toHaveLength(8);
     expect(source).not.toContain("listMine");
   });
 

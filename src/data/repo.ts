@@ -8,6 +8,7 @@ import type {
   AssignByFilterResult,
   AssignmentFilter,
   AgendaConflict,
+  AgendaPlacementConflict,
   AgendaItem,
   AgentProposalId,
   AgentRun,
@@ -16,11 +17,18 @@ import type {
   Availability,
   Comm,
   CommPreview,
+  CrmCampaignSendResult,
   CommSendResult,
   CommTemplate,
   CommTemplateWrite,
   CommunicationDraft,
   CrossFieldLimit,
+  CrmContact,
+  CrmContactId,
+  CrmSegment,
+  CrmSource,
+  CrmSourceProvider,
+  CrmStage,
   AirtableConnectInput,
   AirtableImportResult,
   ContentIntegration,
@@ -99,6 +107,63 @@ export interface FilesRepo {
 }
 export interface AnalyticsRepo {
   summary(scope: EventScope): Promise<EventAnalyticsSummary>;
+}
+export interface CrmRepo {
+  list(scope: EventScope): Promise<CrmContact[]>;
+  listSegments(scope: EventScope): Promise<CrmSegment[]>;
+  save(
+    input: EventScope & {
+      id?: CrmContactId;
+      firstName: string;
+      lastName: string;
+      email: string;
+      stage: CrmStage;
+      score: number;
+    },
+  ): Promise<CrmContactId>;
+  saveSegment(
+    input: EventScope & {
+      id?: string;
+      name: string;
+      stage?: CrmStage;
+      minScore?: number;
+      maxScore?: number;
+    },
+  ): Promise<string>;
+  assignToEvent(
+    input: EventScope & { contactId: CrmContactId },
+  ): Promise<string>;
+  unlinkFromEvent(
+    input: EventScope & { contactId: CrmContactId },
+  ): Promise<{ unlinked: boolean }>;
+  archive(
+    input: EventScope & { contactIds: CrmContactId[] },
+  ): Promise<{ archived: number }>;
+  bulkStage(
+    input: EventScope & { contactIds: CrmContactId[]; stage: CrmStage },
+  ): Promise<{ updated: number }>;
+  backfillEvent(scope: EventScope): Promise<{ linked: number; total: number }>;
+  listSources(scope: EventScope): Promise<CrmSource[]>;
+  connectSource(
+    input: EventScope & {
+      provider: CrmSourceProvider;
+      token: string;
+      config: CrmSource["config"];
+    },
+  ): Promise<{ status: "connected" }>;
+  startSourceOAuth(
+    input: EventScope & { provider: CrmSourceProvider },
+  ): Promise<{ url: string }>;
+  finishSourceOAuth(
+    input: EventScope & {
+      provider: CrmSourceProvider;
+      pendingId: string;
+      config: CrmSource["config"];
+    },
+  ): Promise<{ status: "connected" }>;
+  syncSource(
+    input: EventScope & { provider: CrmSourceProvider },
+  ): Promise<{ created: number; updated: number; skipped: number }>;
 }
 /**
  * Which event the signed-in portal user is actually a speaker on, resolved server-side.
@@ -420,7 +485,9 @@ export interface SpeakersRepo {
 }
 export interface SpeakerNotesRepo {
   list(scope: EventScope & { speakerId: SpeakerId }): Promise<SpeakerNote[]>;
-  create(input: EventScope & { speakerId: SpeakerId; body: string }): Promise<string>;
+  create(
+    input: EventScope & { speakerId: SpeakerId; body: string },
+  ): Promise<string>;
   remove(input: EventScope & { noteId: string }): Promise<void>;
 }
 // `score` is optional because a scorecard review records per-criterion values instead. Exactly
@@ -512,8 +579,11 @@ export interface AgendaWrite {
 }
 export interface AgendaRepo {
   list(scope: EventScope): Promise<AgendaItem[]>;
-  listForSpeaker(scope: EventScope & { speakerId: SpeakerId }): Promise<SpeakerAgendaItem[]>;
+  listForSpeaker(
+    scope: EventScope & { speakerId: SpeakerId },
+  ): Promise<SpeakerAgendaItem[]>;
   detectConflicts(scope: EventScope): Promise<AgendaConflict[]>;
+  checkPlacement(input: AgendaWrite): Promise<AgendaPlacementConflict[]>;
   save(input: AgendaWrite): Promise<string>;
   remove(input: EventScope & { id: string }): Promise<void>;
   publishSchedule(eventId: EventId): Promise<void>;
@@ -554,9 +624,14 @@ export interface TaskTemplatesRepo {
   }): Promise<void>;
   remove(templateId: string): Promise<void>;
   setDefault(input: EventScope & { templateId?: string }): Promise<void>;
+  ensureStarters(input: EventScope): Promise<{ created: number }>;
   applyToSubmission(input: {
     templateId: string;
     submissionId: SubmissionId;
+  }): Promise<{ created: number; skipped: number }>;
+  applyToSpeaker(input: {
+    templateId: string;
+    speakerId: SpeakerId;
   }): Promise<{ created: number; skipped: number }>;
   applyToSponsor(input: {
     templateId: string;
@@ -567,13 +642,40 @@ export interface CommsRepo {
   list(scope: EventScope): Promise<Comm[]>;
   listDrafts(scope: EventScope): Promise<CommunicationDraft[]>;
   listTemplates(scope: EventScope): Promise<CommTemplate[]>;
-  previewDecision(input: { eventId: EventId; submissionId: string }): Promise<CommPreview>;
-  previewReminder(input: { eventId: EventId; speakerId: string; taskId?: string }): Promise<CommPreview>;
-  previewConsolidatedDecision(input: { eventId: EventId; speakerId: string }): Promise<CommPreview>;
+  previewDecision(input: {
+    eventId: EventId;
+    submissionId: string;
+  }): Promise<CommPreview>;
+  previewReminder(input: {
+    eventId: EventId;
+    speakerId: string;
+    taskId?: string;
+  }): Promise<CommPreview>;
+  previewConsolidatedDecision(input: {
+    eventId: EventId;
+    speakerId: string;
+  }): Promise<CommPreview>;
   saveTemplate(input: CommTemplateWrite): Promise<string>;
-  sendDecision(input: { eventId: EventId; submissionId: string; recipientSpeakerIds?: string[] }): Promise<CommSendResult>;
-  sendReminder(input: { eventId: EventId; speakerId: string; taskId?: string }): Promise<CommSendResult>;
-  sendConsolidatedDecision(input: { eventId: EventId; speakerId: string }): Promise<CommSendResult>;
+  sendDecision(input: {
+    eventId: EventId;
+    submissionId: string;
+    recipientSpeakerIds?: string[];
+  }): Promise<CommSendResult>;
+  sendReminder(input: {
+    eventId: EventId;
+    speakerId: string;
+    taskId?: string;
+  }): Promise<CommSendResult>;
+  sendConsolidatedDecision(input: {
+    eventId: EventId;
+    speakerId: string;
+  }): Promise<CommSendResult>;
+  sendCrmCampaign(input: {
+    eventId: EventId;
+    contactIds: string[];
+    subject: string;
+    body: string;
+  }): Promise<CrmCampaignSendResult>;
 }
 // speakerId narrows to one speaker's own availability (portal) — organizer access is
 // required to omit it and see the whole event (see convex/availability.ts).
@@ -624,8 +726,17 @@ export interface PortalFormsRepo {
 }
 export interface PortalResourcesRepo {
   listAdmin(scope: EventScope): Promise<PortalResourcePage[]>;
-  listPublished(input: EventScope & { speakerId: SpeakerId }): Promise<PortalResourcePage[]>;
-  save(input: EventScope & { id?: string; title: string; bodyHtml: string; status: PortalResourcePage["status"] }): Promise<string>;
+  listPublished(
+    input: EventScope & { speakerId: SpeakerId },
+  ): Promise<PortalResourcePage[]>;
+  save(
+    input: EventScope & {
+      id?: string;
+      title: string;
+      bodyHtml: string;
+      status: PortalResourcePage["status"];
+    },
+  ): Promise<string>;
   reorder(input: EventScope & { ids: string[] }): Promise<void>;
   remove(input: EventScope & { id: string }): Promise<void>;
 }
@@ -667,7 +778,11 @@ export interface OrganizationsRepo {
  */
 export interface ProfilesRepo {
   getMine(): Promise<UserProfile | null>;
-  save(input: { displayName?: string; signupRole?: "solo" | "team"; referralSource?: string }): Promise<void>;
+  save(input: {
+    displayName?: string;
+    signupRole?: "solo" | "team";
+    referralSource?: string;
+  }): Promise<void>;
 }
 /**
  * Per-event email provider configuration. Every method is organizer-gated server-side and
@@ -683,24 +798,53 @@ export interface EmailIntegrationsRepo {
   disconnect(scope: EventScope): Promise<{ status: "disconnected" }>;
 }
 export interface ContentIntegrationsRepo {
-  status(scope: EventScope & { provider: ContentIntegrationProvider }): Promise<ContentIntegration | null>;
+  status(
+    scope: EventScope & { provider: ContentIntegrationProvider },
+  ): Promise<ContentIntegration | null>;
   connectNotion(input: NotionConnectInput): Promise<{ status: "connected" }>;
   importNotion(scope: EventScope): Promise<NotionImportResult>;
-  connectAirtable(input: AirtableConnectInput): Promise<{ status: "connected" }>;
-  startOAuth(input: import("./types").OAuthStartInput): Promise<{ url: string }>;
-  listNotionOAuthDatabases(input: { eventId: EventId; pendingId: string }): Promise<Array<{ id: string; title: string }>>;
-  finishNotionOAuth(input: { eventId: EventId; pendingId: string; databaseId: string }): Promise<{ status: "connected" }>;
-  listAirtableOAuthBases(input: { eventId: EventId; pendingId: string }): Promise<Array<{ id: string; name: string }>>;
-  listAirtableOAuthTables(input: { eventId: EventId; pendingId: string; baseId: string }): Promise<Array<{ id: string; name: string }>>;
-  finishAirtableOAuth(input: { eventId: EventId; pendingId: string; baseId: string; tableName: string }): Promise<{ status: "connected" }>;
+  connectAirtable(
+    input: AirtableConnectInput,
+  ): Promise<{ status: "connected" }>;
+  startOAuth(
+    input: import("./types").OAuthStartInput,
+  ): Promise<{ url: string }>;
+  listNotionOAuthDatabases(input: {
+    eventId: EventId;
+    pendingId: string;
+  }): Promise<Array<{ id: string; title: string }>>;
+  finishNotionOAuth(input: {
+    eventId: EventId;
+    pendingId: string;
+    databaseId: string;
+  }): Promise<{ status: "connected" }>;
+  listAirtableOAuthBases(input: {
+    eventId: EventId;
+    pendingId: string;
+  }): Promise<Array<{ id: string; name: string }>>;
+  listAirtableOAuthTables(input: {
+    eventId: EventId;
+    pendingId: string;
+    baseId: string;
+  }): Promise<Array<{ id: string; name: string }>>;
+  finishAirtableOAuth(input: {
+    eventId: EventId;
+    pendingId: string;
+    baseId: string;
+    tableName: string;
+  }): Promise<{ status: "connected" }>;
   importAirtable(scope: EventScope): Promise<AirtableImportResult>;
   connectSanity(input: SanityConnectInput): Promise<{ status: "connected" }>;
   publishSanity(scope: EventScope): Promise<SanityPublishResult>;
-  disconnect(scope: EventScope & { provider: ContentIntegrationProvider }): Promise<{ status: "disconnected" }>;
+  disconnect(
+    scope: EventScope & { provider: ContentIntegrationProvider },
+  ): Promise<{ status: "disconnected" }>;
 }
 export interface ApiKeysRepo {
   list(scope: EventScope): Promise<ApiKey[]>;
-  generate(input: EventScope & { label: string; scopes?: ApiScope[] }): Promise<GeneratedApiKey>;
+  generate(
+    input: EventScope & { label: string; scopes?: ApiScope[] },
+  ): Promise<GeneratedApiKey>;
   revoke(input: EventScope & { id: string }): Promise<void>;
   auditLog(scope: EventScope): Promise<ApiAuditLogEntry[]>;
 }
@@ -711,21 +855,49 @@ export interface AgentRunsRepo {
   canUse(scope: EventScope): Promise<boolean>;
   suggestions(scope: EventScope): Promise<import("./types").AgentSuggestion[]>;
   list(scope: EventScope & { limit?: number }): Promise<AgentRun[]>;
-  get(scope: EventScope & { runId: AgentRunId }): Promise<AgentRunDetail | null>;
-  create(input: EventScope & { objective: string; idempotencyKey: string }): Promise<{ runId: AgentRunId }>;
-  respond(input: EventScope & { runId: AgentRunId; message: string; idempotencyKey: string }): Promise<void>;
+  get(
+    scope: EventScope & { runId: AgentRunId },
+  ): Promise<AgentRunDetail | null>;
+  create(
+    input: EventScope & { objective: string; idempotencyKey: string },
+  ): Promise<{ runId: AgentRunId }>;
+  respond(
+    input: EventScope & {
+      runId: AgentRunId;
+      message: string;
+      idempotencyKey: string;
+    },
+  ): Promise<void>;
   retry(input: EventScope & { runId: AgentRunId }): Promise<void>;
   cancel(input: EventScope & { runId: AgentRunId }): Promise<void>;
-  approveTaskProposal(input: EventScope & { proposalId: AgentProposalId; expectedPayloadHash: string }): Promise<{ createdTaskIds: string[] }>;
-  approveMessageProposal(input: EventScope & { proposalId: AgentProposalId; expectedPayloadHash: string }): Promise<{ createdDraftIds: string[] }>;
-  rejectProposal(input: EventScope & { proposalId: AgentProposalId; reason?: string }): Promise<void>;
+  approveTaskProposal(
+    input: EventScope & {
+      proposalId: AgentProposalId;
+      expectedPayloadHash: string;
+    },
+  ): Promise<{ createdTaskIds: string[] }>;
+  approveMessageProposal(
+    input: EventScope & {
+      proposalId: AgentProposalId;
+      expectedPayloadHash: string;
+    },
+  ): Promise<{ createdDraftIds: string[] }>;
+  rejectProposal(
+    input: EventScope & { proposalId: AgentProposalId; reason?: string },
+  ): Promise<void>;
 }
 export interface AgentProviderSettingsRepo {
   status(scope: EventScope): Promise<AgentProviderSetting>;
   saveManaged(scope: EventScope): Promise<{ mode: "managed"; status: "ready" }>;
-  saveByok(input: EventScope & { apiKey: string }): Promise<{ mode: "bring_your_own"; status: "ready" }>;
-  disconnectByok(scope: EventScope): Promise<{ mode: "managed"; status: "ready" }>;
-  assignBillingOwner(scope: EventScope): Promise<{ billingOwnerAssigned: true }>;
+  saveByok(
+    input: EventScope & { apiKey: string },
+  ): Promise<{ mode: "bring_your_own"; status: "ready" }>;
+  disconnectByok(
+    scope: EventScope,
+  ): Promise<{ mode: "managed"; status: "ready" }>;
+  assignBillingOwner(
+    scope: EventScope,
+  ): Promise<{ billingOwnerAssigned: true }>;
 }
 export interface Repository {
   activity: ActivityRepo;
@@ -735,6 +907,7 @@ export interface Repository {
   apiKeys: ApiKeysRepo;
   emailIntegrations: EmailIntegrationsRepo;
   contentIntegrations: ContentIntegrationsRepo;
+  crm: CrmRepo;
   events: EventsRepo;
   files: FilesRepo;
   eventMembers: EventMembersRepo;

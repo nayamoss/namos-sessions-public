@@ -2,18 +2,35 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { RepoContext, type Repository } from "@/data/repo";
-import type { CommPreview, Event, EventId, SpeakerId, TaskId } from "@/data/types";
+import type {
+  CommPreview,
+  Event,
+  EventId,
+  SpeakerId,
+  TaskTemplate,
+  TaskId,
+} from "@/data/types";
 import type { SpeakerOperationsRow } from "@/lib/speaker-operations";
 import { AddSpeakerPane, SpeakerDetail } from "@/pages/program/Speakers";
 
 const eventId = "event-a" as EventId;
 const speakerId = "speaker-a" as SpeakerId;
-const event = { id: eventId, name: "Namos Sessions", timezone: "America/New_York" } as Event;
+const event = {
+  id: eventId,
+  name: "Namos Sessions",
+  timezone: "America/New_York",
+} as Event;
 const row: SpeakerOperationsRow = {
   id: speakerId,
   name: "Ada Lovelace",
   email: "ada@example.test",
-  speaker: { id: speakerId, eventId, name: "Ada Lovelace", email: "ada@example.test", confirmationStatus: "awaiting" },
+  speaker: {
+    id: speakerId,
+    eventId,
+    name: "Ada Lovelace",
+    email: "ada@example.test",
+    confirmationStatus: "awaiting",
+  },
   confirmationStatus: "awaiting",
   profileState: "bio_and_headshot_missing",
   submissions: [{ id: "submission-a", title: "Reliable workflows" }],
@@ -31,13 +48,38 @@ beforeAll(() => {
   });
 });
 
-function renderDetail(overrides: { saveConfirmation?: Repository["speakers"]["setConfirmationStatus"]; createTask?: Repository["tasks"]["create"]; comms?: Partial<Repository["comms"]> } = {}) {
-  const saveConfirmation = overrides.saveConfirmation ?? vi.fn().mockResolvedValue(undefined);
-  const createTask = overrides.createTask ?? vi.fn().mockResolvedValue("task-created" as TaskId);
+function renderDetail(
+  overrides: {
+    saveConfirmation?: Repository["speakers"]["setConfirmationStatus"];
+    createTask?: Repository["tasks"]["create"];
+    taskTemplates?: TaskTemplate[];
+    createTemplate?: Repository["taskTemplates"]["create"];
+    setDefaultTemplate?: Repository["taskTemplates"]["setDefault"];
+    comms?: Partial<Repository["comms"]>;
+  } = {},
+) {
+  const saveConfirmation =
+    overrides.saveConfirmation ?? vi.fn().mockResolvedValue(undefined);
+  const createTask =
+    overrides.createTask ?? vi.fn().mockResolvedValue("task-created" as TaskId);
   const repo = {
     speakers: { setConfirmationStatus: saveConfirmation },
-    speakerNotes: { list: vi.fn().mockResolvedValue([]), create: vi.fn().mockResolvedValue("note-created"), remove: vi.fn().mockResolvedValue(undefined) },
-    tasks: { create: createTask, setStatus: vi.fn().mockResolvedValue(undefined) },
+    speakerNotes: {
+      list: vi.fn().mockResolvedValue([]),
+      create: vi.fn().mockResolvedValue("note-created"),
+      remove: vi.fn().mockResolvedValue(undefined),
+    },
+    tasks: {
+      create: createTask,
+      setStatus: vi.fn().mockResolvedValue(undefined),
+    },
+    taskTemplates: {
+      list: vi.fn().mockResolvedValue(overrides.taskTemplates ?? []),
+      create:
+        overrides.createTemplate ?? vi.fn().mockResolvedValue("template-new"),
+      setDefault:
+        overrides.setDefaultTemplate ?? vi.fn().mockResolvedValue(undefined),
+    },
     comms: overrides.comms ?? {},
   } as unknown as Repository;
   const callbacks = {
@@ -45,11 +87,18 @@ function renderDetail(overrides: { saveConfirmation?: Repository["speakers"]["se
     onConfirmationSaved: vi.fn(),
     onTaskCreated: vi.fn(),
     onTaskStatusChanged: vi.fn(),
+    onTasksChanged: vi.fn().mockResolvedValue(undefined),
+    onTaskTemplatesChanged: vi.fn().mockResolvedValue(undefined),
   };
   render(
     <MemoryRouter>
       <RepoContext.Provider value={repo}>
-        <SpeakerDetail row={row} event={event} {...callbacks} />
+        <SpeakerDetail
+          row={row}
+          event={event}
+          taskTemplates={overrides.taskTemplates}
+          {...callbacks}
+        />
       </RepoContext.Provider>
     </MemoryRouter>,
   );
@@ -57,25 +106,89 @@ function renderDetail(overrides: { saveConfirmation?: Repository["speakers"]["se
 }
 
 async function chooseConfirmation(label: "Confirmed" | "Declined") {
-  fireEvent.pointerDown(screen.getByRole("combobox", { name: "Confirmation status" }), { button: 0, ctrlKey: false, pointerType: "mouse" });
+  fireEvent.pointerDown(
+    screen.getByRole("combobox", { name: "Confirmation status" }),
+    { button: 0, ctrlKey: false, pointerType: "mouse" },
+  );
   fireEvent.click(await screen.findByRole("option", { name: label }));
 }
 
+function chooseDetailTab(name: "Notes" | "Tasks") {
+  const tab = screen.getByRole("tab", { name: new RegExp(`^${name}`) });
+  fireEvent.pointerDown(tab, {
+    button: 0,
+    ctrlKey: false,
+    pointerType: "mouse",
+  });
+  fireEvent.click(tab);
+}
+
 describe("SpeakerDetail", () => {
+  it("renders as a full speaker workspace with a clear path back to the list", () => {
+    const harness = renderDetail();
+    expect(
+      screen.getByRole("tablist", { name: "Speaker detail sections" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(
+      screen.getByRole("complementary", { name: "Activity" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Activity" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Close detail" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Back to speakers" }));
+    expect(harness.onClose).toHaveBeenCalledOnce();
+  });
+
   it("saves a note with the keyboard shortcut and exposes it in the activity feed", async () => {
     const create = vi.fn().mockResolvedValue("note-created");
     render(
       <MemoryRouter>
-        <RepoContext.Provider value={{ speakers: { setConfirmationStatus: vi.fn() }, speakerNotes: { list: vi.fn().mockResolvedValue([]), create, remove: vi.fn() }, tasks: { create: vi.fn(), setStatus: vi.fn() }, comms: {} } as unknown as Repository}>
-          <SpeakerDetail row={row} event={event} onClose={vi.fn()} onConfirmationSaved={vi.fn()} onTaskCreated={vi.fn()} onTaskStatusChanged={vi.fn()} />
+        <RepoContext.Provider
+          value={
+            {
+              speakers: { setConfirmationStatus: vi.fn() },
+              speakerNotes: {
+                list: vi.fn().mockResolvedValue([]),
+                create,
+                remove: vi.fn(),
+              },
+              tasks: { create: vi.fn(), setStatus: vi.fn() },
+              comms: {},
+            } as unknown as Repository
+          }
+        >
+          <SpeakerDetail
+            row={row}
+            event={event}
+            onClose={vi.fn()}
+            onConfirmationSaved={vi.fn()}
+            onTaskCreated={vi.fn()}
+            onTaskStatusChanged={vi.fn()}
+          />
         </RepoContext.Provider>
       </MemoryRouter>,
     );
+    chooseDetailTab("Notes");
     const note = await screen.findByRole("textbox", { name: "New note" });
     fireEvent.change(note, { target: { value: "Confirmed travel details." } });
     fireEvent.keyDown(note, { key: "Enter", metaKey: true });
-    await waitFor(() => expect(create).toHaveBeenCalledWith({ eventId, speakerId, body: "Confirmed travel details." }));
-    expect((await screen.findAllByText("Confirmed travel details.")).length).toBe(2);
+    await waitFor(() =>
+      expect(create).toHaveBeenCalledWith({
+        eventId,
+        speakerId,
+        body: "Confirmed travel details.",
+      }),
+    );
+    expect(
+      await screen.findByText("Confirmed travel details."),
+    ).toBeInTheDocument();
     expect(await screen.findByText("Added note")).toBeInTheDocument();
   });
 
@@ -84,60 +197,205 @@ describe("SpeakerDetail", () => {
     await chooseConfirmation("Confirmed");
     fireEvent.click(screen.getByRole("button", { name: "Save confirmation" }));
 
-    await waitFor(() => expect(harness.saveConfirmation).toHaveBeenCalledWith({ eventId, speakerId, status: "confirmed" }));
+    await waitFor(() =>
+      expect(harness.saveConfirmation).toHaveBeenCalledWith({
+        eventId,
+        speakerId,
+        status: "confirmed",
+      }),
+    );
     expect(harness.onConfirmationSaved).toHaveBeenCalledWith("confirmed");
-    expect(await screen.findByRole("status")).toHaveTextContent("Confirmation status saved.");
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Confirmation status saved.",
+    );
   });
 
   it("keeps the pane open and announces a confirmation failure", async () => {
-    renderDetail({ saveConfirmation: vi.fn().mockRejectedValue(new Error("Confirmation unavailable")) });
+    renderDetail({
+      saveConfirmation: vi
+        .fn()
+        .mockRejectedValue(new Error("Confirmation unavailable")),
+    });
     await chooseConfirmation("Declined");
     fireEvent.click(screen.getByRole("button", { name: "Save confirmation" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Confirmation unavailable");
-    expect(screen.getByRole("heading", { name: "Ada Lovelace" })).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Confirmation unavailable",
+    );
+    expect(
+      screen.getByRole("complementary", { name: "Activity" }),
+    ).toBeInTheDocument();
   });
 
   it("validates, creates, and reports task failures locally", async () => {
-    const createTask = vi.fn().mockRejectedValueOnce(new Error("Task service unavailable")).mockResolvedValueOnce("task-created" as TaskId);
+    const createTask = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Task service unavailable"))
+      .mockResolvedValueOnce("task-created" as TaskId);
     const harness = renderDetail({ createTask });
-    fireEvent.click(screen.getByRole("button", { name: "Add task" }));
+    chooseDetailTab("Tasks");
+    fireEvent.click(screen.getByRole("button", { name: "Add one-off task" }));
     fireEvent.click(screen.getByRole("button", { name: "Create task" }));
     expect(screen.getByRole("alert")).toHaveTextContent("Enter a task title.");
 
-    fireEvent.change(screen.getByRole("textbox", { name: "Task title" }), { target: { value: "Upload final slides" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Task title" }), {
+      target: { value: "Upload final slides" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Create task" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Task service unavailable");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Task service unavailable",
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Create task" }));
-    await waitFor(() => expect(harness.onTaskCreated).toHaveBeenCalledWith(expect.objectContaining({ id: "task-created", speakerId, title: "Upload final slides", status: "pending" })));
-    expect(await screen.findByRole("status")).toHaveTextContent("Onboarding task created.");
+    await waitFor(() =>
+      expect(harness.onTaskCreated).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "task-created",
+          speakerId,
+          title: "Upload final slides",
+          status: "pending",
+        }),
+      ),
+    );
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Onboarding task created.",
+    );
+  });
+
+  it("assigns a reusable onboarding template directly to the speaker", async () => {
+    const template = {
+      id: "template-a",
+      eventId,
+      name: "Standard Speaker Onboarding",
+      items: [
+        { title: "Upload headshot", targetType: "submission" as const },
+        { title: "Upload slides", targetType: "submission" as const },
+      ],
+      isSeeded: true,
+    } as TaskTemplate;
+    const createTask = vi
+      .fn()
+      .mockResolvedValueOnce("task-headshot")
+      .mockResolvedValueOnce("task-slides");
+    const harness = renderDetail({
+      taskTemplates: [template],
+      createTask,
+    });
+
+    chooseDetailTab("Tasks");
+    expect(screen.getByText("Assign from template")).toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "Onboarding task template" }),
+    ).toHaveTextContent("Standard Speaker Onboarding");
+    fireEvent.click(screen.getByRole("button", { name: "Assign template" }));
+
+    await waitFor(() => expect(createTask).toHaveBeenCalledTimes(2));
+    expect(createTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventId,
+        speakerId,
+        title: "Upload headshot",
+      }),
+    );
+    expect(harness.onTasksChanged).toHaveBeenCalled();
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Assigned 2 tasks from the template.",
+    );
+  });
+
+  it("recovers an empty event with the starter template library", async () => {
+    const createTemplate = vi
+      .fn()
+      .mockImplementation(async ({ name }) => `template-${name}`);
+    const setDefaultTemplate = vi.fn().mockResolvedValue(undefined);
+    const harness = renderDetail({ createTemplate, setDefaultTemplate });
+
+    chooseDetailTab("Tasks");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create starter templates" }),
+    );
+
+    await waitFor(() => expect(createTemplate).toHaveBeenCalledTimes(6));
+    expect(setDefaultTemplate).toHaveBeenCalledWith(
+      expect.objectContaining({ eventId }),
+    );
+    expect(harness.onTaskTemplatesChanged).toHaveBeenCalled();
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Created 6 starter task templates.",
+    );
   });
 
   it("previews the resolved reminder and calendar attachment before confirming delivery", async () => {
-    const preview: CommPreview = { kind: "reminder", templateName: "Speaker task reminder", subject: "Slides are due", body: "Please upload your slides.", recipients: [{ speakerId, name: "Ada Lovelace", email: "ada@example.test" }], calendarAttached: true, scheduleTime: "October 12 at 1:00 PM" };
+    const preview: CommPreview = {
+      kind: "reminder",
+      templateName: "Speaker task reminder",
+      subject: "Slides are due",
+      body: "Please upload your slides.",
+      recipients: [
+        { speakerId, name: "Ada Lovelace", email: "ada@example.test" },
+      ],
+      calendarAttached: true,
+      scheduleTime: "October 12 at 1:00 PM",
+    };
     const previewReminder = vi.fn().mockResolvedValue(preview);
-    const sendReminder = vi.fn().mockResolvedValue({ status: "sent", requested: 1, sent: 1, failed: 0, skipped: 0, results: [{ speakerId, toEmail: "ada@example.test", status: "sent" }] });
+    const sendReminder = vi.fn().mockResolvedValue({
+      status: "sent",
+      requested: 1,
+      sent: 1,
+      failed: 0,
+      skipped: 0,
+      results: [{ speakerId, toEmail: "ada@example.test", status: "sent" }],
+    });
     renderDetail({ comms: { previewReminder, sendReminder } });
 
     fireEvent.click(screen.getByRole("button", { name: "Send reminder" }));
     expect(await screen.findByText("Slides are due")).toBeInTheDocument();
-    expect(screen.getByText(/Calendar invite attached/)).toHaveTextContent("October 12 at 1:00 PM");
+    expect(screen.getByText(/Calendar invite attached/)).toHaveTextContent(
+      "October 12 at 1:00 PM",
+    );
     expect(sendReminder).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Confirm send" }));
-    await waitFor(() => expect(sendReminder).toHaveBeenCalledWith({ eventId, speakerId }));
-    expect(await screen.findByRole("status")).toHaveTextContent("Reminder sent to 1 recipient.");
+    await waitFor(() =>
+      expect(sendReminder).toHaveBeenCalledWith({ eventId, speakerId }),
+    );
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Reminder sent to 1 recipient.",
+    );
   });
 
   it("keeps a failed reminder visible and actionable", async () => {
-    const previewReminder = vi.fn().mockResolvedValue({ kind: "reminder", subject: "Reminder", body: "Action needed", recipients: [{ speakerId, name: "Ada Lovelace", email: "ada@example.test" }], calendarAttached: false });
-    const sendReminder = vi.fn().mockResolvedValue({ status: "failed", requested: 1, sent: 0, failed: 1, skipped: 0, results: [{ speakerId, toEmail: "ada@example.test", status: "failed", error: "Provider unavailable" }] });
+    const previewReminder = vi.fn().mockResolvedValue({
+      kind: "reminder",
+      subject: "Reminder",
+      body: "Action needed",
+      recipients: [
+        { speakerId, name: "Ada Lovelace", email: "ada@example.test" },
+      ],
+      calendarAttached: false,
+    });
+    const sendReminder = vi.fn().mockResolvedValue({
+      status: "failed",
+      requested: 1,
+      sent: 0,
+      failed: 1,
+      skipped: 0,
+      results: [
+        {
+          speakerId,
+          toEmail: "ada@example.test",
+          status: "failed",
+          error: "Provider unavailable",
+        },
+      ],
+    });
     renderDetail({ comms: { previewReminder, sendReminder } });
     fireEvent.click(screen.getByRole("button", { name: "Send reminder" }));
     await screen.findByText("Reminder");
     fireEvent.click(screen.getByRole("button", { name: "Confirm send" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Provider unavailable");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Provider unavailable",
+    );
     expect(screen.getByText("Reminder")).toBeInTheDocument();
   });
 });
@@ -148,8 +406,14 @@ describe("AddSpeakerPane", () => {
     const onCreated = vi.fn();
     render(
       <MemoryRouter>
-        <RepoContext.Provider value={{ speakers: { create } } as unknown as Repository}>
-          <AddSpeakerPane event={event} onClose={vi.fn()} onCreated={onCreated} />
+        <RepoContext.Provider
+          value={{ speakers: { create } } as unknown as Repository}
+        >
+          <AddSpeakerPane
+            event={event}
+            onClose={vi.fn()}
+            onCreated={onCreated}
+          />
         </RepoContext.Provider>
       </MemoryRouter>,
     );
@@ -157,30 +421,67 @@ describe("AddSpeakerPane", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add speaker" }));
     expect(screen.getByRole("alert")).toHaveTextContent("first and last name");
 
-    fireEvent.change(screen.getByLabelText("First name"), { target: { value: " Ada " } });
-    fireEvent.change(screen.getByLabelText("Last name"), { target: { value: " Lovelace " } });
-    fireEvent.change(screen.getByLabelText("Email"), { target: { value: " ADA@EXAMPLE.TEST " } });
+    fireEvent.change(screen.getByLabelText("First name"), {
+      target: { value: " Ada " },
+    });
+    fireEvent.change(screen.getByLabelText("Last name"), {
+      target: { value: " Lovelace " },
+    });
+    fireEvent.change(screen.getByLabelText("Email"), {
+      target: { value: " ADA@EXAMPLE.TEST " },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Add speaker" }));
 
-    await waitFor(() => expect(create).toHaveBeenCalledWith({ eventId, firstName: "Ada", lastName: "Lovelace", email: "ada@example.test", confirmationStatus: "awaiting" }));
-    expect(onCreated).toHaveBeenCalledWith(expect.objectContaining({ id: "speaker-created", firstName: "Ada", lastName: "Lovelace", email: "ada@example.test" }));
+    await waitFor(() =>
+      expect(create).toHaveBeenCalledWith({
+        eventId,
+        firstName: "Ada",
+        lastName: "Lovelace",
+        email: "ada@example.test",
+        confirmationStatus: "awaiting",
+      }),
+    );
+    expect(onCreated).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "speaker-created",
+        firstName: "Ada",
+        lastName: "Lovelace",
+        email: "ada@example.test",
+      }),
+    );
   });
 
   it("keeps the form open when creation fails", async () => {
-    const create = vi.fn().mockRejectedValue(new Error("A speaker with this email already exists for this event."));
+    const create = vi
+      .fn()
+      .mockRejectedValue(
+        new Error("A speaker with this email already exists for this event."),
+      );
     render(
       <MemoryRouter>
-        <RepoContext.Provider value={{ speakers: { create } } as unknown as Repository}>
+        <RepoContext.Provider
+          value={{ speakers: { create } } as unknown as Repository}
+        >
           <AddSpeakerPane event={event} onClose={vi.fn()} onCreated={vi.fn()} />
         </RepoContext.Provider>
       </MemoryRouter>,
     );
-    fireEvent.change(screen.getByLabelText("First name"), { target: { value: "Ada" } });
-    fireEvent.change(screen.getByLabelText("Last name"), { target: { value: "Lovelace" } });
-    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "ada@example.test" } });
+    fireEvent.change(screen.getByLabelText("First name"), {
+      target: { value: "Ada" },
+    });
+    fireEvent.change(screen.getByLabelText("Last name"), {
+      target: { value: "Lovelace" },
+    });
+    fireEvent.change(screen.getByLabelText("Email"), {
+      target: { value: "ada@example.test" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Add speaker" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("already exists");
-    expect(screen.getByRole("heading", { name: "Add speaker" })).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "already exists",
+    );
+    expect(
+      screen.getByRole("heading", { name: "Add speaker" }),
+    ).toBeInTheDocument();
   });
 });

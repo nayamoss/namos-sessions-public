@@ -149,16 +149,18 @@ async function requireWorkspace(request: Request, env: Env, csrf = false) {
   return result.workspace ? { cookie, workspace: result.workspace as Workspace } : null;
 }
 
-async function createWorkspace(request: Request, env: Env) {
-  if (!sameOrigin(request)) return json(403, { error: "request_rejected" });
+async function createWorkspace(request: Request, env: Env, judgeEntry = false) {
+  if (!judgeEntry && !sameOrigin(request)) return json(403, { error: "request_rejected" });
   const ip = requestIp(request);
   if (!ip) return json(403, { error: "request_rejected" });
-  let body: { turnstileToken?: string };
-  try { body = await request.json<{ turnstileToken?: string }>(); }
-  catch { return json(400, { error: "invalid_request" }); }
-  const allowed = await rateLimit(env, "create-v2", ip, 3, 60 * 60 * 1_000);
+  let body: { turnstileToken?: string } = {};
+  if (!judgeEntry) {
+    try { body = await request.json<{ turnstileToken?: string }>(); }
+    catch { return json(400, { error: "invalid_request" }); }
+  }
+  const allowed = await rateLimit(env, judgeEntry ? "judge-entry" : "create-v2", ip, judgeEntry ? 10 : 3, 60 * 60 * 1_000);
   if (!allowed.allowed) return json(429, { error: "rate_limited" }, { "retry-after": String(allowed.retryAfterSeconds) });
-  if (!body.turnstileToken || !(await verifyTurnstile(request, env, body.turnstileToken))) return json(403, { error: "verification_failed" });
+  if (!judgeEntry && (!body.turnstileToken || !(await verifyTurnstile(request, env, body.turnstileToken)))) return json(403, { error: "verification_failed" });
 
   const workspaceId = crypto.randomUUID();
   const clerk = createClerkClient({ secretKey: env.CLERK_SECRET_KEY });
@@ -187,15 +189,29 @@ async function createWorkspace(request: Request, env: Env) {
     const reviewerUserId = users.reviewer;
     const speakerUserId = users.speaker;
     if (!organizerUserId || !reviewerUserId || !speakerUserId) throw new Error("Demo users were not created.");
-    const signInUrl = await ticket(env, organizerUserId, new URL(`/events/demo-${workspaceId}/dashboard`, new URL(request.url).origin).toString());
+    const destination = judgeEntry ? `/events/demo-${workspaceId}/program/agenda` : `/events/demo-${workspaceId}/dashboard`;
+    const signInUrl = await ticket(env, organizerUserId, new URL(destination, new URL(request.url).origin).toString());
     const workspace = await convex(env, { action: "provision", workspaceId, organizerUserId, reviewerUserId, speakerUserId, organizerEmail: emails.organizer, reviewerEmail: emails.reviewer, speakerEmail: emails.speaker }) as unknown as Workspace;
     const csrf = crypto.randomUUID();
     const cookie = await signCookie(env, { workspaceId, csrf, expiresAt: workspace.absoluteExpiresAt });
+    if (judgeEntry) return new Response(null, { status: 302, headers: { location: signInUrl, "set-cookie": setCookie(cookie), "cache-control": "no-store" } });
     return json(201, { workspace: { ...workspace, userIds: undefined }, csrf, signInUrl }, { "set-cookie": setCookie(cookie) });
   } catch {
     await Promise.allSettled(Object.values(users).map((userId) => clerk.users.deleteUser(userId)));
     return json(503, { error: "demo_unavailable" });
   }
+}
+
+async function judgeScheduleStudio(request: Request, env: Env) {
+  const key = new URL(request.url).searchParams.get("access");
+  const configuredKey = (env as Env & { DEMO_JUDGE_ACCESS_KEY?: string }).DEMO_JUDGE_ACCESS_KEY;
+  if (!configuredKey || !key || key !== configuredKey) return json(404, { error: "not_found" });
+  const active = await requireWorkspace(request, env);
+  if (active) {
+    const destination = new URL(`/events/${active.workspace.eventSlug}/program/agenda`, new URL(request.url).origin).toString();
+    return new Response(null, { status: 302, headers: { location: await ticket(env, active.workspace.userIds.organizer, destination), "cache-control": "no-store" } });
+  }
+  return createWorkspace(request, env, true);
 }
 
 async function state(request: Request, env: Env) {
@@ -242,6 +258,7 @@ export async function handleDemoRequest(request: Request, env: Env) {
   const { pathname } = new URL(request.url);
   try {
     if (pathname === "/api/demo/workspaces" && request.method === "POST") return await createWorkspace(request, env);
+    if (pathname === "/demo/schedule-studio" && request.method === "GET") return await judgeScheduleStudio(request, env);
     if (pathname === "/api/demo/workspaces/current" && request.method === "GET") return await state(request, env);
     if (pathname === "/api/demo/workspaces/current/role" && request.method === "POST") return await switchRole(request, env);
     if (pathname === "/api/demo/workspaces/current/reset" && request.method === "POST") return await resetWorkspace(request, env);

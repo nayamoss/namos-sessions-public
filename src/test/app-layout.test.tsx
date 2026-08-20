@@ -193,7 +193,7 @@ describe("AppLayout", () => {
     container.remove();
   });
 
-  it("keeps collapsible nav sections auto-collapsed and lets only one stay open", () => {
+  it("keeps multi-item navigation collapsible and presents Configure as one settings hub", () => {
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
@@ -209,21 +209,18 @@ describe("AppLayout", () => {
 
     const sections = [...container.querySelectorAll("nav section")];
     const programHeader = sections.find((section) => section.querySelector("h2")?.textContent === "Program")!;
-    const configureHeader = sections.find((section) => section.querySelector("h2")?.textContent === "Settings")!;
     const programToggle = programHeader.querySelector("button")!;
-    const configureToggle = configureHeader.querySelector("button")!;
+    const configureSection = sections.find((section) => section.querySelector('button[aria-label="Configure"]'))!;
+    const configureButton = configureSection.querySelector('button[aria-label="Configure"]')!;
 
-    // No active route inside either section, so both start collapsed.
+    // No active route inside Program, so it starts collapsed. Configuration
+    // intentionally is not another accordion: it opens the settings hub.
     expect(programToggle).toHaveAttribute("aria-expanded", "false");
-    expect(configureToggle).toHaveAttribute("aria-expanded", "false");
+    expect(configureSection.querySelector("h2")).not.toBeInTheDocument();
+    expect(configureButton).toHaveTextContent("Configure");
 
     act(() => programToggle.click());
     expect(programHeader.querySelector("button")).toHaveAttribute("aria-expanded", "true");
-
-    // Opening Configure auto-collapses Program — only one section stays open.
-    act(() => configureHeader.querySelector("button")!.click());
-    expect(programHeader.querySelector("button")).toHaveAttribute("aria-expanded", "false");
-    expect(configureHeader.querySelector("button")).toHaveAttribute("aria-expanded", "true");
 
     act(() => root.unmount());
     container.remove();

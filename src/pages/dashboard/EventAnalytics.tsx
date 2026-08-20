@@ -103,7 +103,7 @@ export default function EventAnalytics() {
           <>
             {error && <p role="status" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">Refresh failed. Showing the most recent snapshot.</p>}
             <section aria-label="Event snapshot" className="grid border-y sm:grid-cols-2 lg:grid-cols-4 lg:divide-x">
-              <div className="border-b px-1 sm:border-r lg:border-b-0 lg:px-4 lg:first:pl-1"><Metric label="Submissions" value={summary.submissions.total} detail={`${summary.submissions.pending + summary.submissions.inReview} need a decision`} to={`${base}/program/abstracts`} /></div>
+              <div className="border-b px-1 sm:border-r lg:border-b-0 lg:px-4 lg:first:pl-1"><Metric label="Submissions" value={summary.submissions.total} detail={`${summary.submissions.undecided} need a decision`} to={`${base}/program/abstracts`} /></div>
               <div className="border-b px-1 sm:border-r-0 lg:border-b-0 lg:px-4"><Metric label="Acceptance rate" value={percent(summary.submissions.acceptanceRate)} detail={`${summary.submissions.accepted} accepted of ${summary.submissions.accepted + summary.submissions.declined} decided`} to={`${base}/program/abstracts`} /></div>
               <div className="border-b px-1 sm:border-b-0 sm:border-r lg:px-4"><Metric label="Reviews complete" value={percent(summary.reviews.completionRate)} detail={`${summary.reviews.completed} of ${summary.reviews.assigned} assignments`} to={`${base}/program/evaluation`} /></div>
               <div className="px-1 lg:px-4 lg:pr-1"><Metric label="Accepted sessions scheduled" value={percent(summary.agenda.scheduleRate)} detail={`${summary.agenda.scheduledAccepted} of ${summary.agenda.acceptedSessions} sessions`} to={`${base}/program/agenda`} /></div>
@@ -113,6 +113,7 @@ export default function EventAnalytics() {
                 <Section title="Submission pipeline" description="Current proposals by decision stage." to={`${base}/program/abstracts`}>
                   <ProgressRow label="Awaiting review" value={summary.submissions.pending} total={summary.submissions.total} tone="warning" />
                   <ProgressRow label="In review" value={summary.submissions.inReview} total={summary.submissions.total} />
+                  <ProgressRow label="Unassigned for review" value={summary.reviews.unassigned} total={summary.submissions.undecided} tone="danger" />
                   <ProgressRow label="Accepted" value={summary.submissions.accepted} total={summary.submissions.total} />
                   <ProgressRow label="Declined" value={summary.submissions.declined} total={summary.submissions.total} tone="muted" />
                 </Section>
@@ -121,12 +122,22 @@ export default function EventAnalytics() {
                   <ProgressRow label="Awaiting response" value={summary.speakers.awaiting} total={summary.speakers.total} tone="warning" />
                   <ProgressRow label="Profile complete" value={summary.speakers.profileComplete} total={summary.speakers.total} />
                 </Section></div>
+                <div className="border-t"><Section title="CRM pipeline" description="Event contacts by the organizer-owned relationship stage." to={`${base}/program/contacts`}>
+                  <ProgressRow label="Qualified" value={summary.crm.qualified} total={summary.crm.total} />
+                  <ProgressRow label="Invited" value={summary.crm.invited} total={summary.crm.total} />
+                  <ProgressRow label="Confirmed" value={summary.crm.confirmed} total={summary.crm.total} />
+                </Section></div>
               </div>
               <div>
                 <Section title="Program delivery" description="Scheduling and publication progress for the accepted program." to={`${base}/program/agenda`}>
                   <ProgressRow label="Accepted sessions scheduled" value={summary.agenda.scheduledAccepted} total={summary.agenda.acceptedSessions} />
                   <ProgressRow label="Agenda items published" value={summary.agenda.published} total={summary.agenda.total} />
                 </Section>
+                <div className="border-t"><Section title="Reviewer workload" description={`${summary.reviews.workload.reviewers} assigned reviewers · ${summary.reviews.workload.min}–${summary.reviews.workload.max} assignments each.`} to={`${base}/program/evaluation`}>
+                  <ProgressRow label="Light workload" value={summary.reviews.workload.light} total={summary.reviews.workload.reviewers} tone="muted" />
+                  <ProgressRow label="Balanced workload" value={summary.reviews.workload.balanced} total={summary.reviews.workload.reviewers} />
+                  <ProgressRow label="Heavy workload" value={summary.reviews.workload.heavy} total={summary.reviews.workload.reviewers} tone="warning" />
+                </Section></div>
                 <div className="border-t"><Section title="Operational follow-through" description="Speaker tasks and message delivery that still need attention." to={`${base}/program/readiness`}>
                   <ProgressRow label="Tasks complete" value={summary.tasks.completed} total={summary.tasks.total} />
                   <ProgressRow label="Tasks overdue" value={summary.tasks.overdue} total={summary.tasks.total} tone="danger" />
@@ -135,7 +146,7 @@ export default function EventAnalytics() {
                 </Section></div>
               </div>
             </div>
-            <p className="border-t pt-3 text-xs leading-5 text-muted-foreground">This is a current operational snapshot. Historical daily trends will appear here when first-party history is available; no synthetic history is generated.</p>
+            <p className="border-t pt-3 text-xs leading-5 text-muted-foreground">This snapshot updates as your event workflow changes.</p>
           </>
         ) : null}
       </div>

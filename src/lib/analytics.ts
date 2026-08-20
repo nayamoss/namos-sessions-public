@@ -66,12 +66,12 @@ export interface AnalyticsEventProperties {
       | "custom";
   };
   communication_sent: {
-    communication_kind: "decision" | "reminder" | "consolidated_decision";
+    communication_kind: "decision" | "reminder" | "consolidated_decision" | "campaign";
     sent_count: number;
     failed_count: number;
   };
   communication_failed: {
-    communication_kind: "decision" | "reminder" | "consolidated_decision";
+    communication_kind: "decision" | "reminder" | "consolidated_decision" | "campaign";
     error_category: ErrorCategory;
   };
   task_created: {
@@ -168,7 +168,7 @@ const enums = {
     "calendar_invite",
     "custom",
   ],
-  sendKind: ["decision", "reminder", "consolidated_decision"],
+  sendKind: ["decision", "reminder", "consolidated_decision", "campaign"],
   taskTarget: ["contact", "group", "submission", "sponsor"],
   taskSource: ["manual", "auto", "agent"],
   taskStatus: ["pending", "in_progress", "completed"],

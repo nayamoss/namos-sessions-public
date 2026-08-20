@@ -14,7 +14,7 @@ const genericDocumentLists = new Set<ReadOperation>([
   "speakers.documents.list", "speakerNotes.list", "activity.list", "evaluations.list", "evaluations.plans.list", "evaluations.assignments.list",
   "agenda.list", "agenda.listForSpeaker", "tasks.list", "availability.list", "organizers.list", "taskTemplates.list",
   "comms.templates.list", "apiKeys.list", "apiKeys.auditLog", "organizations.listMine",
-  "sponsors.list", "sponsorTiers.list", "sponsorContacts.listBySponsor",
+  "sponsors.list", "sponsorTiers.list", "sponsorContacts.listBySponsor", "crm.list", "crm.segments.list", "crm.sources.list",
   "comms.listDrafts", "portalResources.listAdmin", "portalResources.listPublished",
 ]);
 

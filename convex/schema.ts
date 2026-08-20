@@ -161,7 +161,9 @@ export default defineSchema({
     location: v.optional(v.string()), timezone: v.string(), startDate: v.number(), endDate: v.number(),
     description: v.optional(v.string()), contactEmail: v.optional(v.string()), logoFileId: v.optional(v.string()),
     programPublishedAt: v.optional(v.number()),
-    theme: v.optional(v.string()), logoStorageKey: v.optional(v.string()), accentColor: v.optional(v.string()), backgroundStorageKey: v.optional(v.string()),
+    scheduleStartTime: v.optional(v.string()),
+    scheduleEndTime: v.optional(v.string()),
+    theme: v.optional(v.string()), logoStorageKey: v.optional(v.string()), accentColor: v.optional(v.string()), backgroundStorageKey: v.optional(v.string()), industry: v.optional(v.string()),
     exhibitorsEnabled: v.boolean(), sponsorsEnabled: v.boolean(), defaultOnboardingTemplateId: v.optional(v.id("task_templates")),
     // The Clerk user whose subscription pays for Namos-managed AI. Optional for existing
     // events; an organization owner assigns it once before managed AI can be enabled.
@@ -324,6 +326,49 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_organization", ["organizationId"]),
+  // CRM sources intentionally do not share content_integrations: their lifecycle and mapping
+  // write only organization-contact identity, never CFP content or CRM-owned workflow fields.
+  crm_sources: defineTable({
+    eventId: v.id("events"),
+    provider: v.union(v.literal("notion"), v.literal("airtable")),
+    config: v.object({
+      notionDatabaseId: v.optional(v.string()),
+      airtableBaseId: v.optional(v.string()),
+      airtableTableName: v.optional(v.string()),
+      emailField: v.string(),
+      fullNameField: v.optional(v.string()),
+      firstNameField: v.optional(v.string()),
+      lastNameField: v.optional(v.string()),
+    }),
+    credentialHint: v.string(),
+    credentialEnvelope: v.object({ version: v.literal(1), iv: v.string(), ciphertext: v.string(), tag: v.string() }),
+    oauthExpiresAt: v.optional(v.number()),
+    status: v.union(v.literal("connected"), v.literal("error")),
+    lastSyncedAt: v.optional(v.number()),
+    lastRun: v.optional(v.object({ created: v.number(), updated: v.number(), skipped: v.number() })),
+    lastError: v.optional(v.string()),
+    updatedByUserId: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_event", ["eventId"]).index("by_event_provider", ["eventId", "provider"]),
+  crm_source_records: defineTable({
+    sourceId: v.id("crm_sources"),
+    providerRecordId: v.string(),
+    contactId: v.id("crm_contacts"),
+    normalizedEmail: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_source_record", ["sourceId", "providerRecordId"]).index("by_source_email", ["sourceId", "normalizedEmail"]),
+  // Kept separate from content OAuth state so a CRM authorization cannot be repurposed to
+  // import CFP content. Both rows are short lived and never queryable by the browser.
+  crm_oauth_states: defineTable({
+    stateHash: v.string(), provider: v.union(v.literal("notion"), v.literal("airtable")), eventId: v.id("events"), userId: v.string(),
+    verifierEnvelope: v.optional(v.object({ version: v.literal(1), iv: v.string(), ciphertext: v.string(), tag: v.string() })), expiresAt: v.number(), createdAt: v.number(),
+  }).index("by_stateHash", ["stateHash"]),
+  crm_oauth_pending: defineTable({
+    pendingId: v.string(), provider: v.union(v.literal("notion"), v.literal("airtable")), eventId: v.id("events"), userId: v.string(),
+    credentialEnvelope: v.object({ version: v.literal(1), iv: v.string(), ciphertext: v.string(), tag: v.string() }), oauthExpiresAt: v.optional(v.number()), expiresAt: v.number(), createdAt: v.number(),
+  }).index("by_pendingId", ["pendingId"]),
   speakers: defineTable({
     eventId: v.id("events"),
     contactId: v.optional(v.id("crm_contacts")),

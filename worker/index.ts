@@ -76,7 +76,8 @@ export default {
     const response =
       url.pathname === "/api/public/cfp-submissions"
         ? await handlePublicCfpSubmission(request, env)
-        : url.pathname.startsWith("/api/demo/")
+        : url.pathname.startsWith("/api/demo/") ||
+            url.pathname === "/demo/schedule-studio"
           ? await handleDemoRequest(request, env)
           : url.pathname.startsWith("/api/")
             ? Response.json(

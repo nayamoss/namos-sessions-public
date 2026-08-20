@@ -1,5 +1,98 @@
 import { v } from "convex/values";
 import { assertEventOrganizerAccess, mutation, query } from "./functions";
+import type { Id } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
+
+const speakerStarterTemplates = [
+  [
+    "Standard Speaker Onboarding",
+    [
+      "Upload headshot",
+      "Confirm bio",
+      "Upload slides",
+      "Sign speaker agreement",
+    ],
+  ],
+  [
+    "Keynote Speaker",
+    [
+      "Confirm keynote title",
+      "Upload headshot",
+      "Share AV requirements",
+      "Upload slides",
+    ],
+  ],
+  [
+    "Workshop Facilitator",
+    [
+      "Confirm workshop materials",
+      "Share room setup",
+      "Upload slides",
+      "Sign speaker agreement",
+    ],
+  ],
+  [
+    "Panelist",
+    ["Confirm panel topic", "Confirm bio", "Share discussion prompts"],
+  ],
+  [
+    "Virtual/Remote Speaker",
+    [
+      "Run technical check",
+      "Confirm time zone",
+      "Upload slides",
+      "Share backup connection",
+    ],
+  ],
+  [
+    "Sponsor-Nominated Speaker",
+    [
+      "Confirm sponsor details",
+      "Confirm bio",
+      "Upload headshot",
+      "Sign speaker agreement",
+    ],
+  ],
+] as const;
+
+export async function ensureSpeakerStarterTemplates(
+  ctx: MutationCtx,
+  eventId: Id<"events">,
+  now = Date.now(),
+) {
+  const existing = await ctx.db
+    .query("task_templates")
+    .withIndex("by_event", (q) => q.eq("eventId", eventId))
+    .collect();
+  const ids = new Map(
+    existing.map((template) => [template.name, template._id]),
+  );
+  let created = 0;
+  for (const [name, titles] of speakerStarterTemplates) {
+    if (ids.has(name)) continue;
+    const id = await ctx.db.insert("task_templates", {
+      eventId,
+      name,
+      items: titles.map((title) => ({
+        title,
+        targetType: "submission" as const,
+      })),
+      isSeeded: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    ids.set(name, id);
+    created += 1;
+  }
+  const event = await ctx.db.get(eventId);
+  const defaultId = ids.get("Standard Speaker Onboarding");
+  if (event && !event.defaultOnboardingTemplateId && defaultId)
+    await ctx.db.patch(eventId, {
+      defaultOnboardingTemplateId: defaultId,
+      updatedAt: now,
+    });
+  return { created };
+}
 
 const item = v.object({
   title: v.string(),
@@ -147,6 +240,14 @@ export const setDefault = mutation({
     });
   },
 });
+
+export const ensureStarters = mutation({
+  args: { eventId: v.id("events") },
+  handler: async (ctx, args) => {
+    await assertEventOrganizerAccess(ctx, args.eventId);
+    return ensureSpeakerStarterTemplates(ctx, args.eventId);
+  },
+});
 export const applyToSubmission = mutation({
   args: {
     templateId: v.id("task_templates"),
@@ -198,6 +299,59 @@ export const applyToSubmission = mutation({
     return {
       created: todo.length,
       skipped: template.items.length - todo.length,
+    };
+  },
+});
+
+export const applyToSpeaker = mutation({
+  args: {
+    templateId: v.id("task_templates"),
+    speakerId: v.id("speakers"),
+  },
+  handler: async (ctx, args) => {
+    const [template, speaker] = await Promise.all([
+      ctx.db.get(args.templateId),
+      ctx.db.get(args.speakerId),
+    ]);
+    if (!template || !speaker || template.eventId !== speaker.eventId)
+      throw new Error("Template and speaker must belong to the same event.");
+    await assertEventOrganizerAccess(ctx, template.eventId);
+    const existing = await ctx.db
+      .query("onboarding_tasks")
+      .withIndex("by_speaker", (q) => q.eq("speakerId", args.speakerId))
+      .collect();
+    const titles = new Set(
+      existing
+        .filter((task) => task.source === "auto")
+        .map((task) => task.title),
+    );
+    const applicable = template.items.filter(
+      (entry) => entry.targetType !== "sponsor",
+    );
+    const todo = applicable.filter((entry) => !titles.has(entry.title));
+    const now = Date.now();
+    await Promise.all(
+      todo.map((entry) =>
+        ctx.db.insert("onboarding_tasks", {
+          eventId: speaker.eventId,
+          targetType: entry.targetType,
+          speakerId: speaker._id,
+          title: entry.title,
+          ...(entry.description ? { description: entry.description } : {}),
+          ...(entry.linkedFormId ? { linkedFormId: entry.linkedFormId } : {}),
+          ...(entry.dueDateOffsetDays !== undefined
+            ? { dueDate: now + entry.dueDateOffsetDays * 86_400_000 }
+            : {}),
+          source: "auto",
+          status: "pending",
+          createdAt: now,
+          updatedAt: now,
+        }),
+      ),
+    );
+    return {
+      created: todo.length,
+      skipped: applicable.length - todo.length,
     };
   },
 });

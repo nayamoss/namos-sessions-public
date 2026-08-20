@@ -83,6 +83,12 @@ define an in-app, event-scoped Operations Agent with visible progress, clarifica
 source-linked readiness tools, and hash-bound approval before agent-attributed task creation. The
 closed, unmerged external MCP spike in #66 is prior art only, not an implementation dependency.
 
+**Slack integration planning update (2026-08-19):** a FULL Namos-plan package defines an
+organization-installed, event/channel-bound Slack adapter for the existing Operations Agent,
+explicit account linking, hash-bound task decisions, and selected event notifications. Convex
+signed HTTP actions, durable receipts, and an outbound delivery queue replace Takumi's in-memory
+webhook processing; no implementation or live Slack app configuration has started.
+
 **Branding maintenance update (2026-08-13):** the legacy Sentio favicon was replaced throughout
 the web app with the Namos Sessions blue microphone icon, including SVG, ICO, PNG, and iOS assets.
 
@@ -233,6 +239,8 @@ replace provider or final release acceptance gates.
 | 64 | [forge-self-host-research](./forge-self-host-research/requirements.md) | `done` (research) | — | — | — | Research doc, no deployment and none proposed. SmolForge self-hosting means thirteen independently released Workers plus multiple D1 databases, R2, and Durable Objects — a genuine infrastructure project, not a quick deploy. Hosted alpha registration is closed regardless. |
 | 65 | [account-menu-imori-parity](./account-menu-imori-parity/plan.md) | `done` | 4-6h | #228 | — | The account dropdown exposed only namos-specific navigation plus a theme toggle and sign out. Adds Imori's What's New, Take a tour, Feedback, and Shortcuts entries — the affordances that let a new or returning user get unstuck without opening a support channel — while keeping every namos-specific item, which has no Imori equivalent and must not be dropped. Merged as #230. |
 | 66 | [settings-modal-refactor](./settings-modal-refactor/plan.md) | `done` | 6-8h | #229 | — | Settings were 9 separately routed pages, each a full navigation away from whatever the organizer was doing. Now a Claude.ai-style modal overlay reachable from any page, with Imori's grouped sidebar nav and card content inside this app's design system. Deep links still resolve — `/events/:slug/settings/event` lands on the right tab inside the overlay instead of as a standalone page. Merged as #231. |
+| 67 | [onboarding-multi-source-import](./onboarding-multi-source-import/plan.md) | `planned` | 32-44h | #236 | high | Replaces the CSV-only final onboarding step with one preview-first source chooser for CSV, Google Sheets, Trello, the existing Notion integration, and a structured Markdown table. Google/Trello are read-only encrypted connections also manageable in Settings; Airtable remains Settings-only and is explicitly outside this request. |
+| 68 | [slack-integration](./slack-integration/plan.md) | `planned` | 32-44h | #238 | high | Organization-level Slack OAuth with one channel per event, explicit organizer account linking, signed/deduplicated commands and mentions routed into the existing Operations Agent, hash-bound task approval from Block Kit, and selected event notifications through a durable outbox. No Marketplace distribution, multi-channel binding, email auto-linking, or expanded agent write authority in v1. |
 
 **Total estimate:** ~156-216h including the attendee site, post-demo public API, restored public
 embeds + Accelevents integration, and the agent-native operations foundation, against a deadline
