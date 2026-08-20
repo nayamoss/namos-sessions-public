@@ -37,7 +37,6 @@ import { useOptionalCurrentEvent } from "@/components/EventContext";
 import { RepoContext } from "@/data/repo";
 import { SettingsModalProvider } from "@/components/settings/SettingsModalContext";
 import { useOptionalSettingsModal } from "@/components/settings/SettingsModalContext";
-import { settingsTabFromPath } from "@/components/settings/settings-nav";
 import { selectedBackend } from "@/data/backend";
 
 export type DashboardNavItem = {
@@ -88,8 +87,7 @@ const navSections: DashboardNavSection[] = [
       { to: "/portals/resources", label: "Resources", icon: BookOpen },
     ],
   },
-  // Running the event day-to-day, as opposed to configuring how it's set up
-  // (that split lives in "Settings" below).
+  // Running the event day-to-day, as opposed to configuring how it's set up.
   {
     label: "Operations",
     items: [
@@ -187,7 +185,7 @@ function Navigation({
                     aria-controls={sectionId}
                     aria-expanded={expanded}
                     onClick={() => toggleSection(section.label)}
-                    className="flex w-full items-center justify-between rounded-md px-3 py-1.5 text-xs font-bold uppercase tracking-[0.12em] text-foreground/65 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="flex w-full items-center justify-between rounded-md px-3 py-1.5 text-xs font-bold uppercase tracking-[0.12em] text-foreground/65 transition-colors hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:outline-none"
                   >
                     <span>{section.label}</span>
                     <ChevronDown
@@ -204,7 +202,7 @@ function Navigation({
             )}
             <div id={sectionId} hidden={!collapsed && !expanded} className={cn("space-y-1", !collapsed && "mt-1")}>
               {(collapsed ? section.items.slice(0, 1) : section.items).map((item) => {
-                const settingsTab = settingsTabFromPath(item.to);
+                const isConfigure = item.label === "Configure";
                 const active = item.end
                   ? location.pathname === item.to
                   : location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
@@ -213,8 +211,8 @@ function Navigation({
                   collapsed ? "justify-center p-2" : "gap-3 px-3 py-2",
                   active ? "bg-muted text-foreground" : "text-foreground/75 hover:bg-muted hover:text-foreground",
                 );
-                if (settingsTab && settingsModal) return (
-                  <button key={item.to} type="button" title={collapsed ? item.label : undefined} aria-label={item.label} onClick={() => { settingsModal.openSettings(settingsTab); onNavigate?.(); }} className={className}>
+                if (isConfigure && settingsModal) return (
+                  <button key={item.to} type="button" title={collapsed ? item.label : undefined} aria-label={item.label} onClick={() => { settingsModal.openSettings(); onNavigate?.(); }} className={className}>
                     <item.icon className="h-4 w-4 shrink-0" />
                     {!collapsed && <span className="truncate">{item.label}</span>}
                   </button>
@@ -359,7 +357,7 @@ function DesktopSidebar({
         )}
       </div>
       {accountContext === "admin" && <AdminWorkspaceMenus collapsed={collapsed} />}
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <Navigation sections={sections} />
       </div>
       <div className="shrink-0 pt-2">
@@ -374,20 +372,22 @@ function DashboardLayoutInner({
   children,
   detail,
   utility,
-  headerEnd,
+  bodyToolbar,
   homeHref,
   navSections,
   title,
+  contentVariant = "default",
 }: {
   accountContext: "admin" | "portal";
   children: ReactNode;
   detail?: ReactNode;
   /** A page-level utility rail, rendered beside—not inside—the content surface. */
   utility?: ReactNode;
-  headerEnd?: ReactNode;
+  bodyToolbar?: ReactNode;
   homeHref: string;
   navSections: DashboardNavSection[];
   title: string;
+  contentVariant?: "default" | "conversation";
 }) {
   const { collapsed } = useSidebarState();
 
@@ -402,17 +402,17 @@ function DashboardLayoutInner({
           utility && "lg:pr-[23.75rem] xl:pr-[25.75rem]",
         )}
       >
-        <header className="flex h-14 shrink-0 items-center justify-between gap-4 pl-14 pr-4 md:pl-16 md:pr-4 lg:px-3">
+        <header className="flex h-14 shrink-0 items-center pl-14 pr-4 md:pl-16 md:pr-4 lg:px-3">
           <div className="min-w-0"><PageHeader title={title} /></div>
-          {headerEnd && (
-            <div className="ml-auto flex shrink-0 items-center gap-2">
-              {headerEnd}
-            </div>
-          )}
         </header>
         <div className="flex min-h-0 min-w-0 flex-1 px-3 pb-3 md:px-4 md:pb-4">
-          <PageContentSurface className="min-w-0">
-            <div className="min-w-0 flex-1 p-4 md:p-5 lg:overflow-y-auto">
+          <PageContentSurface variant={contentVariant} className="min-w-0">
+            <div className={cn("min-w-0 flex-1", contentVariant === "conversation" ? "flex min-h-0 overflow-hidden" : "p-4 md:p-5 lg:overflow-y-auto")}>
+              {bodyToolbar && (
+                <nav aria-label="Workspace utilities" className="mb-4 flex items-center justify-end gap-2">
+                  {bodyToolbar}
+                </nav>
+              )}
               {children}
             </div>
             {detail && (
@@ -443,23 +443,25 @@ export function DashboardLayout({
   children,
   detail,
   utility,
-  headerEnd,
+  bodyToolbar,
   homeHref,
   navSections,
   title,
+  contentVariant,
 }: {
   accountContext: "admin" | "portal";
   children: ReactNode;
   detail?: ReactNode;
   utility?: ReactNode;
-  headerEnd?: ReactNode;
+  bodyToolbar?: ReactNode;
   homeHref: string;
   navSections: DashboardNavSection[];
   title: string;
+  contentVariant?: "default" | "conversation";
 }) {
   return (
     <SidebarProvider>
-      <DashboardLayoutInner accountContext={accountContext} detail={detail} utility={utility} headerEnd={headerEnd} homeHref={homeHref} navSections={navSections} title={title}>
+      <DashboardLayoutInner accountContext={accountContext} detail={detail} utility={utility} bodyToolbar={bodyToolbar} homeHref={homeHref} navSections={navSections} title={title} contentVariant={contentVariant}>
         {children}
       </DashboardLayoutInner>
     </SidebarProvider>
@@ -471,11 +473,13 @@ export function AppLayout({
   detail,
   utility,
   title,
+  contentVariant,
 }: {
   children: ReactNode;
   detail?: ReactNode;
   utility?: ReactNode;
   title: string;
+  contentVariant?: "default" | "conversation";
 }) {
   const current = useOptionalCurrentEvent()?.event;
   const repo = useContext(RepoContext);
@@ -498,7 +502,7 @@ export function AppLayout({
       accountContext="admin"
       detail={detail}
       utility={utility}
-      headerEnd={(
+      bodyToolbar={(
         <>
           <button
             type="button"
@@ -516,6 +520,7 @@ export function AppLayout({
       homeHref={current ? `/events/${current.slug}/dashboard` : "/events"}
       navSections={visibleNavSections}
       title={title}
+      contentVariant={contentVariant}
     >
       {children}
       <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen} />

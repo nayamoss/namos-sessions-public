@@ -1,0 +1,81 @@
+# AI Schedule Proposals — Implementation Plan
+
+## Phase 1: Backend Foundation
+- [ ] T001: Add `proposedScheduleAssignmentValidator` to `convex/agentState.ts` (next to `proposedTaskValidator`/`proposedMessageValidator`, line ~6)
+- [ ] T002: Add `"schedule_assignments"` to `agent_action_proposals.kind` union in `convex/schema.ts:643`; add `scheduleAssignments`, `createdAgendaItemIds`, `skippedAssignments` optional fields
+- [ ] T003: Add `canonicalScheduleProposalPayload(summary, assignments)` to `convex/agentProposal.ts`, mirroring `canonicalMessageDraftProposalPayload`
+- [ ] T004: Add `saveScheduleProposal` internal mutation to `convex/agentState.ts`, mirroring `saveMessageProposal` (line 109)
+- [ ] T005: Add `agenda.checkPlacementInternal` internal query to `convex/agenda.ts`, wrapping the existing exported `placementConflicts` function (line 106)
+- [ ] T006: Add `agentData.unscheduledAcceptedSubmissions` internal query to `convex/agentData.ts`
+- [ ] T007: Add `agentData.candidateScheduleSlots` internal query to `convex/agentData.ts` (30-min grid, per-day, bounded to 200 candidate starts, uses `event.scheduleStartTime`/`scheduleEndTime`/`timezone`)
+
+## Phase 2: Agent Tool Wiring
+- [ ] T008: Add `list_unscheduled_sessions` and `list_schedule_slots` read tools to `convex/agentRuntime.ts` `tools` object
+- [ ] T009: Add `scheduleAssignmentInputSchema` (zod) near `taskSchema`/`messageSchema` (`agentRuntime.ts:63`)
+- [ ] T010: Add `propose_schedule_assignments` tool with server-side re-validation loop (calls `checkPlacementInternal` per assignment before saving proposal)
+- [ ] T011: Update `SYSTEM_PROMPT` (`agentRuntime.ts:21-28`) to permit schedule proposals and describe the list-then-propose flow
+- [ ] T012: Add `hasToolCall("propose_schedule_assignments")` to both `stopWhen` arrays (lines 143, 228)
+
+## Phase 3: Approval Mutation
+- [ ] T013: Add `approveScheduleProposal` mutation to `convex/agentRuns.ts`, mirroring `approveTaskProposal`/`approveMessageProposal` — re-validates each assignment via `placementConflicts` (imported directly), checks room/track still belong to the event, inserts `agenda_items` rows, writes `agenda_items_audit` rows with `source: "agent:schedule_proposal"`, tracks `skippedAssignments`
+- [ ] T014: Confirm `rejectProposal` (`agentRuns.ts:273`) needs no kind-specific change — read full function body to verify
+
+## Phase 4: Frontend UI (REQUIRED — never skip)
+
+> A feature is NOT done until it is visible and usable in the UI. This phase must be specific.
+
+### UI Spec
+
+**Location:** Operations Agent page (`/events/:slug/program/agent`, `src/pages/program/AgentOperations.tsx`) — the existing agent run detail panel (`AgentRunInspector`, rendered as the `detail` slot of `AppLayout`). No new route or page.
+
+**Elements — new `schedule_assignments` proposal card** (added inside the existing `proposals.map(...)` loop in `AgentRunInspector.tsx`, same `<section className="space-y-3 rounded-lg bg-background p-4">` card style as task/message proposals):
+- Card header: `<h2>` reading "Proposed schedule" (third branch of the existing kind-ternary) + existing `<StatusBadge>{proposal.status}</StatusBadge>`
+- Summary line: `<p className="text-sm text-muted-foreground">{proposal.summary}</p>` (unchanged, reused)
+- Per-assignment row (one `<div className="rounded-md bg-muted/60 p-3">` per assignment, same visual weight as task/message rows):
+  - Session title: `<p className="text-sm font-medium">{assignment.title}</p>`
+  - Time range: `<p className="text-xs text-muted-foreground">{formatted start} – {formatted end}</p>` using `Date.prototype.toLocaleString`/`toLocaleTimeString`, consistent with existing date formatting in this file (line 85)
+  - Room + track line: `<p className="text-xs text-muted-foreground">{roomName}{trackName ? ` · ${trackName}` : ""}</p>` — resolved via `roomNames`/`trackNames` maps passed down as new props
+  - Reason/rationale: `<p className="mt-1 text-xs">{assignment.reason}</p>` (unchanged pattern, line 88)
+- Approve button: existing `<Button variant="outline" size="sm">` — label becomes `"Approve & schedule"` for this kind (extend ternary at line 120-122)
+- Reject button: existing `<Button variant="ghost" size="sm">Reject</Button>` — unchanged, already generic
+- Applied state (`proposal.status === "applied"`): new third branch of the ternary at line 134 —
+  - `<p className="text-sm">Scheduled {proposal.createdAgendaItemIds?.length ?? 0} session(s).</p>`
+  - If `skippedAssignments.length > 0`: `<p className="text-sm text-muted-foreground">{n} could not be placed:</p>` followed by a `<ul>` of `<li>{title} — {reason}</li>` (resolve title by matching `submissionId` back to `proposal.scheduleAssignments`)
+  - Link to Agenda page (mirrors the existing "Review drafts" link at line 143-150): `<Link to="../agenda">Review agenda</Link>`
+- Empty/loading states: none new — this card only renders once a `schedule_assignments` proposal exists in `proposals[]`; the existing `AgentTimeline` already shows the "Running list_unscheduled_sessions…" / "Running list_schedule_slots…" / "Running propose_schedule_assignments…" tool-call progress lines automatically via `runRead`'s existing `agentState.append` calls (`agentRuntime.ts:45,48`) — no new loading UI needed, this is inherited for free from the existing tool-call logging pattern.
+- New suggestion chip: add `"Propose a schedule for unscheduled accepted sessions"` to `fallbackSuggestions` array (`AgentOperations.tsx:26-30`); check whether `agentRuns.suggestions` (server-derived, `convex/agentRuns.ts:69`) should also surface this when there are unscheduled accepted submissions — mirror however existing suggestions are conditionally generated there.
+
+**Behavior:**
+- Clicking "Approve & schedule" calls `repo.agentRuns.approveScheduleProposal({eventId, proposalId, expectedPayloadHash})` via the extended `approveProposal` ternary in `AgentOperations.tsx:136-149`; button shows "Preparing…" while pending (existing `decisionPendingId` pattern, unchanged)
+- Clicking "Reject" calls the existing generic `repo.agentRuns.rejectProposal` (unchanged)
+- On success, Convex reactivity updates the card to its applied state automatically (no manual refetch) — same behavior as task/message approval today
+- The Agenda page (`src/pages/program/Agenda.tsx`) requires no changes: it already subscribes reactively to all `agenda_items` for the event, so newly created sessions appear there automatically once approved
+
+**Data:**
+- Card reads from `AgentRunDetail.proposals[]` (already fetched by the existing `useRepoQuery("agentRuns.get", ...)` in `AgentOperations.tsx:52-57`) — no new query needed on the read side beyond the room/track name lookups
+- Room/track name resolution: `AgentOperations.tsx` needs `useRepoQuery("rooms.list", {eventId})` and `useRepoQuery("tracks.list", {eventId})` if not already present on this page (check first — the Agenda page already has this pattern to copy) and pass down as `roomNames`/`trackNames` `Map<string,string>` props to `AgentRunInspector`
+
+### Tasks
+- [ ] T015: Add `AgentProposedScheduleAssignment` and `AgentScheduleProposal` types to `src/data/types.ts`, extend `AgentActionProposal` union
+- [ ] T016: Expose `approveScheduleProposal` through the `repo.agentRuns` data-adapter surface (same place `approveTaskProposal`/`approveMessageProposal` are already exposed — confirm exact file/pattern before implementing)
+- [ ] T017: Add the third `schedule_assignments` rendering branch to `AgentRunInspector.tsx` per the UI Spec above (header, per-assignment rows, approve label, applied state with skipped list)
+- [ ] T018: Wire room/track name lookups in `AgentOperations.tsx` and thread as props into `AgentRunInspector`
+- [ ] T019: Extend `approveProposal` in `AgentOperations.tsx:136-149` to a 3-way ternary calling `approveScheduleProposal`
+- [ ] T020: Add the new suggestion chip string
+- [ ] T021: Verify full user flow works in browser end-to-end (drive an actual agent run through to an applied schedule proposal, confirm sessions appear on the Agenda page)
+
+## Task Dependencies
+- T001-T007 (schema + internal queries) block T008-T012 (tool wiring)
+- T008-T012 (tools) block T013 (approval mutation needs the schema fields from T002 and the proposal-saving pattern from T004 as reference)
+- T013-T014 block T015-T020 (frontend needs the backend shape finalized)
+- T015-T020 block T021 (browser verification needs the full stack wired)
+
+## Verification Checklist
+- [ ] All acceptance criteria in requirements.md met
+- [ ] Feature is accessible and usable in the UI (not just implemented in the backend) — verified via T021
+- [ ] Agent never writes `agenda_items` directly — only `approveScheduleProposal` (organizer-triggered) does
+- [ ] A proposal containing a blocking conflict is never shown as approvable (server-side re-validation in the tool, not just at approval time)
+- [ ] Approving a proposal after the agenda changed correctly skips invalidated assignments and applies the rest, without throwing
+- [ ] `agenda_items_audit` rows exist for every session created this way, with `source: "agent:schedule_proposal"` and the approving organizer's user id
+- [ ] No regressions to existing `create_tasks`/`prepare_message_drafts` proposal rendering or approval flows
+- [ ] Docs updated if needed (none beyond this folder expected)

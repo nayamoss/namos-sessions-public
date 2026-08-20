@@ -46,6 +46,7 @@ import type {
   Embed,
   EmbedId,
   EmbedWrite,
+  PublicEmbedShowcase,
   PublicEmbedView,
   PublicSubmissionFormConfig,
   PublicSubmissionFormSummary,
@@ -69,6 +70,8 @@ import type {
   Tag,
   TaskTemplate,
   Track,
+  SlackChannel,
+  SlackIntegrationStatus,
 } from "./types";
 import type {
   PortalFormView,
@@ -103,6 +106,7 @@ export const readOperations = [
   "forms.fields",
   "forms.listFields",
   "submissions.list",
+  "submissions.get",
   "submissions.getForSpeaker",
   "speakers.list",
   "speakers.getMine",
@@ -118,6 +122,7 @@ export const readOperations = [
   "agenda.detectConflicts",
   "agenda.checkPlacement",
   "tasks.list",
+  "tasks.get",
   "taskTemplates.list",
   "comms.list",
   "comms.listDrafts",
@@ -129,6 +134,7 @@ export const readOperations = [
   "publicEmbeds.getAdmin",
   "publicEmbeds.preview",
   "publicEmbeds.getPublic",
+  "publicEmbeds.listShowcase",
   "publicForms.listOpen",
   "publicForms.get",
   "portalForms.get",
@@ -143,6 +149,7 @@ export const readOperations = [
   "profiles.getMine",
   "emailIntegrations.status",
   "contentIntegrations.status",
+  "slackIntegrations.status",
   "evaluations.reviewerProgress",
   "comms.previewDecision",
   "comms.previewReminder",
@@ -200,6 +207,8 @@ export type WriteOperation =
   | "submissions.submit"
   | "submissions.saveDraft"
   | "submissions.createAdmin"
+  | "submissions.update"
+  | "submissions.remove"
   | "submissions.decide"
   | "submissions.setStatus"
   | "submissions.setTags"
@@ -222,6 +231,8 @@ export type WriteOperation =
   | "agenda.remove"
   | "agenda.publishSchedule"
   | "tasks.create"
+  | "tasks.update"
+  | "tasks.remove"
   | "tasks.setStatus"
   | "availability.upsert"
   | "publicForms.submit"
@@ -242,6 +253,14 @@ export type WriteOperation =
   | "emailIntegrations.save"
   | "emailIntegrations.test"
   | "emailIntegrations.disconnect"
+  | "slackIntegrations.startOAuth"
+  | "slackIntegrations.listChannels"
+  | "slackIntegrations.saveBinding"
+  | "slackIntegrations.updateBinding"
+  | "slackIntegrations.removeBinding"
+  | "slackIntegrations.disconnectWorkspace"
+  | "slackIntegrations.claimLink"
+  | "slackIntegrations.testNotification"
   | "contentIntegrations.connectNotion"
   | "contentIntegrations.importNotion"
   | "contentIntegrations.connectAirtable"
@@ -825,6 +844,17 @@ export function createRepository(transport: DataTransport): Repository {
           },
         ),
     },
+    slackIntegrations: {
+      status: ({ eventId }) => transport.read<SlackIntegrationStatus>("slackIntegrations.status", { eventId }),
+      startOAuth: ({ eventId }) => transport.write("slackIntegrations.startOAuth", { eventId }),
+      listChannels: ({ eventId }) => transport.write<{ channels: SlackChannel[] }>("slackIntegrations.listChannels", { eventId }),
+      saveBinding: (input) => transport.write("slackIntegrations.saveBinding", input),
+      updateBinding: (input) => transport.write("slackIntegrations.updateBinding", input),
+      removeBinding: ({ eventId }) => transport.write("slackIntegrations.removeBinding", { eventId }),
+      disconnectWorkspace: ({ eventId }) => transport.write("slackIntegrations.disconnectWorkspace", { eventId }),
+      claimLink: (input) => transport.write("slackIntegrations.claimLink", input),
+      testNotification: ({ eventId }) => transport.write("slackIntegrations.testNotification", { eventId }),
+    },
     events: {
       list: () => transport.read<Event[]>("events.list", {}),
       listMine: () => transport.read<Event[]>("events.listMine", {}),
@@ -942,12 +972,15 @@ export function createRepository(transport: DataTransport): Repository {
           "submissions.list",
           speakerId ? { eventId, speakerId } : { eventId },
         ),
+      get: (input) => transport.read<Submission | null>("submissions.get", input),
       submit: (input) =>
         transport.write<Submission>("submissions.submit", { input }),
       saveDraft: (input) =>
         transport.write<Submission>("submissions.saveDraft", { input }),
       createAdmin: (input) =>
         transport.write<Submission>("submissions.createAdmin", { input }),
+      update: (input) => transport.write<void>("submissions.update", { input }),
+      remove: (input) => transport.write<void>("submissions.remove", input),
       decide: (submissionId, status) =>
         transport.write<Submission>("submissions.decide", {
           submissionId,
@@ -1063,7 +1096,10 @@ export function createRepository(transport: DataTransport): Repository {
     tasks: {
       list: ({ eventId, speakerId }) =>
         transport.read<OnboardingTask[]>("tasks.list", { eventId, speakerId }),
+      get: (input) => transport.read<OnboardingTask | null>("tasks.get", input),
       create: (input) => transport.write<string>("tasks.create", input),
+      update: (input) => transport.write<void>("tasks.update", input),
+      remove: (input) => transport.write<void>("tasks.remove", input),
       setStatus: (id, status) =>
         transport.write<void>("tasks.setStatus", { id, status }),
     },
@@ -1148,6 +1184,11 @@ export function createRepository(transport: DataTransport): Repository {
         transport.read<PublicEmbedView | null>("publicEmbeds.getPublic", {
           embedId,
         }),
+      listShowcase: (eventSlug) =>
+        transport.read<PublicEmbedShowcase | null>(
+          "publicEmbeds.listShowcase",
+          { eventSlug },
+        ),
       getLegacy: (eventSlug) =>
         transport.read<PublicEmbed | null>("publicEmbeds.get", { eventSlug }),
     },

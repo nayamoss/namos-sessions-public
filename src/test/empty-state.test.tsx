@@ -30,6 +30,21 @@ describe("empty-state system", () => {
     container.remove();
   });
 
+  it("allows a concise title and action without filler copy", () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    act(() => root.render(<EmptyState title="No records yet" action={<button type="button">Create record</button>} />));
+
+    expect(container).toHaveTextContent("No records yet");
+    expect(container.querySelectorAll("p")).toHaveLength(1);
+    expect(container.querySelector("button")).toHaveTextContent("Create record");
+
+    act(() => root.unmount());
+    container.remove();
+  });
+
   it("allows data grids to render the same rich empty state", () => {
     const container = document.createElement("div");
     document.body.append(container);
@@ -55,6 +70,7 @@ describe("empty-state system", () => {
   it("keeps primary collection routes on the shared empty-state pattern", () => {
     const files = [
       "pages/events/EventsLanding.tsx",
+      "pages/dashboard/EventAnalytics.tsx",
       "pages/program/SubmissionForms.tsx",
       "pages/program/Abstracts.tsx",
       "pages/program/Speakers.tsx",
@@ -63,6 +79,7 @@ describe("empty-state system", () => {
       "pages/program/Availability.tsx",
       "pages/program/Communications.tsx",
       "pages/program/Evaluation.tsx",
+      "pages/program/Readiness.tsx",
       "pages/portal/PortalForms.tsx",
       "pages/portal/TasksAdmin.tsx",
       "pages/portal/PortalPages.tsx",
@@ -71,6 +88,9 @@ describe("empty-state system", () => {
       "pages/settings/Library.tsx",
       "pages/settings/TaskTemplates.tsx",
       "pages/settings/ApiKeys.tsx",
+      "pages/settings/ActivityLog.tsx",
+      "pages/settings/Integrations.tsx",
+      "pages/portal/SpeakerDocuments.tsx",
       "pages/cms/EmbedsListPage.tsx",
     ];
 

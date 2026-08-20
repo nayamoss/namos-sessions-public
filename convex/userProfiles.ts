@@ -14,14 +14,24 @@ export const getMine = query({
 
 export const save = mutation({
   args: {
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
     displayName: v.optional(v.string()),
     signupRole: v.optional(v.union(v.literal("solo"), v.literal("team"))),
     referralSource: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await requireIdentity(ctx);
-    const patch: { displayName?: string; signupRole?: "solo" | "team"; referralSource?: string } = {};
+    const patch: { firstName?: string; lastName?: string; displayName?: string; signupRole?: "solo" | "team"; referralSource?: string } = {};
+    if (args.firstName !== undefined) patch.firstName = args.firstName.trim().slice(0, 60);
+    if (args.lastName !== undefined) patch.lastName = args.lastName.trim().slice(0, 60);
     if (args.displayName !== undefined) patch.displayName = args.displayName.trim().slice(0, 100);
+    else if (args.firstName !== undefined || args.lastName !== undefined) {
+      const existing = await ctx.db.query("userProfiles").withIndex("by_userId", (q) => q.eq("userId", identity.subject)).unique();
+      const firstName = args.firstName?.trim() ?? existing?.firstName ?? existing?.displayName ?? "";
+      const lastName = args.lastName?.trim() ?? existing?.lastName ?? "";
+      patch.displayName = [firstName, lastName].filter(Boolean).join(" ").slice(0, 100);
+    }
     if (args.signupRole !== undefined) patch.signupRole = args.signupRole;
     if (args.referralSource !== undefined) patch.referralSource = args.referralSource.trim().slice(0, 200);
     if (Object.keys(patch).length === 0) return;

@@ -22,16 +22,13 @@ export function AnalyticsConsentBanner() {
   const consent = useSyncExternalStore(subscribeToAnalyticsConsent, getAnalyticsConsent, serverSnapshot);
   if (consent !== "unknown") return null;
   return (
-    <section role="region" aria-label="Analytics preference" className={cardSurfaceClasses("default", "fixed inset-x-3 bottom-3 z-50 mx-auto max-w-2xl p-4")}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold">Help improve Namos Sessions</p>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            Optional analytics measure useful workflows. We never capture form entries, workspace content, names, or email addresses.
-          </p>
-        </div>
+    <section role="region" aria-label="Analytics preference" className={cardSurfaceClasses("default", "fixed inset-x-3 bottom-3 z-50 mx-auto max-w-lg p-3")}>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <p className="min-w-0 flex-1 text-xs leading-5 text-muted-foreground">
+          Optional analytics never capture form entries or workspace content.
+        </p>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <Button size="sm" onClick={() => { setAnalyticsConsent("accepted"); track("analytics_consent_updated", { consented: true }); }}>Accept analytics</Button>
+          <Button size="sm" onClick={() => { setAnalyticsConsent("accepted"); track("analytics_consent_updated", { consented: true }); }}>Accept</Button>
           <Button variant="outline" size="sm" onClick={() => setAnalyticsConsent("rejected")}>Decline</Button>
           <a className="text-xs font-medium underline underline-offset-4" href={`${marketingSiteUrl}/privacy`} onClick={() => track("help_opened", { destination: "privacy" })}>Privacy</a>
         </div>

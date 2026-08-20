@@ -60,6 +60,7 @@ import type {
   Embed,
   EmbedId,
   EmbedWrite,
+  PublicEmbedShowcase,
   PublicEmbedView,
   PublicSubmissionFormConfig,
   PublicSubmissionFormSummary,
@@ -96,6 +97,10 @@ import type {
   TaskTemplate,
   TaskTemplateItem,
   Track,
+  SlackChannel,
+  SlackChannelBindingInput,
+  SlackIntegrationStatus,
+  SlackNotificationKind,
 } from "./types";
 
 export interface EventScope {
@@ -394,9 +399,12 @@ export interface SubmissionSpeakerUpdateResult {
 }
 export interface SubmissionsRepo {
   list(scope: EventScope & { speakerId?: SpeakerId }): Promise<Submission[]>;
+  get(input: EventScope & { id: SubmissionId }): Promise<Submission | null>;
   submit(input: PublicSubmissionInput): Promise<Submission>;
   saveDraft(input: PublicSubmissionInput): Promise<Submission>;
   createAdmin(input: AdminSubmissionInput): Promise<Submission>;
+  update(input: AdminSubmissionInput & { id: SubmissionId }): Promise<void>;
+  remove(input: EventScope & { id: SubmissionId }): Promise<void>;
   decide(
     submissionId: string,
     status: "accepted" | "declined",
@@ -597,6 +605,7 @@ export interface TaskCreateInput {
   sponsorId?: SponsorId;
   linkedFormId?: FormId;
   dueDate?: number;
+  description?: string;
 }
 // speakerId narrows to one speaker's own tasks (portal) — organizer access is required to
 // omit it and see the whole event (see convex/tasks.ts).
@@ -604,7 +613,10 @@ export interface TasksRepo {
   list(
     scope: EventScope & { speakerId?: SpeakerId },
   ): Promise<OnboardingTask[]>;
+  get(input: EventScope & { id: string }): Promise<OnboardingTask | null>;
   create(input: TaskCreateInput): Promise<string>;
+  update(input: TaskCreateInput & { id: string }): Promise<void>;
+  remove(input: EventScope & { id: string }): Promise<void>;
   setStatus(id: string, status: OnboardingTask["status"]): Promise<void>;
 }
 export interface TaskTemplatesRepo {
@@ -691,6 +703,7 @@ export interface PublicEmbedsRepo {
   duplicate(input: EventScope & { embedId: EmbedId }): Promise<EmbedId>;
   remove(input: EventScope & { embedId: EmbedId }): Promise<void>;
   getPublic(embedId: string): Promise<PublicEmbedView | null>;
+  listShowcase(eventSlug: string): Promise<PublicEmbedShowcase | null>;
   /** Legacy slug feed; retained to keep `/e/:eventSlug/:feed` links working. */
   getLegacy(eventSlug: string): Promise<PublicEmbed | null>;
 }
@@ -779,6 +792,8 @@ export interface OrganizationsRepo {
 export interface ProfilesRepo {
   getMine(): Promise<UserProfile | null>;
   save(input: {
+    firstName?: string;
+    lastName?: string;
     displayName?: string;
     signupRole?: "solo" | "team";
     referralSource?: string;
@@ -839,6 +854,17 @@ export interface ContentIntegrationsRepo {
   disconnect(
     scope: EventScope & { provider: ContentIntegrationProvider },
   ): Promise<{ status: "disconnected" }>;
+}
+export interface SlackIntegrationsRepo {
+  status(scope: EventScope): Promise<SlackIntegrationStatus>;
+  startOAuth(scope: EventScope): Promise<{ url: string; expiresAt: number }>;
+  listChannels(scope: EventScope): Promise<{ channels: SlackChannel[] }>;
+  saveBinding(input: SlackChannelBindingInput): Promise<{ status: "connected"; channelId: string; channelName: string; isPrivate: boolean; updatedAt: number }>;
+  updateBinding(input: EventScope & { agentEnabled: boolean; notificationsEnabled: boolean; notificationKinds: SlackNotificationKind[] }): Promise<{ updatedAt: number }>;
+  removeBinding(scope: EventScope): Promise<{ removed: boolean }>;
+  disconnectWorkspace(scope: EventScope): Promise<{ disconnected: true }>;
+  claimLink(input: EventScope & { token: string }): Promise<{ linked: true; teamName: string; slackDisplayName?: string }>;
+  testNotification(scope: EventScope): Promise<{ sent: true; slackMessageTs: string }>;
 }
 export interface ApiKeysRepo {
   list(scope: EventScope): Promise<ApiKey[]>;
@@ -908,6 +934,7 @@ export interface Repository {
   emailIntegrations: EmailIntegrationsRepo;
   contentIntegrations: ContentIntegrationsRepo;
   crm: CrmRepo;
+  slackIntegrations: SlackIntegrationsRepo;
   events: EventsRepo;
   files: FilesRepo;
   eventMembers: EventMembersRepo;

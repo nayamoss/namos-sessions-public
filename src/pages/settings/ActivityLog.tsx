@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, ListChecks, RefreshCcw } from "lucide-react";
+import { AlertTriangle, Bell, ListChecks, RefreshCcw } from "lucide-react";
 import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { StatCard } from "@/components/shared/StatCard";
 import { ActivityFeed } from "@/components/settings/ActivityFeed";
 import { ActivityLogTable } from "@/components/settings/ActivityLogTable";
@@ -40,9 +41,6 @@ export default function ActivityLog() {
   return (
     <>
       <div className="space-y-4">
-        <p className="text-base text-muted-foreground">
-          Everything that happened on this event — agenda changes, comms sends, agent runs, notifications, and API requests, in one feed.
-        </p>
         <ContentToolbar
           ariaLabel="Activity actions"
           primaryAction={
@@ -60,23 +58,25 @@ export default function ActivityLog() {
             </Button>
           </p>
         )}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <StatCard label="Events, last 24h" value={loading ? "—" : last24h} icon={ListChecks} />
-          <StatCard label="Errors, last 24h" value={loading ? "—" : errors24h} icon={AlertTriangle} />
-          <StatCard label="Total in feed" value={loading ? "—" : entries.length} icon={RefreshCcw} />
-        </div>
-        <Tabs defaultValue="timeline">
-          <TabsList>
-            <TabsTrigger value="timeline">Timeline</TabsTrigger>
-            <TabsTrigger value="table">Table</TabsTrigger>
-          </TabsList>
-          <TabsContent value="timeline" className="pt-3">
-            <ActivityFeed entries={entries} loading={loading} />
-          </TabsContent>
-          <TabsContent value="table" className="pt-3">
-            <ActivityLogTable entries={entries} loading={loading} />
-          </TabsContent>
-        </Tabs>
+        {!loading && entries.length === 0 ? <EmptyState icon={Bell} title="No activity yet" /> : <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <StatCard label="Events, last 24h" value={loading ? "—" : last24h} icon={ListChecks} />
+            <StatCard label="Errors, last 24h" value={loading ? "—" : errors24h} icon={AlertTriangle} />
+            <StatCard label="Total in feed" value={loading ? "—" : entries.length} icon={RefreshCcw} />
+          </div>
+          <Tabs defaultValue="timeline">
+            <TabsList>
+              <TabsTrigger value="timeline">Timeline</TabsTrigger>
+              <TabsTrigger value="table">Table</TabsTrigger>
+            </TabsList>
+            <TabsContent value="timeline" className="pt-3">
+              <ActivityFeed entries={entries} loading={loading} />
+            </TabsContent>
+            <TabsContent value="table" className="pt-3">
+              <ActivityLogTable entries={entries} loading={loading} />
+            </TabsContent>
+          </Tabs>
+        </>}
       </div>
     </>
   );

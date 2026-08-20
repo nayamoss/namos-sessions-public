@@ -6,7 +6,6 @@ export function ToggleField({ label, checked, onCheckedChange, surface = false, 
   label: ReactNode;
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
-  hint?: ReactNode;
   surface?: boolean;
   className?: string;
 }) {

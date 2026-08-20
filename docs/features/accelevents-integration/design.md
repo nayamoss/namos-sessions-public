@@ -1,5 +1,13 @@
 # Accelevents One-Way Integration — Technical Design
 
+> **Partially superseded, 2026-08-17.** See
+> [`BRIEF-RECONCILIATION-2026-08-17.md`](./BRIEF-RECONCILIATION-2026-08-17.md). The four-table
+> schema, mapping/idempotency model, eligibility rules, and speakers-before-sessions ordering all
+> stand. The authorization design (`EVENT_ADMIN_USER_IDS`, referenced around lines 161, 435, and
+> 495) and the three-secret environment design (around lines 498-500) predate this codebase's
+> row-based `organizers` / `event_members` model and its shared
+> `convex/credentialEncryption.ts` pattern, and are replaced there.
+
 ## Scope Decision and Evidence
 
 The product owner reopened a feature the competition brief had struck. The existing commercial

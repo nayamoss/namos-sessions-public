@@ -1,9 +1,15 @@
 # Accelevents One-Way Integration — Requirements
 
 **Type:** Feature  
-**Status:** In Review  
+**Status:** In Review — **not implemented; zero Accelevents code exists on `main` as of 2026-08-17**  
 **Priority:** Medium  
-**Last Updated:** 2026-08-12
+**Last Updated:** 2026-08-12, reconciled 2026-08-17
+
+> **FR-002 is superseded.** It requires a user id present in `EVENT_ADMIN_USER_IDS`. That variable
+> does not exist in this repository and must not be created — authorization here is row-based
+> (`organizers`, `event_members`, `convex/functions.ts`). Use `assertEventOrganizerAccess`. FR-004's
+> dedicated encryption key stands; the service and scheduler secrets in `design.md` do not. Full
+> audit: [`BRIEF-RECONCILIATION-2026-08-17.md`](./BRIEF-RECONCILIATION-2026-08-17.md).
 
 ## Problem Statement
 

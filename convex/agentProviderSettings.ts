@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { assertEventOrganizerAccess } from "./functions";
+import { isManagedAiDisabled } from "./managedAi";
 
 const mode = v.union(v.literal("managed"), v.literal("bring_your_own"));
 const envelope = v.object({ version: v.literal(1), iv: v.string(), ciphertext: v.string(), tag: v.string() });
@@ -16,9 +17,14 @@ export const status = query({
     const usage = event.billingOwnerUserId
       ? await ctx.db.query("agent_managed_allowances").withIndex("by_owner_period", (q) => q.eq("billingOwnerUserId", event.billingOwnerUserId!).eq("periodStart", periodStart)).unique()
       : null;
-    const shared = { billingOwnerAssigned: Boolean(event.billingOwnerUserId), managedUsage: usage ? { periodStart: usage.periodStart, planSlug: usage.planSlug, runLimit: usage.runLimit, tokenLimit: usage.tokenLimit, usedRuns: usage.usedRuns, usedTokens: usage.usedTokens, reservedRuns: usage.reservedRuns, reservedTokens: usage.reservedTokens } : undefined };
-    if (!stored) return { eventId: args.eventId, mode: "managed" as const, provider: "openai" as const, status: process.env.OPENAI_API_KEY ? "ready" as const : "error" as const, managedAvailable: Boolean(process.env.OPENAI_API_KEY), updatedAt: 0, ...shared };
-    return { eventId: stored.eventId, mode: stored.mode, provider: stored.provider, credentialHint: stored.credentialHint, status: stored.mode === "managed" && !process.env.OPENAI_API_KEY ? "error" as const : stored.status, lastError: stored.lastError, managedAvailable: Boolean(process.env.OPENAI_API_KEY), updatedAt: stored.updatedAt, ...shared };
+    const managedDisabled = isManagedAiDisabled();
+    const shared = { billingOwnerAssigned: Boolean(event.billingOwnerUserId), managedDisabled, managedUsage: usage ? { periodStart: usage.periodStart, planSlug: usage.planSlug, runLimit: usage.runLimit, tokenLimit: usage.tokenLimit, usedRuns: usage.usedRuns, usedTokens: usage.usedTokens, reservedRuns: usage.reservedRuns, reservedTokens: usage.reservedTokens } : undefined };
+    const managedAvailable = Boolean(process.env.OPENAI_API_KEY) && !managedDisabled;
+    if (!stored) return { eventId: args.eventId, mode: "managed" as const, provider: "openai" as const, status: managedDisabled ? "disabled" as const : process.env.OPENAI_API_KEY ? "ready" as const : "error" as const, managedAvailable, updatedAt: 0, ...shared };
+    const status = stored.mode === "managed"
+      ? managedDisabled ? "disabled" as const : process.env.OPENAI_API_KEY ? stored.status : "error" as const
+      : stored.status;
+    return { eventId: stored.eventId, mode: stored.mode, provider: stored.provider, credentialHint: stored.credentialHint, status, lastError: stored.lastError, managedAvailable, updatedAt: stored.updatedAt, ...shared };
   },
 });
 

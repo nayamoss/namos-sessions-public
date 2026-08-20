@@ -31,7 +31,7 @@ function publicWorkspace(workspace: {
   };
 }
 
-async function deleteDemoFixture(ctx: MutationCtx, eventId: Id<"events">, organizerUserId: string) {
+async function deleteDemoFixture(ctx: MutationCtx, eventId: Id<"events">, organizationId: Id<"organizations">, organizerUserId: string) {
   const speakers = await ctx.db.query("speakers").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect();
   const forms = await ctx.db.query("submission_forms").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect();
   const documents = (await Promise.all(speakers.map((speaker) => ctx.db.query("speaker_documents").withIndex("by_speaker", (q) => q.eq("speakerId", speaker._id)).collect()))).flat();
@@ -54,12 +54,18 @@ async function deleteDemoFixture(ctx: MutationCtx, eventId: Id<"events">, organi
     ]);
     for (const row of [...idempotency, ...audits, ...limits]) await ctx.db.delete(row._id);
   }
+  const crmSources = await ctx.db.query("crm_sources").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect();
+  for (const source of crmSources) {
+    const records = await ctx.db.query("crm_source_records").withIndex("by_source_record", (q) => q.eq("sourceId", source._id)).collect();
+    for (const record of records) await ctx.db.delete(record._id);
+  }
   const tables = [
     "notifications", "form_responses", "evaluations", "ai_assessments", "evaluation_assignments", "evaluation_plans",
     "agenda_items_audit", "agenda_items", "speaker_availability", "onboarding_tasks",
     "agent_action_proposals", "communication_drafts", "agent_run_events", "agent_usage_records", "agent_runs", "agent_provider_settings",
     "comms_log", "comms_templates", "inbound_messages", "inbound_email_domains", "email_integrations",
     "content_oauth_pending", "content_oauth_states", "content_integrations", "submission_confirmation_requests",
+    "crm_event_contacts", "crm_sources", "crm_oauth_pending", "crm_oauth_states",
     "public_feeds", "embeds", "api_tokens", "sponsor_contacts", "sponsors", "sponsor_tiers",
     "portal_resource_pages", "speaker_notes", "task_templates", "submissions", "speakers", "submission_forms",
     "tags", "tracks", "rooms",
@@ -79,6 +85,16 @@ async function deleteDemoFixture(ctx: MutationCtx, eventId: Id<"events">, organi
   }
   const allowances = await ctx.db.query("agent_managed_allowances").withIndex("by_owner_period", (q) => q.eq("billingOwnerUserId", organizerUserId)).collect();
   for (const allowance of allowances) await ctx.db.delete(allowance._id);
+  const [contacts, segments] = await Promise.all([
+    ctx.db.query("crm_contacts").withIndex("by_organization", (q) => q.eq("organizationId", organizationId)).collect(),
+    ctx.db.query("crm_segments").withIndex("by_organization", (q) => q.eq("organizationId", organizationId)).collect(),
+  ]);
+  for (const contact of contacts) {
+    const history = await ctx.db.query("crm_stage_history").withIndex("by_contact_createdAt", (q) => q.eq("contactId", contact._id)).collect();
+    for (const row of history) await ctx.db.delete(row._id);
+    await ctx.db.delete(contact._id);
+  }
+  for (const segment of segments) await ctx.db.delete(segment._id);
 }
 
 async function seedDemoFixture(ctx: MutationCtx, input: {
@@ -369,7 +385,7 @@ export const reset = internalMutation({
     if (!workspace || workspace.expiresAt <= args.now || workspace.absoluteExpiresAt <= args.now) return null;
     const deliveries = await ctx.db.query("demo_deliveries").withIndex("by_workspace_createdAt", (q) => q.eq("workspaceId", args.workspaceId)).collect();
     await Promise.all(deliveries.map((row) => ctx.db.delete(row._id)));
-    await deleteDemoFixture(ctx, workspace.eventId, workspace.organizerUserId);
+    await deleteDemoFixture(ctx, workspace.eventId, workspace.organizationId, workspace.organizerUserId);
     await seedDemoFixture(ctx, { eventId: workspace.eventId, reviewerUserId: workspace.reviewerUserId, speakerEmail: workspace.speakerEmail, now: args.now });
     const expiresAt = Math.min(args.now + idleLifetimeMs, workspace.absoluteExpiresAt);
     await ctx.db.patch(workspace.eventId, { status: "published", programPublishedAt: undefined, billingOwnerUserId: workspace.organizerUserId, updatedAt: args.now });
@@ -386,7 +402,7 @@ export const cleanupExpired = internalMutation({
     for (const workspace of expired) {
       const deliveries = await ctx.db.query("demo_deliveries").withIndex("by_workspace_createdAt", (q) => q.eq("workspaceId", workspace.workspaceId)).collect();
       const members = await ctx.db.query("event_members").withIndex("by_event", (q) => q.eq("eventId", workspace.eventId)).collect();
-      await deleteDemoFixture(ctx, workspace.eventId, workspace.organizerUserId);
+      await deleteDemoFixture(ctx, workspace.eventId, workspace.organizationId, workspace.organizerUserId);
       await Promise.all([...deliveries, ...members].map((row) => ctx.db.delete(row._id)));
       await ctx.db.delete(workspace.eventId);
       for (const userId of [workspace.organizerUserId, workspace.reviewerUserId, workspace.speakerUserId]) {

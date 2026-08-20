@@ -2,7 +2,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
 import { ClerkProvider } from "@clerk/clerk-react";
-import App from "@/App";
+import App, { resolveAuthReturnTo } from "@/App";
 import { resolveOnboardingStatus } from "@/lib/onboarding-status";
 import { TEST_CLERK_PUBLISHABLE_KEY } from "./clerk-test-key";
 
@@ -39,6 +39,7 @@ describe("organizer route guard", () => {
     container?.remove();
     container = null;
     root = null;
+    sessionStorage.clear();
   });
 
   it.each(ORGANIZER_ROUTES)("redirects %s to sign-in when signed out", async (path) => {
@@ -54,11 +55,19 @@ describe("organizer route guard", () => {
       );
     });
 
-    // A real Clerk session never loads against the test key, so SignedOut always wins:
-    // RedirectToSignIn should navigate away before any organizer chrome mounts.
+    // A signed-out visitor gets a clean auth URL; the protected destination is kept out of
+    // Clerk's query string and restored after authentication by /auth/complete.
     expect(container.querySelector("aside")).not.toBeInTheDocument();
     expect(container.textContent).not.toContain("Good afternoon");
     expect(container.textContent).not.toContain("Claim owner access");
+  });
+
+  it("accepts only safe app-local post-auth destinations", () => {
+    expect(resolveAuthReturnTo("/events/conf/dashboard?view=ready#top")).toBe("/events/conf/dashboard?view=ready#top");
+    expect(resolveAuthReturnTo("https://example.com/steal-session")).toBe("/");
+    expect(resolveAuthReturnTo("//example.com/steal-session")).toBe("/");
+    expect(resolveAuthReturnTo("/sign-in?redirect_url=https://example.com")).toBe("/");
+    expect(resolveAuthReturnTo("/auth/complete")).toBe("/");
   });
 });
 

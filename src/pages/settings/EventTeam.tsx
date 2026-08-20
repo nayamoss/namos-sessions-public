@@ -137,7 +137,7 @@ function InviteEventMember({
       </div>
       {mode === "invite" ? (
         <>
-          <FormField label="Email" htmlFor="member-email" hint="We’ll send a secure, single-use Clerk invitation link.">
+          <FormField label="Email" htmlFor="member-email">
             <Input
               id="member-email"
               type="email"
@@ -146,7 +146,7 @@ function InviteEventMember({
               autoFocus
             />
           </FormField>
-          <FormField label="Role" hint="Organizers can manage this event; reviewers only receive review access.">
+          <FormField label="Role">
             <Select
               value={role}
               onValueChange={(value) => setRole(value as EventMember["role"])}

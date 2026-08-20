@@ -43,3 +43,14 @@ export function RepoProvider({ children }: { children: ReactNode }) {
   if (selectedBackend() === "convex") return <ConvexRepoProvider>{children}</ConvexRepoProvider>;
   return <AirtableRepoProvider>{children}</AirtableRepoProvider>;
 }
+
+/** Public saved embeds use only unauthenticated Convex queries and must not initialize Clerk. */
+export function PublicEmbedRepoProvider({ children }: { children: ReactNode }) {
+  const repo = useMemo<Repository>(() => createConvexRepo(), []);
+  const reactive = useMemo(() => createConvexReactiveTransport(), []);
+  return (
+    <RepoContext.Provider value={repo}>
+      <ReactiveContext.Provider value={reactive}>{children}</ReactiveContext.Provider>
+    </RepoContext.Provider>
+  );
+}

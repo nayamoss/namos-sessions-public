@@ -40,24 +40,23 @@ export default function ComponentShowcase() {
       <div className="space-y-6">
         <ContentToolbar
           ariaLabel="Component library controls"
-          utilities={<p className="text-sm text-muted-foreground">Live reference for shared product UI.</p>}
         />
 
         <div className="grid gap-4 xl:grid-cols-2">
-          <SectionCard title="Fields" description="Labels, inputs, help text, and validation use one rhythm.">
+          <SectionCard title="Fields">
             <div className="space-y-4">
-              <FormField label="Plan name" hint="Used by organizers and reviewers.">
+              <FormField label="Plan name">
                 <Input value={name} onChange={(event) => setName(event.target.value)} />
               </FormField>
               <FormField label="Internal note">
                 <Textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Add context for the team…" />
               </FormField>
-              <ToggleField label="Send reminder notifications" hint="Only unresolved assignments receive reminders." checked={notifications} onCheckedChange={setNotifications} surface />
+              <ToggleField label="Send reminder notifications" checked={notifications} onCheckedChange={setNotifications} surface />
               <ErrorList errors={["A close date is required before publishing."]} className="mt-0" />
             </div>
           </SectionCard>
 
-          <SectionCard title="Choices and status" description="Selection and state use semantic color rather than local styling.">
+          <SectionCard title="Choices and status">
             <div className="space-y-5">
               <SegmentedControl
                 label="Preview filter"
@@ -68,12 +67,12 @@ export default function ComponentShowcase() {
               <div className="flex flex-wrap gap-2">
                 {(["draft", "pending", "accept_queue", "accepted", "declined"] as SubmissionStatus[]).map((status) => <SubmissionStatusBadge key={status} status={status} />)}
               </div>
-              <EmptyState compact icon={Inbox} title={view === "active" ? "No active records" : "No archived records"} message="Useful empty states explain what belongs here and offer a next step." action={<Button variant="accent" size="sm">Add record</Button>} className={cardSurfaceClasses("default", "bg-muted/60")} />
+              <EmptyState compact icon={Inbox} title={view === "active" ? "No active records" : "No archived records"} action={<Button variant="accent" size="sm">Add record</Button>} className={cardSurfaceClasses("default", "bg-muted/60")} />
             </div>
           </SectionCard>
         </div>
 
-        <SectionCard title="Data grid" description="Tables use one responsive, accessible surface.">
+        <SectionCard title="Data grid">
           <DataGrid rows={previewRows} columns={previewColumns} empty="No preview records." rowActivation="none" ariaLabel="Component library table preview" />
         </SectionCard>
       </div>

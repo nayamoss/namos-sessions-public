@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Trash2 } from "lucide-react";
+import { Save, Trash2, X } from "lucide-react";
 import { useCurrentEvent } from "@/components/EventContext";
 import { useOptionalSettingsModal } from "@/components/settings/SettingsModalContext";
 import { Button } from "@/components/ui/button";
@@ -7,10 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { CharCounterInput } from "@/components/shared/CharCounterInput";
 import { parseDateTimeLocalValue, toDateTimeLocalValue } from "@/lib/datetime";
-import { ContentToolbar } from "@/components/shared/ContentToolbar";
 import { FormField } from "@/components/shared/FormField";
 import { SkeletonList } from "@/components/shared/SkeletonList";
 import { ToggleField } from "@/components/shared/ToggleField";
+import { TimezoneCombobox } from "@/components/shared/TimezoneCombobox";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useRepo } from "@/data/repo";
 import type { Event, EventId, Room, Track } from "@/data/types";
 
@@ -37,11 +38,7 @@ type EditableCollectionItem = {
 };
 type EditableRoom = Omit<Room, "id"> & { id?: string };
 type EditableTrack = Omit<Track, "id"> & { id?: string };
-const eventStatusLabels: Record<Event["status"], string> = {
-  draft: "Draft — public pages hidden",
-  published: "Published — public pages live",
-  archived: "Archived",
-};
+const accentPalette = ["#F59E0B", "#EF4444", "#EC4899", "#8B5CF6", "#3B82F6", "#14B8A6", "#22C55E"];
 
 export default function EventDetails() {
   const repo = useRepo();
@@ -223,16 +220,10 @@ export default function EventDetails() {
   return (
     <>
       <div className="space-y-4">
-        <ContentToolbar
-          ariaLabel="Event settings actions"
-          utilities={
-            <>
-              <span
-                className="text-xs text-muted-foreground"
-                aria-label={`Event status: ${eventStatusLabels[event.status]}`}
-              >
-                {eventStatusLabels[event.status]}
-              </span>
+        <div className="flex min-h-9 items-center justify-between gap-3">
+          <h2 className="text-base font-semibold text-foreground">Event details</h2>
+          <TooltipProvider>
+            <div className="flex items-center gap-1.5">
               <Button
                 type="button"
                 variant="outline"
@@ -248,19 +239,25 @@ export default function EventDetails() {
                     ? "Unpublish"
                     : "Publish event"}
               </Button>
-            </>
-          }
-          primaryAction={
-            <Button
-              variant="accent"
-              size="sm"
-              onClick={() => void save()}
-              disabled={loading || saving}
-            >
-              {saving ? "Saving…" : "Save"}
-            </Button>
-          }
-        />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="accent" size="icon" className="h-8 w-8" onClick={() => void save()} disabled={loading || saving} aria-label={saving ? "Saving event" : "Save event"}>
+                    <Save className="h-4 w-4" aria-hidden="true" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{saving ? "Saving…" : "Save"}</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => settingsModal?.closeSettings()} aria-label="Close settings">
+                    <X className="h-4 w-4" aria-hidden="true" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Close</TooltipContent>
+              </Tooltip>
+            </div>
+          </TooltipProvider>
+        </div>
         {error && (
           <p role="alert" className="text-sm text-destructive">
             {error}
@@ -306,10 +303,18 @@ export default function EventDetails() {
                   />
                 </FormField>
                 <FormField label="Timezone">
-                  <Input
+                  <TimezoneCombobox
                     value={event.timezone}
-                    onChange={(e) => update("timezone", e.target.value)}
+                    onChange={(timezone) => update("timezone", timezone)}
                   />
+                </FormField>
+                <FormField label="Event color">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {accentPalette.map((color) => (
+                      <Button key={color} type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full border border-border p-0" style={{ backgroundColor: color }} aria-label={`Use ${color}`} aria-pressed={event.accentColor?.toUpperCase() === color} onClick={() => update("accentColor", color)} />
+                    ))}
+                    <Input value={event.accentColor ?? ""} onChange={(change) => update("accentColor", change.target.value)} placeholder="#F59E0B" pattern="^#[0-9A-Fa-f]{6}$" className="h-8 w-28 font-mono uppercase" aria-label="Custom event color" />
+                  </div>
                 </FormField>
                 <FormField label="Starts At">
                   <Input

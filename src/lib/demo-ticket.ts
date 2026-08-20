@@ -1,9 +1,12 @@
 export async function consumeDemoTicket(
   signOut: (options: { redirectUrl: string }) => Promise<unknown>,
   signInUrl: string,
+  isSignedIn: boolean,
+  navigate: (url: string) => void = (url) => window.location.assign(url),
 ) {
-  // Clerk redirects from signOut by default. Supplying the one-time ticket as that
-  // redirect makes the handoff atomic; code after signOut is not guaranteed to run.
-  await signOut({ redirectUrl: signInUrl });
-  window.location.assign(signInUrl);
+  // An active role must be signed out before Clerk consumes the next role ticket. When
+  // there is no active session, signOut has no redirect to complete, so navigate exactly
+  // once instead. A ticket is single-use; never execute both branches.
+  if (isSignedIn) await signOut({ redirectUrl: signInUrl });
+  else navigate(signInUrl);
 }

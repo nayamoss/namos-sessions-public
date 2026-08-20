@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
   BrowserRouter,
@@ -10,13 +10,12 @@ import {
   useLocation,
   useNavigate,
   useParams,
+  useSearchParams,
 } from "react-router-dom";
 import {
-  SignedIn,
-  SignedOut,
   SignIn,
   SignUp,
-  RedirectToSignIn,
+  useAuth,
 } from "@clerk/clerk-react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toaster";
@@ -31,9 +30,15 @@ import { resolveOnboardingStatus } from "@/lib/onboarding-status";
 import { AnalyticsRuntime } from "@/components/AnalyticsConsent";
 import { track } from "@/lib/analytics";
 import { DemoWorkspaceBar } from "@/components/demo/DemoWorkspaceBar";
-// EventDetails/Library/Integrations/TaskTemplates are no longer standalone routed pages —
-// they render as tab panels inside SettingsModal instead (see settings-modal-refactor).
 import type { Event } from "@/data/types";
+const EventDetails = lazy(() => import("@/pages/settings/EventDetails"));
+const EventTeam = lazy(() => import("@/pages/settings/EventTeam"));
+const Library = lazy(() => import("@/pages/settings/Library"));
+const TaskTemplates = lazy(() => import("@/pages/settings/TaskTemplates"));
+const Integrations = lazy(() => import("@/pages/settings/Integrations"));
+const ApiKeys = lazy(() => import("@/pages/settings/ApiKeys"));
+const ActivityLog = lazy(() => import("@/pages/settings/ActivityLog"));
+const ReadinessSettings = lazy(() => import("@/pages/settings/ReadinessSettings"));
 const SubmissionForms = lazy(() => import("@/pages/program/SubmissionForms"));
 const Abstracts = lazy(() => import("@/pages/program/Abstracts"));
 const Agenda = lazy(() => import("@/pages/program/Agenda"));
@@ -46,6 +51,7 @@ const SubmissionFormBuilder = lazy(
 );
 const PortalForms = lazy(() => import("@/pages/portal/PortalForms"));
 const TasksAdmin = lazy(() => import("@/pages/portal/TasksAdmin"));
+const TaskEditorPage = lazy(() => import("@/pages/portal/TaskEditorPage"));
 const PortalResourcesAdmin = lazy(() => import("@/pages/portal/PortalResourcesAdmin"));
 const Communications = lazy(() => import("@/pages/program/Communications"));
 const CommTemplateEditor = lazy(
@@ -85,6 +91,18 @@ function FeaturePlaceholder({ title }: { title: string }) {
     </AppLayout>
   );
 }
+function SettingsPage({ title, children }: { title: string; children: ReactNode }) {
+  return <AppLayout title={title}>{children}</AppLayout>;
+}
+function LegacyEmbedRedirect() {
+  const { eventSlug, embedId } = useParams();
+  return <Navigate to={`/events/${eventSlug}/cms/embeds/${embedId}/edit`} replace />;
+}
+
+function SubmissionFormCreateRoute() {
+  const [params] = useSearchParams();
+  return params.get("blank") === "1" ? <SubmissionFormBuilder /> : <SubmissionForms createMode />;
+}
 function PublicLoading({
   children,
   width = "wide",
@@ -102,17 +120,45 @@ function PublicLoading({
 // Gates its nested routes behind a Clerk session: every organizer/admin route (dashboard,
 // settings, portals-admin, program/*) and the speaker-facing portal itself. The public
 // submission and embed routes below must never be wrapped in it.
+const AUTH_RETURN_TO_KEY = "namos-auth-return-to";
+
+export function resolveAuthReturnTo(value: string | null): string {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) return "/";
+  if (value.startsWith("/sign-in") || value.startsWith("/sign-up") || value.startsWith("/auth/complete")) return "/";
+  return value;
+}
+
+function SignedOutRedirect() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  useEffect(() => {
+    const returnTo = `${location.pathname}${location.search}${location.hash}`;
+    try {
+      sessionStorage.setItem(AUTH_RETURN_TO_KEY, resolveAuthReturnTo(returnTo));
+    } catch {
+      // Storage is optional; the completion route safely falls back to the app root.
+    }
+    navigate("/sign-in", { replace: true });
+  }, [location.hash, location.pathname, location.search, navigate]);
+  return <p className="p-6 text-sm text-muted-foreground">Opening sign in…</p>;
+}
+
 function RequireAuth() {
-  return (
-    <>
-      <SignedIn>
-        <Outlet />
-      </SignedIn>
-      <SignedOut>
-        <RedirectToSignIn />
-      </SignedOut>
-    </>
-  );
+  const { isLoaded, isSignedIn } = useAuth();
+  if (!isLoaded) return <p className="p-6 text-sm text-muted-foreground">Loading…</p>;
+  if (!isSignedIn) return <SignedOutRedirect />;
+  return <Outlet />;
+}
+
+function AuthComplete() {
+  let stored: string | null = null;
+  try {
+    stored = sessionStorage.getItem(AUTH_RETURN_TO_KEY);
+    sessionStorage.removeItem(AUTH_RETURN_TO_KEY);
+  } catch {
+    // Private browsing can deny storage access; returning to / remains safe.
+  }
+  return <Navigate to={resolveAuthReturnTo(stored)} replace />;
 }
 
 function RequireOnboarding() {
@@ -172,11 +218,11 @@ function RequireOnboarding() {
   return <Outlet />;
 }
 
-// A signed-out visitor hitting any gated route lands on /sign-in, where Clerk's only route to
+// A signed-out visitor hitting any gated route lands on a clean /sign-in URL, where Clerk's only route to
 // creating an account is a small grey line inside the card. Organizers arriving from the
 // marketing site read that as "there is no way in" and leave, so each auth screen carries an
-// explicit, full-width link to the other one. `redirect_url` is carried across so a visitor who
-// was bounced here from a deep link still lands there after signing up.
+// explicit, full-width link to the other one. The intended destination lives in session storage
+// so Clerk's internal steps never expose or repeatedly rewrite a nested `redirect_url` query.
 function AuthAltAction({
   to,
   prompt,
@@ -186,12 +232,11 @@ function AuthAltAction({
   prompt: string;
   action: string;
 }) {
-  const { search } = useLocation();
   return (
     <p className="mt-6 text-center text-sm text-[#4A5568]">
       {prompt}{" "}
       <Link
-        to={`${to}${search}`}
+        to={to}
         onClick={() => track("cta_converted", { destination: to === "/sign-up" ? "sign_up" : "sign_in" })}
         className="font-semibold text-[#0066FF] underline-offset-4 hover:underline"
       >
@@ -269,10 +314,13 @@ export default function App() {
             }
           >
             <Routes>
-              <Route path="/demo" element={<DemoLandingPage />} />
+              {/* The production Worker owns /demo; this keeps local SPA navigation canonical. */}
+              <Route path="/demo" element={<Navigate to="/demo/start" replace />} />
+              <Route path="/demo/start" element={<DemoLandingPage />} />
               <Route path="/demo/proof" element={<DemoProofPage />} />
               <Route path="/demo/inbox" element={<DemoInboxPage />} />
               <Route path="/updates" element={<Updates />} />
+              <Route path="/auth/complete" element={<AuthComplete />} />
               <Route
                 path="/sign-in/*"
                 element={
@@ -281,6 +329,7 @@ export default function App() {
                       routing="path"
                       path="/sign-in"
                       signUpUrl="/sign-up"
+                      forceRedirectUrl="/auth/complete"
                       // Clerk's own footer prompt is suppressed in favour of the larger
                       // AuthAltAction below; showing both put the same link on screen twice.
                       appearance={{ elements: { footerAction: { display: "none" } } }}
@@ -301,6 +350,7 @@ export default function App() {
                       routing="path"
                       path="/sign-up"
                       signInUrl="/sign-in"
+                      forceRedirectUrl="/auth/complete"
                       appearance={{ elements: { footerAction: { display: "none" } } }}
                     />
                     <AuthAltAction
@@ -332,6 +382,7 @@ export default function App() {
                 <Route element={<RequireOnboarding />}>
                   <Route path="/" element={<EventsEntry />} />
                   <Route path="/events" element={<EventsLanding />} />
+                  <Route path="/events/new" element={<EventsLanding />} />
                   <Route
                     path="/settings/organization"
                     element={<EventsLanding />}
@@ -421,20 +472,32 @@ export default function App() {
                       </EventProvider>
                     }
                   >
+                    <Route path="edit" element={<SettingsPage title="Edit event"><EventDetails /></SettingsPage>} />
                     <Route path="dashboard" element={<DashboardHome />} />
                     <Route path="analytics" element={<EventAnalytics />} />
                     <Route path="program/forms" element={<SubmissionForms />} />
+                    <Route path="program/forms/new" element={<SubmissionFormCreateRoute />} />
                     <Route
                       path="program/forms/:id/edit"
                       element={<SubmissionFormBuilder />}
                     />
                     <Route path="program/abstracts" element={<Abstracts />} />
+                    <Route path="program/abstracts/new" element={<Abstracts />} />
+                    <Route path="program/abstracts/:abstractId/edit" element={<Abstracts />} />
                     <Route path="program/speakers" element={<Speakers />} />
+                    <Route path="program/speakers/new" element={<Speakers />} />
                     <Route path="program/speakers/:speakerId" element={<Speakers />} />
+                    <Route path="program/speakers/:speakerId/edit" element={<Speakers />} />
                     <Route path="program/contacts" element={<Contacts />} />
+                    <Route path="program/contacts/new" element={<Contacts />} />
+                    <Route path="program/contacts/:contactId/edit" element={<Contacts />} />
                     <Route path="program/sponsors" element={<Sponsors />} />
+                    <Route path="program/sponsors/new" element={<Sponsors />} />
+                    <Route path="program/sponsors/:sponsorId/edit" element={<Sponsors />} />
                     <Route path="program/evaluation" element={<Evaluation />} />
                     <Route path="program/agenda" element={<Agenda />} />
+                    <Route path="program/agenda/new" element={<Agenda />} />
+                    <Route path="program/agenda/:agendaId/edit" element={<Agenda />} />
                     <Route path="program/readiness" element={<Readiness />} />
                     <Route path="program/agent" element={<AgentOperations />} />
                     <Route
@@ -449,21 +512,30 @@ export default function App() {
                       path="program/communications/templates/:id/edit"
                       element={<CommTemplateEditor />}
                     />
+                    <Route path="program/communications/templates/new" element={<CommTemplateEditor />} />
                     <Route path="portals/forms" element={<PortalForms />} />
+                    <Route path="portals/forms/new" element={<PortalForms />} />
+                    <Route path="portals/forms/:formId/edit" element={<PortalForms />} />
                     <Route path="portals/tasks" element={<TasksAdmin />} />
+                    <Route path="portals/tasks/new" element={<TaskEditorPage />} />
+                    <Route path="portals/tasks/:taskId/edit" element={<TaskEditorPage />} />
                     <Route path="portals/resources" element={<PortalResourcesAdmin />} />
-                    <Route path="settings/event" element={<DashboardHome />} />
-                    <Route path="settings/team" element={<DashboardHome />} />
-                    <Route path="settings/library" element={<DashboardHome />} />
+                    <Route path="portals/resources/new" element={<PortalResourcesAdmin />} />
+                    <Route path="portals/resources/:resourceId/edit" element={<PortalResourcesAdmin />} />
+                    <Route path="settings/event" element={<SettingsPage title="Event settings"><EventDetails /></SettingsPage>} />
+                    <Route path="settings/team" element={<SettingsPage title="Event team"><EventTeam /></SettingsPage>} />
+                    <Route path="settings/library" element={<SettingsPage title="Library"><Library /></SettingsPage>} />
                     <Route
                       path="settings/task-templates"
-                      element={<DashboardHome />}
+                      element={<SettingsPage title="Task templates"><TaskTemplates /></SettingsPage>}
                     />
+                    <Route path="settings/task-templates/new" element={<TaskTemplates />} />
+                    <Route path="settings/task-templates/:templateId/edit" element={<TaskTemplates />} />
                     {/* Organizer-only and useless signed out — every call it makes needs a
                     verified identity. */}
                     <Route
                       path="settings/integrations"
-                      element={<DashboardHome />}
+                      element={<SettingsPage title="Integrations"><Integrations /></SettingsPage>}
                     />
                     {/* Old URL kept working — bookmarks/links to the previous
                     single-provider page still land. */}
@@ -473,11 +545,13 @@ export default function App() {
                         <Navigate to="../settings/integrations" replace />
                       }
                     />
-                    <Route path="settings/api" element={<DashboardHome />} />
-                    <Route path="settings/activity" element={<DashboardHome />} />
+                    <Route path="settings/api" element={<SettingsPage title="API"><ApiKeys /></SettingsPage>} />
+                    <Route path="settings/activity" element={<SettingsPage title="Activity"><ActivityLog /></SettingsPage>} />
+                    <Route path="settings/readiness" element={<SettingsPage title="Readiness settings"><ReadinessSettings /></SettingsPage>} />
                     <Route path="cms/embeds" element={<EmbedsListPage />} />
                     <Route path="cms/embeds/new" element={<EmbedEditorPage />} />
-                    <Route path="cms/embeds/:embedId" element={<EmbedEditorPage />} />
+                    <Route path="cms/embeds/:embedId/edit" element={<EmbedEditorPage />} />
+                    <Route path="cms/embeds/:embedId" element={<LegacyEmbedRedirect />} />
                   </Route>
                   <Route path="/dev/components" element={<ComponentShowcase />} />
                 </Route>

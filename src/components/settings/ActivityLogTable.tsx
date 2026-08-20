@@ -1,4 +1,6 @@
 import { DataGrid } from "@/components/shared/DataGrid";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { Bell } from "lucide-react";
 import type { ActivityEntry } from "@/data/types";
 
 const time = (value: number) => new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(value);
@@ -21,7 +23,7 @@ export function ActivityLogTable({ entries, loading = false }: { entries: Activi
       paginated
       defaultPageSize={50}
       rowActivation="none"
-      empty="No activity yet. Agenda changes, comms sends, agent runs, and notifications will show up here."
+      empty={<EmptyState compact icon={Bell} title="No activity yet" />}
       ariaLabel="Event activity log"
       columns={[
         { key: "timestamp", header: "Timestamp", cell: (row) => time(row.createdAt) },

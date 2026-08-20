@@ -27,7 +27,7 @@ function fixtureFor(operation: ReadOperation): unknown {
   if (operation === "events.portalSpeakerIdentity") {
     return { event: document, speaker: { ...document, firstName: "Grace", lastName: "Hopper" }, publishedEvents: [document] };
   }
-  if (operation === "events.get" || operation === "events.getBySlug" || operation === "emailIntegrations.status" || operation === "contentIntegrations.status" || operation === "organizers.getMine" || operation === "organizations.getMine" || operation === "profiles.getMine" || operation === "publicEmbeds.getAdmin") return document;
+  if (operation === "events.get" || operation === "events.getBySlug" || operation === "emailIntegrations.status" || operation === "contentIntegrations.status" || operation === "organizers.getMine" || operation === "organizations.getMine" || operation === "profiles.getMine" || operation === "publicEmbeds.getAdmin" || operation === "tasks.get") return document;
   if (genericDocumentLists.has(operation)) return [document];
   if (operation === "forms.list") return [{ ...document, internalName: "Internal CFP", status: "open" }];
   if (operation === "speakers.list") return [{ ...document, firstName: "Ada", lastName: "Lovelace" }];

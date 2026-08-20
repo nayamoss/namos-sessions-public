@@ -1,5 +1,13 @@
 # Public Embeds — Requirements
 
+> **Brief-coverage audit, 2026-08-17:**
+> [`BRIEF-ADDENDUM-2026-08-17.md`](./BRIEF-ADDENDUM-2026-08-17.md). Kill My SaaS requirement 9 is
+> covered in source, including both named views, the responsive renderer, the public URL, the
+> iframe snippet, and the published-only projection. Three gaps: the seeded speaker gallery is
+> `enabled: false`, no `schedule_itinerary` embed is seeded, and the seed clears headshots so an
+> enabled gallery renders blank avatars. Mobile behaviour has never been verified at a device width
+> in a real browser. Seed changes plus a recorded mobile pass; no embed code work is proposed.
+
 **Type:** Feature
 
 **Status:** Done

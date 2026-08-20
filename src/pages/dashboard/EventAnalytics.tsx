@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { AlertCircle, ArrowUpRight, CheckCircle2, RefreshCw } from "lucide-react";
+import { AlertCircle, ArrowUpRight, BarChart3, RefreshCw } from "lucide-react";
 import { Link } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { useRepo } from "@/data/repo";
 import type { EventAnalyticsSummary } from "@/data/types";
@@ -41,13 +42,13 @@ function ProgressRow({ label, value, total, tone = "primary" }: { label: string;
   );
 }
 
-function Section({ title, description, to, children }: { title: string; description: string; to: string; children: ReactNode }) {
+function Section({ title, description, to, children }: { title: string; description?: string; to: string; children: ReactNode }) {
   return (
     <section className="min-w-0 py-5">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-sm font-semibold">{title}</h2>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>
+          {description && <p className="mt-1 text-xs text-muted-foreground">{description}</p>}
         </div>
         <Button asChild variant="ghost" size="sm"><Link to={to}>Open <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" /></Link></Button>
       </div>
@@ -82,7 +83,6 @@ export default function EventAnalytics() {
       <div className="space-y-3">
         <ContentToolbar
           ariaLabel="Analytics controls"
-          utilities={<p className="text-xs text-muted-foreground">Current event snapshot{summary ? ` · Updated ${new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(summary.generatedAt)}` : ""}</p>}
           primaryAction={<Button type="button" variant="outline" size="sm" onClick={() => void load()} disabled={loading}><RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} aria-hidden="true" />{loading ? "Refreshing…" : "Refresh"}</Button>}
         />
         {loading && !summary ? <LoadingState /> : error && !summary ? (
@@ -93,12 +93,11 @@ export default function EventAnalytics() {
             <Button className="mt-4" variant="outline" size="sm" onClick={() => void load()}>Try again</Button>
           </section>
         ) : summary && empty ? (
-          <section className="flex min-h-64 flex-col items-center justify-center text-center">
-            <CheckCircle2 className="h-6 w-6 text-muted-foreground" aria-hidden="true" />
-            <h2 className="mt-3 text-base font-semibold">Your event snapshot starts here</h2>
-            <p className="mt-1 max-w-md text-sm text-muted-foreground">Open a call for papers or add speakers to begin measuring program progress.</p>
-            <div className="mt-4 flex flex-wrap justify-center gap-2"><Button asChild size="sm"><Link to={`${base}/program/forms`}>Set up a call</Link></Button><Button asChild variant="outline" size="sm"><Link to={`${base}/program/speakers`}>Add speakers</Link></Button></div>
-          </section>
+          <EmptyState
+            icon={BarChart3}
+            title="No event activity yet"
+            action={<><Button asChild size="sm"><Link to={`${base}/program/forms`}>Set up a call</Link></Button><Button asChild variant="outline" size="sm"><Link to={`${base}/program/speakers`}>Add speakers</Link></Button></>}
+          />
         ) : summary ? (
           <>
             {error && <p role="status" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">Refresh failed. Showing the most recent snapshot.</p>}
@@ -110,14 +109,14 @@ export default function EventAnalytics() {
             </section>
             <div className="grid gap-x-8 divide-y lg:grid-cols-2 lg:divide-y-0">
               <div>
-                <Section title="Submission pipeline" description="Current proposals by decision stage." to={`${base}/program/abstracts`}>
+                <Section title="Submission pipeline" to={`${base}/program/abstracts`}>
                   <ProgressRow label="Awaiting review" value={summary.submissions.pending} total={summary.submissions.total} tone="warning" />
                   <ProgressRow label="In review" value={summary.submissions.inReview} total={summary.submissions.total} />
                   <ProgressRow label="Unassigned for review" value={summary.reviews.unassigned} total={summary.submissions.undecided} tone="danger" />
                   <ProgressRow label="Accepted" value={summary.submissions.accepted} total={summary.submissions.total} />
                   <ProgressRow label="Declined" value={summary.submissions.declined} total={summary.submissions.total} tone="muted" />
                 </Section>
-                <div className="border-t"><Section title="Speaker readiness" description={`${summary.speakers.profileComplete} of ${summary.speakers.total} profiles include a bio and headshot.`} to={`${base}/program/speakers`}>
+                <div className="border-t"><Section title="Speaker readiness" to={`${base}/program/speakers`}>
                   <ProgressRow label="Confirmed" value={summary.speakers.confirmed} total={summary.speakers.total} />
                   <ProgressRow label="Awaiting response" value={summary.speakers.awaiting} total={summary.speakers.total} tone="warning" />
                   <ProgressRow label="Profile complete" value={summary.speakers.profileComplete} total={summary.speakers.total} />
@@ -129,7 +128,7 @@ export default function EventAnalytics() {
                 </Section></div>
               </div>
               <div>
-                <Section title="Program delivery" description="Scheduling and publication progress for the accepted program." to={`${base}/program/agenda`}>
+                <Section title="Program delivery" to={`${base}/program/agenda`}>
                   <ProgressRow label="Accepted sessions scheduled" value={summary.agenda.scheduledAccepted} total={summary.agenda.acceptedSessions} />
                   <ProgressRow label="Agenda items published" value={summary.agenda.published} total={summary.agenda.total} />
                 </Section>

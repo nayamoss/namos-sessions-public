@@ -1,5 +1,18 @@
 # Event-scoped Slack Operations Integration — Implementation Plan
 
+## Implementation Status — 2026-08-19
+
+Issue #238 is implemented locally on `feature/238-slack-integration`. The additive Convex schema,
+OAuth and account-linking flows, signed inbound endpoints, existing-agent adapter, durable
+notification outbox, settings UI, example manifest, and operator runbook are present. Local
+verification includes Convex code generation and typechecking, repository TypeScript and lint,
+focused Slack/security/UI tests, the full repository test suite, and a production build.
+
+Release verification remains open: no real Slack sandbox was installed, no production Convex or
+static app deployment was made, and the live authorization, latency, retry, light/dark, and mobile
+matrices in T051 and T053–T058 still require configured Slack credentials and deployed endpoints.
+Accordingly this feature remains `in-progress`, not `done`.
+
 ## Delivery Rules
 
 - Build from `requirements.md` and `design.md`; do not reinterpret Slack as a generic chat bot.

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent, type ReactNode } from "react";
 import { useUser } from "@clerk/clerk-react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowRight, ChevronDown, Eye, EyeOff, Loader2, Upload } from "lucide-react";
+import { ArrowRight, ChevronDown, Loader2, Upload } from "lucide-react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { TimezoneCombobox } from "@/components/shared/TimezoneCombobox";
 import { DateTimeField } from "@/components/shared/DateTimeField";
@@ -166,8 +166,8 @@ export default function OnboardingWizard() {
   const [slugTouched, setSlugTouched] = useState(false);
   const [organizerExists, setOrganizerExists] = useState(false);
   const [displayName, setDisplayName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [nameTouched, setNameTouched] = useState(false);
-  const [isEmailVisible, setIsEmailVisible] = useState(false);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string>();
   const avatarPreviewRef = useRef<string>();
@@ -179,7 +179,10 @@ export default function OnboardingWizard() {
   const email = user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses[0]?.emailAddress ?? "";
 
   useEffect(() => {
-    if (!nameTouched && user?.firstName) setDisplayName(user.firstName);
+    if (!nameTouched && user?.firstName) {
+      setDisplayName(user.firstName);
+      setLastName(user.lastName ?? "");
+    }
     // Clerk always returns an imageUrl — a generated placeholder when no photo was ever set.
     // `hasImage` is the actual signal for whether the user chose one.
     if (!avatarPreview && user?.hasImage) setAvatarPreview(user.imageUrl);
@@ -282,7 +285,12 @@ export default function OnboardingWizard() {
         }
       }
       const trimmedName = displayName.trim();
-      const nameChanged = trimmedName && trimmedName !== (user?.firstName ?? "");
+      const trimmedLastName = lastName.trim();
+      if (!trimmedName) {
+        setError("Enter your first name to continue.");
+        return;
+      }
+      const nameChanged = trimmedName !== (user?.firstName ?? "") || trimmedLastName !== (user?.lastName ?? "");
       if (nameChanged || avatarFile) {
         setBusy(true);
         try {
@@ -290,7 +298,7 @@ export default function OnboardingWizard() {
           // instance has first/last name collection disabled and rejects `user.update({
           // firstName })` outright ("first_name is not a valid parameter for this request").
           if (nameChanged) {
-            void repo.profiles.save({ displayName: trimmedName }).catch((cause) => {
+            void repo.profiles.save({ firstName: trimmedName, lastName: trimmedLastName || undefined }).catch((cause) => {
               console.error(friendlyErrorMessage(cause, "Could not save your name."));
             });
           }
@@ -359,29 +367,19 @@ export default function OnboardingWizard() {
     await complete();
   };
 
-  // Full keyboard-only navigation: Enter advances (or submits the current screen), Shift+Enter
-  // or Backspace-on-an-already-empty text field goes back. Anything happening inside a popover
-  // (the timezone combobox, the date picker) is left alone so it can handle its own keys —
-  // React portals still bubble synthetic events up to this handler, so that has to be explicit.
+  // Keep the shortcut explicit and narrow: Cmd/Ctrl+Enter advances and Shift+Cmd/Ctrl+Enter
+  // goes back. Content editors and popovers retain their native keyboard behavior.
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
     if (target.closest("[data-onboarding-popover]")) return;
-    if (target.tagName === "BUTTON") return; // native activation already handles Enter/Space
-    if (event.key === "Enter") {
-      event.preventDefault();
-      if (event.shiftKey) goBack();
-      else void next();
-      return;
-    }
-    if (event.key === "Backspace" && target instanceof HTMLInputElement && target.type === "text" && target.value === "") {
-      event.preventDefault();
-      goBack();
-    }
+    if (event.defaultPrevented || event.key !== "Enter" || (!event.metaKey && !event.ctrlKey)) return;
+    if (target.closest("[contenteditable=\"true\"]")) return;
+    event.preventDefault();
+    if (event.shiftKey) goBack();
+    else void next();
   };
 
   const total = stepMeta.length;
-  const canSkip = step >= 1;
-
   return (
     <div
       className="relative flex min-h-screen flex-col bg-background text-foreground"
@@ -410,18 +408,18 @@ export default function OnboardingWizard() {
 
       <main className="flex flex-1 items-center justify-center px-6 pb-28 sm:px-10">
         {loading ? (
-          <div className="w-full max-w-lg space-y-4">
+          <div className="w-full max-w-2xl space-y-4">
             <Skeleton className="h-8 w-2/3" />
             <Skeleton className="h-4 w-full" />
             <Skeleton className="h-11 w-full rounded-[12px]" />
           </div>
         ) : (
-          <div ref={stepRef} key={step} className="w-full max-w-lg animate-fade-in">
+          <div ref={stepRef} key={step} className="w-full max-w-2xl animate-fade-in">
             {step === 0 && (
-              <section className="space-y-9">
+              <section className="space-y-7">
                 <div>
                   <h1 className="text-3xl font-semibold sm:text-4xl">Welcome to Namos Sessions</h1>
-                  <p className="mt-2 text-base text-muted-foreground">Set up your profile.</p>
+                  <p className="mt-2 text-sm text-muted-foreground">Set up your profile to get started.</p>
                 </div>
                 <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
                   <div className="flex shrink-0 justify-center sm:justify-start">
@@ -450,31 +448,19 @@ export default function OnboardingWizard() {
                       onChange={chooseAvatar}
                     />
                   </div>
-                  <div className="min-w-0 flex-1 space-y-2">
-                    <Label htmlFor="onboarding-name">Name</Label>
-                    <Input
-                      id="onboarding-name"
-                      data-autofocus="true"
-                      className="h-11 rounded-[12px] bg-card text-base"
-                      placeholder="e.g. Jordan"
-                      value={displayName}
-                      onChange={(change) => { setNameTouched(true); setDisplayName(change.target.value); }}
-                    />
-                    {email && (
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <p>Signed in as {isEmailVisible ? email : maskEmail(email)}</p>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setIsEmailVisible((visible) => !visible)}
-                          className="h-6 w-6 rounded p-1 text-muted-foreground hover:text-foreground"
-                          aria-label={isEmailVisible ? "Hide signed-in email address" : "Show signed-in email address"}
-                          title={isEmailVisible ? "Hide email" : "Show email"}
-                        >
-                          {isEmailVisible ? <EyeOff aria-hidden="true" className="h-3.5 w-3.5" /> : <Eye aria-hidden="true" className="h-3.5 w-3.5" />}
-                        </Button>
+                  <div className="min-w-0 flex-1 space-y-3">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="onboarding-first-name">First name</Label>
+                        <Input id="onboarding-first-name" data-autofocus="true" className="h-11 rounded-[12px] bg-card text-base" value={displayName} onChange={(change) => { setNameTouched(true); setDisplayName(change.target.value); }} />
                       </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="onboarding-last-name">Last name <span className="font-normal text-muted-foreground">(optional)</span></Label>
+                        <Input id="onboarding-last-name" className="h-11 rounded-[12px] bg-card text-base" value={lastName} onChange={(change) => { setNameTouched(true); setLastName(change.target.value); }} />
+                      </div>
+                    </div>
+                    {email && (
+                      <p className="text-xs text-muted-foreground">Signed in as {email}</p>
                     )}
                   </div>
                 </div>
@@ -491,7 +477,6 @@ export default function OnboardingWizard() {
               <section className="space-y-6">
                 <div>
                   <h1 className="text-2xl font-semibold sm:text-3xl">A couple quick things</h1>
-                  <p className="mt-2 text-sm text-muted-foreground">Helps us set things up right for you — skip if you'd rather not say.</p>
                 </div>
                 <div className="space-y-5">
                   <div className="space-y-2">
@@ -554,7 +539,6 @@ export default function OnboardingWizard() {
               <section className="space-y-6">
                 <div>
                   <h1 className="text-2xl font-semibold sm:text-3xl">Name your conference</h1>
-                  <p className="mt-2 text-sm text-muted-foreground">We've filled in sensible defaults below — change anything now, or later in Settings → Event Details.</p>
                 </div>
                 <div className="space-y-5">
                   <div className="space-y-2">
@@ -636,12 +620,15 @@ export default function OnboardingWizard() {
         )}
       </main>
 
-      <footer className="fixed inset-x-0 bottom-0 flex items-center justify-center gap-4 px-6 py-4 text-xs text-muted-foreground sm:justify-end sm:px-10">
-        <span className="hidden sm:inline">
-          Press <kbd className="rounded bg-card px-1.5 py-0.5 font-mono">Enter ↵</kbd> to continue
-          {canSkip ? "" : ", Shift+Enter to go back"}
+      <footer className="pointer-events-none fixed inset-x-0 bottom-0 flex items-center justify-end px-6 py-4 text-xs text-muted-foreground sm:px-10">
+        <span className="hidden items-center gap-1.5 sm:flex" aria-label={`Keyboard shortcuts: Command or Control Enter to continue${step > 0 ? "; Shift Command or Control Enter to go back" : ""}`}>
+          <kbd className="rounded bg-card px-1.5 py-0.5 font-mono text-foreground">⌘</kbd>
+          <kbd className="rounded bg-card px-1.5 py-0.5 font-mono text-foreground">↵</kbd>
+          <span>Continue</span>
+          {step > 0 && <><span className="mx-1">·</span><kbd className="rounded bg-card px-1.5 py-0.5 font-mono text-foreground">⇧⌘</kbd><kbd className="rounded bg-card px-1.5 py-0.5 font-mono text-foreground">↵</kbd><span>Back</span></>}
         </span>
       </footer>
+
     </div>
   );
 }

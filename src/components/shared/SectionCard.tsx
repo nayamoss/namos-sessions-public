@@ -4,7 +4,6 @@ import { Card, CardContent } from "@/components/ui/card";
 
 export function SectionCard({ title, action, children, className, contentClassName }: {
   title?: ReactNode;
-  description?: ReactNode;
   action?: ReactNode;
   children: ReactNode;
   className?: string;

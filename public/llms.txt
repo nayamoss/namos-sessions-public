@@ -1,35 +1,29 @@
-# Sessionboard Clone
+# Namos Sessions
 
-> Open-source conference program management for CFPs, speakers, review, scheduling, and
-> communications.
+> Conference program management from call for proposals through review, speaker coordination, scheduling, communications, and publication.
 
-Sessionboard Clone is an open-source conference program management app. It supports the program-side workflow from collecting CFP submissions through abstract review, speaker coordination, agenda scheduling, and event communications.
+## Open Live Demo
+
+https://app.namos-sessions.xyz/demo
+
+One GET opens a fresh, isolated, seeded Namos Sessions workspace directly in Schedule Studio. No signup, password, access key, Turnstile, or manual role selection is required. Demo workspaces expire automatically.
 
 ## Core Features
 
-- Public CFP submission forms with conditional fields, category routing, close dates, and validation
-- Abstract and session management with status-based review queues
-- Evaluation plans, reviewer assignments, scoring, and decision workflows
-- Speaker portals for profiles, bios, headshots, tasks, documents, and portal forms
-- Agenda scheduling across rooms with conflict detection for rooms, speakers, and availability
-- Templated speaker communications, submission confirmations, reminders, and calendar-invite previews
-- Speaker tracking dashboard for confirmation status and outstanding onboarding work
-- Repeatable seeded demo data, including scheduling conflicts
+- Conditional CFP forms and public event pages
+- Abstract review, assignments, scoring, and decisions
+- Speaker profiles, tasks, resources, documents, and portal forms
+- Agenda scheduling with room, speaker, and availability conflict detection
+- Communications, calendar-invite previews, and publication workflows
+- Resettable seeded organizer, reviewer, and speaker data
 
-## Product Boundaries
+## Public Routes
 
-- Covers conference program operations: submissions, abstracts, evaluation, agenda, speakers, and communications
-- Does not include payments, marketing, CRM, or a full CMS
-- Uses event-scoped records and role-based organizer, reviewer, and speaker access; it is not multi-tenant
+- Homepage: https://app.namos-sessions.xyz/
+- Live demo: https://app.namos-sessions.xyz/demo
+- Demo role chooser: https://app.namos-sessions.xyz/demo/start
+- AI guide: https://app.namos-sessions.xyz/llms.txt
 
-## Data Backends
+## Technology
 
-Feature code uses a backend adapter layer. The judged demo uses Convex for reliable seeded-demo uptime. Airtable is an optional, server-mediated backend: credentials stay server-side, Clerk identity is verified there, and event-admin access is explicitly allowlisted.
-
-## Tech Stack
-
-- React + TypeScript + Vite frontend
-- Convex or Airtable through a swappable data adapter
-- Clerk authentication
-- Cloudflare Pages Functions for server-mediated Airtable operations
-- Tailwind CSS and shadcn/ui components
+React, TypeScript, Vite, Convex, Clerk, and Cloudflare Workers.

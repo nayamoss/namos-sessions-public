@@ -68,6 +68,15 @@ export const list = query({
   },
 });
 
+export const get = query({
+  args: { eventId: v.id("events"), id: v.id("submissions") },
+  handler: async (ctx, args) => {
+    await assertEventOrganizerAccess(ctx, args.eventId);
+    const submission = await ctx.db.get(args.id);
+    return submission?.eventId === args.eventId ? submission : null;
+  },
+});
+
 export async function validateForm(
   ctx: QueryCtx | MutationCtx,
   eventId: Id<"events">,
@@ -224,6 +233,33 @@ export const createAdmin = mutation({
     const submission = await ctx.db.get(id);
     if (!submission) throw new Error("Could not create abstract.");
     return submission;
+  },
+});
+
+export const update = mutation({
+  args: { input: v.object({
+    id: v.id("submissions"), eventId: v.id("events"), formId: v.id("submission_forms"),
+    title: v.string(), description: v.optional(v.string()), status: submissionStatus,
+  }) },
+  handler: async (ctx, { input }) => {
+    await assertEventOrganizerAccess(ctx, input.eventId);
+    const submission = await ctx.db.get(input.id);
+    if (!submission || submission.eventId !== input.eventId) throw new Error("Submission not found.");
+    const form = await ctx.db.get(input.formId);
+    if (!form || form.eventId !== input.eventId) throw new Error("Submission form was not found for this event.");
+    if (!input.title.trim()) throw new Error("An abstract title is required.");
+    const answers = { ...(submission.answers as Record<string, unknown>), description: input.description?.trim() || undefined };
+    await ctx.db.patch(input.id, { formId: input.formId, title: input.title.trim(), status: input.status, answers, updatedAt: Date.now() });
+  },
+});
+
+export const remove = mutation({
+  args: { eventId: v.id("events"), id: v.id("submissions") },
+  handler: async (ctx, args) => {
+    await assertEventOrganizerAccess(ctx, args.eventId);
+    const submission = await ctx.db.get(args.id);
+    if (!submission || submission.eventId !== args.eventId) throw new Error("Submission not found.");
+    await ctx.db.delete(args.id);
   },
 });
 

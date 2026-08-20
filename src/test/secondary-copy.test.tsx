@@ -1,39 +1,29 @@
-import { render, screen } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { FormField } from "@/components/shared/FormField";
-import { SectionCard } from "@/components/shared/SectionCard";
-import { ToggleField } from "@/components/shared/ToggleField";
-import { Input } from "@/components/ui/input";
+const source = (file: string) => readFileSync(join(process.cwd(), "src", file), "utf8");
 
-describe("secondary copy", () => {
-  it("does not render optional helper copy in shared fields", () => {
-    render(
-      <>
-        <FormField label="Plan name" hint="Visible to reviewers">
-          <Input />
-        </FormField>
-        <ToggleField
-          checked={false}
-          hint="Only unresolved assignments receive reminders."
-          label="Send reminders"
-          onCheckedChange={() => undefined}
-        />
-      </>,
-    );
-
-    expect(screen.queryByText("Visible to reviewers")).not.toBeInTheDocument();
-    expect(screen.queryByText("Only unresolved assignments receive reminders.")).not.toBeInTheDocument();
+describe("secondary copy contract", () => {
+  it("does not expose helper-copy props from shared form fields or section cards", () => {
+    expect(source("components/shared/FormField.tsx")).not.toMatch(/\bhint\??:/);
+    expect(source("components/shared/ToggleField.tsx")).not.toMatch(/\bhint\??:/);
+    expect(source("components/shared/SectionCard.tsx")).not.toMatch(/\bdescription\??:/);
   });
 
-  it("does not render optional section descriptions", () => {
-    render(
-      <SectionCard description="A secondary explanation" title="Review settings">
-        <div>Content</div>
-      </SectionCard>,
-    );
+  it("keeps helper-copy props out of shared-component call sites", () => {
+    const files = [
+      "pages/settings/EventTeam.tsx",
+      "pages/settings/ComponentShowcase.tsx",
+      "pages/program/SubmissionFormBuilder.tsx",
+    ];
+    const violations = files.filter((file) => /<(?:FormField|ToggleField|SectionCard)[\s\S]{0,240}?(?:hint|description)=/.test(source(file)));
+    expect(violations).toEqual([]);
+  });
 
-    expect(screen.getByRole("heading", { name: "Review settings" })).toBeVisible();
-    expect(screen.queryByText("A secondary explanation")).not.toBeInTheDocument();
+  it("renders the speaker access empty state once instead of duplicating route content", () => {
+    const layout = source("pages/portal/PortalLayout.tsx");
+    expect(layout).toContain("!selectedSpeaker ? (");
+    expect(layout).toContain(") : children}");
   });
 });

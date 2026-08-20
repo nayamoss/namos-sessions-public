@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { ClipboardList, MoreHorizontal, Trash2 } from "lucide-react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
 import { DataGrid, type DataGridColumn } from "@/components/shared/DataGrid";
+import { EditorPage } from "@/components/shared/EditorPage";
 import { EmptyState } from "@/components/shared/EmptyState";
 import {
   AlertDialog,
@@ -50,6 +52,11 @@ const blankItem = (): TaskTemplateItem => ({
 export default function TaskTemplates() {
   const repo = useRepo();
   const { event: activeEvent } = useCurrentEvent();
+  const navigate = useNavigate();
+  const { templateId } = useParams<{ templateId?: string }>();
+  const location = useLocation();
+  const creating = templateId === "new" || location.pathname.endsWith("/new");
+  const listPath = `/events/${activeEvent.slug}/settings/task-templates`;
   const [event, setEvent] = useState<Event>();
   const [templates, setTemplates] = useState<TaskTemplate[]>([]);
   const [portalForms, setPortalForms] = useState<PortalForm[]>([]);
@@ -72,6 +79,10 @@ export default function TaskTemplates() {
         setPortalForms([]);
         return;
       }
+      // Older events may predate automatic starter-template creation. This
+      // mutation is idempotent: it adds only missing Namos starter templates
+      // and assigns the standard checklist as the event default when needed.
+      await repo.taskTemplates.ensureStarters({ eventId: current.id });
       const [nextTemplates, forms] = await Promise.all([
         repo.taskTemplates.list({ eventId: current.id }),
         repo.forms.list({ eventId: current.id }),
@@ -105,7 +116,18 @@ export default function TaskTemplates() {
     setDescription(template === "new" ? "" : (template.description ?? ""));
     setItems(template === "new" ? [blankItem()] : template.items);
     setError(undefined);
+    navigate(`${listPath}/${template === "new" ? "new" : `${template.id}/edit`}`);
   };
+  useEffect(() => {
+    if ((!templateId && !creating) || loading) return;
+    const template = creating ? "new" : templates.find((item) => item.id === templateId);
+    if (template) {
+      setEditing(template);
+      setName(template === "new" ? "" : template.name);
+      setDescription(template === "new" ? "" : (template.description ?? ""));
+      setItems(template === "new" ? [blankItem()] : template.items);
+    }
+  }, [creating, loading, templateId, templates]);
 
   const updateItem = (index: number, patch: Partial<TaskTemplateItem>) =>
     setItems((current) =>
@@ -140,6 +162,7 @@ export default function TaskTemplates() {
         });
       setEditing(null);
       await load();
+      navigate(listPath);
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "Could not save template.",
@@ -154,6 +177,10 @@ export default function TaskTemplates() {
     try {
       await repo.taskTemplates.remove(pendingDelete.id);
       await load();
+      if (editing !== "new" && editing?.id === pendingDelete.id) {
+        setEditing(null);
+        navigate(listPath);
+      }
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "Could not delete template.",
@@ -162,6 +189,74 @@ export default function TaskTemplates() {
       setPendingDelete(null);
     }
   };
+
+  const editorDirty = editing
+    ? name !== (editing === "new" ? "" : editing.name) ||
+      description !== (editing === "new" ? "" : (editing.description ?? "")) ||
+      JSON.stringify(items) !== JSON.stringify(editing === "new" ? [blankItem()] : editing.items)
+    : false;
+  const editorContent = editing ? (
+    <section className={cardSurfaceClasses("default", "space-y-4 p-5")}>
+      <div className="grid gap-3 md:grid-cols-2">
+        <div>
+          <Label>Template name</Label>
+          <Input value={name} onChange={(event) => setName(event.target.value)} />
+        </div>
+        <div>
+          <Label>Description <span className="text-muted-foreground">(optional)</span></Label>
+          <Input value={description} onChange={(event) => setDescription(event.target.value)} />
+        </div>
+      </div>
+      <div className="space-y-3">
+        {items.map((item, index) => (
+          <div key={index} className={cardSurfaceClasses("default", "space-y-2 bg-muted p-3")}>
+            <div className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
+              <div className="space-y-1">
+                <Label className="text-xs">Task title</Label>
+                <Input aria-label={`Task ${index + 1} title`} value={item.title} onChange={(event) => updateItem(index, { title: event.target.value })} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Description <span className="text-muted-foreground">(optional)</span></Label>
+                <Input aria-label={`Task ${index + 1} description`} value={item.description ?? ""} onChange={(event) => updateItem(index, { description: event.target.value || undefined })} />
+              </div>
+              <Button variant="ghost" size="icon" className="self-end" aria-label={`Remove task ${index + 1}`} onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}>
+                <Trash2 />
+              </Button>
+            </div>
+            <div className="grid gap-2 md:grid-cols-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Target type</Label>
+                <Select value={item.targetType} onValueChange={(value) => updateItem(index, { targetType: value as TaskTemplateItem["targetType"] })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="submission">Submission</SelectItem>
+                    <SelectItem value="contact">Contact</SelectItem>
+                    <SelectItem value="group">Group</SelectItem>
+                    <SelectItem value="sponsor">Sponsor</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Linked portal form <span className="text-muted-foreground">(optional)</span></Label>
+                <Select value={item.linkedFormId ?? "none"} onValueChange={(value) => updateItem(index, { linkedFormId: value === "none" ? undefined : (value as never) })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No form linked</SelectItem>
+                    {portalForms.map((form) => <SelectItem key={form.id} value={form.id}>{form.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Due offset <span className="text-muted-foreground">(optional)</span></Label>
+                <Input type="number" min={0} aria-label={`Task ${index + 1} due offset in days`} value={item.dueDateOffsetDays ?? ""} onChange={(event) => updateItem(index, { dueDateOffsetDays: event.target.value === "" ? undefined : Number(event.target.value) })} />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <Button variant="outline" size="sm" onClick={() => setItems((current) => [...current, blankItem()])}>Add item</Button>
+    </section>
+  ) : null;
   const columns: DataGridColumn<TaskTemplate>[] = [
     {
       key: "template",
@@ -221,6 +316,41 @@ export default function TaskTemplates() {
     },
   ];
 
+  if (templateId || creating) {
+    const existingTemplate = creating ? true : templates.some((template) => template.id === templateId);
+    return (
+      <>
+        <EditorPage
+          title={creating ? "New task template" : "Edit task template"}
+          backTo={listPath}
+          loading={loading || !editing}
+          notFound={!loading && !existingTemplate}
+          error={error}
+          dirty={editorDirty}
+          saving={saving}
+          saveLabel="Save template"
+          saveDisabled={!name.trim() || !items.length || items.some((item) => !item.title.trim())}
+          onSave={save}
+          secondaryAction={editing !== "new" && editing ? <Button variant="destructive" size="sm" onClick={() => setPendingDelete(editing)}>Delete</Button> : undefined}
+        >
+          {editorContent}
+        </EditorPage>
+        <AlertDialog open={pendingDelete !== null} onOpenChange={(open) => !open && setPendingDelete(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete {pendingDelete?.name}?</AlertDialogTitle>
+              <AlertDialogDescription>This removes the template. It won't affect tasks already applied to submissions.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel className={buttonVariants({ variant: "ghost" })}>Keep template</AlertDialogCancel>
+              <AlertDialogAction className={buttonVariants({ variant: "destructive" })} onClick={() => void confirmRemove()}>Delete</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </>
+    );
+  }
+
   return (
     <>
       <div className="space-y-4">
@@ -250,185 +380,6 @@ export default function TaskTemplates() {
               minWidth={680}
             />
 
-            {editing && (
-              <section className={cardSurfaceClasses("default", "space-y-4 p-5")}>
-                <div>
-                  <h2 className="font-semibold">
-                    {editing === "new" ? "New template" : "Edit template"}
-                  </h2>
-                </div>
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div>
-                    <Label>Template name</Label>
-                    <Input
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <Label>Description</Label>
-                    <Input
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-3">
-                  {items.map((item, index) => (
-                    <div
-                      key={index}
-                      className={cardSurfaceClasses("default", "space-y-2 bg-muted p-3")}
-                    >
-                      <div className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
-                        <div className="space-y-1">
-                          <Label className="text-xs">Task title</Label>
-                          <Input
-                            aria-label={`Task ${index + 1} title`}
-                            placeholder="Task title"
-                            value={item.title}
-                            onChange={(e) =>
-                              updateItem(index, { title: e.target.value })
-                            }
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">
-                            Description{" "}
-                            <span className="text-muted-foreground">
-                              (optional)
-                            </span>
-                          </Label>
-                          <Input
-                            aria-label={`Task ${index + 1} description`}
-                            placeholder="Shown to the speaker"
-                            value={item.description ?? ""}
-                            onChange={(e) =>
-                              updateItem(index, {
-                                description: e.target.value || undefined,
-                              })
-                            }
-                          />
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="self-end"
-                          onClick={() =>
-                            setItems((current) =>
-                              current.filter((_, i) => i !== index),
-                            )
-                          }
-                        >
-                          <Trash2 />
-                        </Button>
-                      </div>
-                      <div className="grid gap-2 md:grid-cols-3">
-                        <div className="space-y-1">
-                          <Label className="text-xs">Target type</Label>
-                          <Select
-                            value={item.targetType}
-                            onValueChange={(value) =>
-                              updateItem(index, {
-                                targetType:
-                                  value as TaskTemplateItem["targetType"],
-                              })
-                            }
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="submission">
-                                Submission
-                              </SelectItem>
-                              <SelectItem value="contact">Contact</SelectItem>
-                              <SelectItem value="group">Group</SelectItem>
-                              <SelectItem value="sponsor">Sponsor</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">
-                            Linked portal form{" "}
-                            <span className="text-muted-foreground">
-                              (optional)
-                            </span>
-                          </Label>
-                          <Select
-                            value={item.linkedFormId ?? "none"}
-                            onValueChange={(value) =>
-                              updateItem(index, {
-                                linkedFormId:
-                                  value === "none"
-                                    ? undefined
-                                    : (value as never),
-                              })
-                            }
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none">
-                                No form linked
-                              </SelectItem>
-                              {portalForms.map((form) => (
-                                <SelectItem key={form.id} value={form.id}>
-                                  {form.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">
-                            Due{" "}
-                            <span className="text-muted-foreground">
-                              (days after acceptance, optional)
-                            </span>
-                          </Label>
-                          <Input
-                            type="number"
-                            min={0}
-                            aria-label={`Task ${index + 1} due offset in days`}
-                            value={item.dueDateOffsetDays ?? ""}
-                            onChange={(e) =>
-                              updateItem(index, {
-                                dueDateOffsetDays:
-                                  e.target.value === ""
-                                    ? undefined
-                                    : Number(e.target.value),
-                              })
-                            }
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setItems((current) => [...current, blankItem()])
-                  }
-                >
-                  Add item
-                </Button>
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setEditing(null)}>
-                    Cancel
-                  </Button>
-                  <Button
-                    variant="accent"
-                    disabled={saving}
-                    onClick={() => void save()}
-                  >
-                    {saving ? "Saving…" : "Save template"}
-                  </Button>
-                </div>
-              </section>
-            )}
           </>
         )}
 

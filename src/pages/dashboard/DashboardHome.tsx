@@ -1,25 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { AlignLeft, ArrowRight, ArrowUp, CalendarDays, ChevronDown, ClipboardCheck, ClipboardList, Layers3, Loader2, Mail, Megaphone, Mic, PanelRight, PenLine, Puzzle, Square, UserRoundX, Users } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
+import { ArrowRight, CalendarDays, ChevronDown, ClipboardCheck, ClipboardList, Mail, Megaphone, UserRoundX, Users } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
-import { AgentHistoryPopover } from "@/components/agent/AgentHistoryPopover";
-import { AgentTimeline } from "@/components/agent/AgentTimeline";
+import { AgentWorkspace } from "@/components/agent/AgentWorkspace";
 import { Card } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useRepo } from "@/data/repo";
 import { cn } from "@/lib/utils";
-import { SHORTCUTS, VOICE_TOGGLE_EVENT, formatShortcut, matchesPrimaryShortcut } from "@/lib/shortcuts";
 import { useRepoQuery } from "@/data/reactive";
-import { useDictation } from "@/lib/voice/use-dictation";
-import { VoiceChatButton } from "@/components/voice/VoiceChatButton";
-import { VoiceSessionPanel } from "@/components/voice/VoiceSessionPanel";
-import { ProgramControlRoom } from "@/components/dashboard/ProgramControlRoom";
-import type { AgendaItem, AgentRun, AgentRunDetail, AgentRunId, Comm, ControlRoomState, OnboardingTask, Speaker, Submission, SubmissionForm } from "@/data/types";
+import type { AgendaItem, Comm, OnboardingTask, Speaker, Submission, SubmissionForm } from "@/data/types";
 import { projectSpeakerOperationsRows, summarizeSpeakerOperations } from "@/lib/speaker-operations";
 
 // Shared empty fallback: a fresh `[]` per render would give every dependent
@@ -30,48 +19,6 @@ const EMPTY: readonly unknown[] = [];
 // way AppLayout composes its nav links: the resting row has no fill of its own,
 // so the hover fill is a state, not a card surface.
 const RAIL_ROW = cn("flex items-center rounded-lg p-2 transition-colors", "hover:bg-muted");
-const RAIL_STORAGE_KEY = "namos-dashboard-right-collapsed";
-type SidebarTab = "action-items" | "voice-agent";
-const newKey = () => typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
-
-// Ported from Imori's composer (components/AgentChat.tsx). "Depth" is the
-// concise→deep axis: Deep means more reasoning, not just more words.
-const DEPTH_OPTIONS = [
-  { value: "concise", label: "Concise", hint: "Short, direct. 1–3 sentences max." },
-  { value: "balanced", label: "Balanced", hint: "Answers fully without padding." },
-  { value: "chatty", label: "Chatty", hint: "Warm, conversational." },
-  { value: "deep", label: "Deep", hint: "Thorough with context and examples." },
-] as const;
-
-type Depth = (typeof DEPTH_OPTIONS)[number]["value"];
-
-function DepthSelect({ value, onChange }: { value: Depth; onChange: (value: Depth) => void }) {
-  const active = DEPTH_OPTIONS.find((option) => option.value === value) ?? DEPTH_OPTIONS[0];
-  return (
-    <Select value={value} onValueChange={(next) => onChange(next as Depth)}>
-      {/* Not <SelectValue /> — that clones the item's children into the trigger,
-          hint included. The trigger shows the one word; hints live in the menu. */}
-      <SelectTrigger
-        className="h-8 w-auto gap-1 bg-transparent px-2 text-[13px] font-medium text-muted-foreground shadow-none hover:bg-muted hover:text-foreground focus:ring-0"
-        aria-label={`Depth: ${active.label}`}
-      >
-        <AlignLeft className="h-3.5 w-3.5" />
-        {active.label}
-      </SelectTrigger>
-      <SelectContent align="start">
-        <SelectGroup>
-          <SelectLabel>Depth</SelectLabel>
-          {DEPTH_OPTIONS.map((option) => (
-            <SelectItem key={option.value} value={option.value}>
-              <span className="font-medium">{option.label}</span>
-              <span className="ml-2 text-xs text-muted-foreground">{option.hint}</span>
-            </SelectItem>
-          ))}
-        </SelectGroup>
-      </SelectContent>
-    </Select>
-  );
-}
 
 // Each rail section collapses independently and remembers its state, so the
 // rail can be pared down to just the sections you actually use.
@@ -103,133 +50,8 @@ function RailSection({ title, storageKey, children }: { title: string; storageKe
   );
 }
 
-// These writing-product controls have no equivalent in this app yet. Keep their
-// unavailable state honest while dictation and voice chat are wired separately.
-function ComposerStub({ icon: Icon, label }: { icon: typeof Puzzle; label: string }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          disabled
-          aria-label={`${label} (not available yet)`}
-          className="compact-hit-target inline-flex h-8 w-8 cursor-not-allowed items-center justify-center rounded-lg text-muted-foreground opacity-40"
-        >
-          <Icon className="h-4 w-4" />
-        </button>
-      </TooltipTrigger>
-      <TooltipContent><p className="text-xs">{label} — not available yet</p></TooltipContent>
-    </Tooltip>
-  );
-}
-
 export default function DashboardHome() {
-  const repo = useRepo();
   const { event } = useCurrentEvent();
-  const [params, setParams] = useSearchParams();
-  const selectedRunId = params.get("run") as AgentRunId | null;
-  const access = useRepoQuery<boolean>("agentRuns.canUse", { eventId: event.id });
-  const history = useRepoQuery<AgentRun[]>("agentRuns.list", access.data ? { eventId: event.id, limit: 30 } : "skip");
-  const detail = useRepoQuery<AgentRunDetail | null>("agentRuns.get", access.data && selectedRunId ? { eventId: event.id, runId: selectedRunId } : "skip");
-  const controlRoom = useRepoQuery<ControlRoomState>("controlRoom.get", { eventId: event.id });
-  const [value, setValue] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string>();
-  const [voiceOpen, setVoiceOpen] = useState(false);
-  const [sidebarTab, setSidebarTab] = useState<SidebarTab>("action-items");
-  const selected = detail.data;
-  const replyMode = selected?.run.status === "needs_input";
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [depth, setDepth] = useState<Depth>("balanced");
-  const running = Boolean(selected && ["queued", "running"].includes(selected.run.status));
-  const busy = submitting || (running && !replyMode);
-  const dictation = useDictation({
-    eventId: event.id,
-    onTranscript: (text) => setValue((current) => `${current}${current && text ? " " : ""}${text}`),
-    onError: (message) => setError(message),
-  });
-
-  useEffect(() => { setError(undefined); setValue(""); }, [selectedRunId]);
-
-  // Right rail: collapsible, remembered, and auto-collapsed on tablet widths.
-  // A matchMedia listener rather than a one-time width check, so resizing or
-  // rotating after load still collapses instead of leaving the rail stuck open.
-  const [railCollapsed, setRailCollapsed] = useState(false);
-  useEffect(() => {
-    const query = window.matchMedia("(max-width: 1024px)");
-    const storedPreference = () => {
-      try {
-        const stored = localStorage.getItem(RAIL_STORAGE_KEY);
-        return stored === "true" ? true : stored === "false" ? false : false;
-      } catch { return false; }
-    };
-    const apply = (isTablet: boolean) => setRailCollapsed(isTablet ? true : storedPreference());
-    apply(query.matches);
-    const onChange = (e: MediaQueryListEvent) => apply(e.matches);
-    query.addEventListener("change", onChange);
-    return () => query.removeEventListener("change", onChange);
-  }, []);
-  useEffect(() => { try { localStorage.setItem(RAIL_STORAGE_KEY, String(railCollapsed)); } catch { /* preference is optional */ } }, [railCollapsed]);
-
-  const closeSidebar = useCallback(() => {
-    setRailCollapsed(true);
-    setVoiceOpen(false);
-  }, []);
-  const toggleActionItems = useCallback(() => {
-    if (railCollapsed) {
-      setSidebarTab("action-items");
-      setRailCollapsed(false);
-    } else if (sidebarTab === "action-items") {
-      closeSidebar();
-    } else {
-      setSidebarTab("action-items");
-    }
-  }, [closeSidebar, railCollapsed, sidebarTab]);
-  const toggleVoiceAgent = useCallback(() => {
-    if (busy) return;
-    if (railCollapsed) {
-      setSidebarTab("voice-agent");
-      setVoiceOpen(true);
-      setRailCollapsed(false);
-    } else if (sidebarTab === "voice-agent") {
-      closeSidebar();
-    } else {
-      setSidebarTab("voice-agent");
-      setVoiceOpen(true);
-    }
-  }, [busy, closeSidebar, railCollapsed, sidebarTab]);
-
-  // Alt+V (GlobalKeyboardShortcuts, mounted in AppLayout) fans this event out
-  // to every page hosting a composer. It cooperates with the rail shortcut:
-  // switching away from voice keeps its mounted session alive, while closing
-  // the sidebar tears that session down just as the old standalone panel did.
-  useEffect(() => {
-    window.addEventListener(VOICE_TOGGLE_EVENT, toggleVoiceAgent);
-    return () => window.removeEventListener(VOICE_TOGGLE_EVENT, toggleVoiceAgent);
-  }, [toggleVoiceAgent]);
-
-  // Owned here rather than in GlobalKeyboardShortcuts because the rail is this
-  // page's state — the same way DesktopSidebar owns its own toggle. Deliberately
-  // not gated on isKeyboardShortcutBlocked: toggling chrome should still work
-  // while the composer has focus.
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (!matchesPrimaryShortcut(e, SHORTCUTS.rightPanel)) return;
-      e.preventDefault();
-      toggleActionItems();
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [toggleActionItems]);
-
-  const submit = async () => {
-    setSubmitting(true); setError(undefined);
-    try {
-      if (replyMode && selected) await repo.agentRuns.respond({ eventId: event.id, runId: selected.run.id, message: value, idempotencyKey: newKey() });
-      else { const created = await repo.agentRuns.create({ eventId: event.id, objective: value, idempotencyKey: newKey() }); setParams({ run: created.runId }); }
-      setValue("");
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not submit this run."); } finally { setSubmitting(false); }
-  };
 
   // `.data` is `undefined` until a query resolves, which is not the same thing
   // as "this event has nothing". Collapsing both into `[]` is what made an event
@@ -332,18 +154,7 @@ export default function DashboardHome() {
   ];
 
   const sidebarDetail = (
-    <Tabs value={sidebarTab} onValueChange={(tab) => {
-      if (tab === "voice-agent") {
-        if (busy) return;
-        setVoiceOpen(true);
-      }
-      setSidebarTab(tab as SidebarTab);
-    }} className="flex h-full min-h-0 flex-col">
-      <TabsList aria-label="Dashboard sidebar">
-        <TabsTrigger value="action-items">Action items</TabsTrigger>
-        <TabsTrigger value="voice-agent">Voice agent</TabsTrigger>
-      </TabsList>
-      <TabsContent value="action-items" className="mt-3 space-y-1.5">
+    <div className="space-y-1.5" aria-label="Dashboard quick access">
         {cfpCount === 0 && !dataPending && (
           <RailSection title="Start here" storageKey="namos-dashboard-rail-setup">
             <div className="space-y-0.5">
@@ -351,7 +162,6 @@ export default function DashboardHome() {
                 <Link key={step.to} to={step.to} className={cn(RAIL_ROW, "gap-2")}>
                   <step.icon className="h-4 w-4 shrink-0 text-muted-foreground" />
                   <p className="min-w-0 flex-1 truncate text-xs font-medium">{step.label}</p>
-                  <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 </Link>
               ))}
             </div>
@@ -363,7 +173,6 @@ export default function DashboardHome() {
               <Link key={`${item.to}-${index}`} to={item.to} className={cn(RAIL_ROW, "gap-2")}>
                 <item.icon className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <p className="min-w-0 flex-1 truncate text-xs font-medium">{item.label}</p>
-                <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               </Link>
             ))}
           </div>
@@ -385,153 +194,17 @@ export default function DashboardHome() {
                 <Link key={item.to} to={item.to} className={cn(RAIL_ROW, "gap-2")}>
                   <item.icon className="h-4 w-4 text-muted-foreground" />
                   <p className="min-w-0 flex-1 truncate text-xs font-medium">{item.label}</p>
-                  <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
                 </Link>
               ))}
             </div>
           ) : <p className="px-2 py-3 text-xs text-muted-foreground">{dataPending ? "Checking…" : "Nothing outstanding."}</p>}
         </RailSection>
-      </TabsContent>
-      {voiceOpen && (
-        <TabsContent
-          value="voice-agent"
-          forceMount
-          className={cn("mt-3 min-h-0 flex-1", sidebarTab !== "voice-agent" && "hidden")}
-        >
-          <VoiceSessionPanel eventId={event.id} onClose={closeSidebar} />
-        </TabsContent>
-      )}
-    </Tabs>
+    </div>
   );
 
-  if (access.error?.message.includes("Convex backend")) return <AppLayout title="Program Control Room"><p className="text-sm text-muted-foreground">The Program Control Room currently requires the Convex backend.</p></AppLayout>;
-
-  return <AppLayout title="Program Control Room" utility={railCollapsed ? undefined : sidebarDetail}><div className="h-full min-h-0 flex flex-col gap-1.5 overflow-hidden">
-    <div className="min-h-0 flex-1 flex gap-2 overflow-hidden">
-
-      {/* Center: agent chat — the page's card surface, on the page background.
-          AppLayout no longer paints one behind it (#171). */}
-      <Card className="flex-1 min-w-0 flex flex-col overflow-hidden rounded-xl">
-        <div className="shrink-0 flex items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-1">
-            <AgentHistoryPopover runs={history.data ?? []} selectedRunId={selectedRunId ?? undefined} onSelect={(runId) => setParams({ run: runId })} isLoading={history.isLoading} />
-            <button
-              type="button"
-              onClick={() => setParams({})}
-              className={cn("inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium text-muted-foreground transition-colors", "hover:bg-muted hover:text-foreground")}
-              title="New chat"
-            >
-              New
-            </button>
-          </div>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={toggleActionItems}
-                aria-label={railCollapsed ? "Show quick access" : "Hide quick access"}
-                aria-pressed={!railCollapsed}
-                className={cn("compact-hit-target inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors", "hover:bg-muted hover:text-foreground")}
-              >
-                <PanelRight className="h-4 w-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p className="text-xs">{railCollapsed ? "Show" : "Hide"} quick access · {formatShortcut(SHORTCUTS.rightPanel).join("")}</p>
-            </TooltipContent>
-          </Tooltip>
-        </div>
-        <div className="flex-1 overflow-y-auto px-3 py-3">
-          {selectedRunId ? (
-            <AgentTimeline events={selected?.events ?? []} isLoading={detail.isLoading} />
-          ) : <ProgramControlRoom state={controlRoom.data} loading={controlRoom.isLoading} error={controlRoom.error?.message} />}
-        </div>
-        {/* Render unless access is *definitively* denied. `agentRuns.canUse` is a reactive
-            subscription, and this app's reactive transport has a known, still-unresolved
-            defect where a subscription can stay unresolved indefinitely (see #211/#217 and
-            the note in VoiceChatButton.tsx) — the socket drops roughly every 60s and heavy
-            subscription sets never finish syncing. Gating on truthiness meant an unresolved
-            gate removed the entire composer — text input, dictation, voice chat, send — from
-            the dashboard with no way to ever get it back, which is exactly what shipped.
-            `undefined` now means "show it": this is a UI affordance, not a security boundary.
-            Every mutation behind it still calls assertEventOrganizerAccess server-side, so a
-            user who genuinely lacks access gets a real error on submit instead of a blank page. */}
-        {selectedRunId && access.data !== false && (
-          <div className="p-3">
-            <form onSubmit={(e) => { e.preventDefault(); if (!busy && value.trim()) void submit(); }} className="mx-auto w-full">
-              {/* The field is defined by background contrast, not a border. The
-                  focus-within intensifier lives on the inner wrapper so the
-                  surface itself stays a plain Card. */}
-              <Card variant="muted" className="overflow-hidden rounded-xl">
-                <div className="transition-colors focus-within:bg-muted">
-                <div className="px-4 pb-2 pt-3.5">
-                  <Textarea
-                    ref={textareaRef}
-                    value={value}
-                    onChange={(e) => { setValue(e.target.value); e.target.style.height = "auto"; e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`; }}
-                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (!busy && value.trim()) void submit(); } }}
-                    placeholder={replyMode ? "Answer the agent's question" : "Ask anything..."}
-                    rows={1}
-                    disabled={busy}
-                    className="min-h-[28px] max-h-[160px] resize-none rounded-none bg-transparent px-0 py-0 leading-6 placeholder:text-muted-foreground/45 focus-visible:bg-transparent"
-                  />
-                </div>
-                {/* One row, inside the field: sources → skills → voice → depth on
-                    the left; how you talk to it plus send on the right. */}
-                <div className="flex items-center justify-between gap-2 px-2.5 pb-2.5">
-                  <div className="flex min-w-0 items-center gap-1">
-                    <ComposerStub icon={Layers3} label="Sources" />
-                    <ComposerStub icon={Puzzle} label="Skills" />
-                    <ComposerStub icon={PenLine} label="Voice guide" />
-                    <DepthSelect value={depth} onChange={setDepth} />
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          onClick={() => void (dictation.isRecording ? dictation.stop() : dictation.start())}
-                          disabled={busy || !dictation.isSupported || dictation.isProcessing}
-                          aria-label={dictation.isRecording ? "Stop dictation" : "Dictation"}
-                          className={cn("compact-hit-target inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors", "hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40", dictation.isRecording && "bg-destructive/10 text-destructive animate-pulse")}
-                        >
-                          {dictation.isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : dictation.isRecording ? <Square className="h-3 w-3 fill-current" /> : <Mic className="h-4 w-4" />}
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent><p className="text-xs">{!dictation.isSupported ? "Dictation requires microphone access in this browser" : dictation.isRecording ? "Stop dictation" : "Dictate"}</p></TooltipContent>
-                    </Tooltip>
-                    <VoiceChatButton eventId={event.id} disabled={busy} onOpen={toggleVoiceAgent} />
-                    {running ? (
-                      <button
-                        type="button"
-                        onClick={() => { if (selected) void repo.agentRuns.cancel({ eventId: event.id, runId: selected.run.id }); }}
-                        className="compact-hit-target ml-0.5 inline-flex h-8 w-8 items-center justify-center rounded-full bg-foreground text-background transition-opacity"
-                        aria-label="Stop"
-                        title="Stop"
-                      >
-                        <Square className="h-3 w-3 fill-current" />
-                      </button>
-                    ) : (
-                      <button
-                        type="submit"
-                        disabled={busy || !value.trim()}
-                        className="compact-hit-target ml-0.5 inline-flex h-8 w-8 items-center justify-center rounded-full bg-foreground text-background transition-opacity disabled:cursor-not-allowed disabled:opacity-25"
-                        aria-label="Send"
-                        title="Send"
-                      >
-                        <ArrowUp className="h-4 w-4" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-                </div>
-              </Card>
-              {error && <p role="alert" className="mt-1 px-1 text-xs text-destructive">{error}</p>}
-            </form>
-          </div>
-        )}
-      </Card>
-
-    </div>
-  </div></AppLayout>;
+  return (
+    <AppLayout title="Program Control Room" utility={sidebarDetail} contentVariant="conversation">
+      <AgentWorkspace />
+    </AppLayout>
+  );
 }

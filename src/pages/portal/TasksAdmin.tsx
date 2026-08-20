@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, ClipboardList, Search } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
@@ -18,11 +19,9 @@ import {
 } from "@/components/ui/select";
 import { useRepo } from "@/data/repo";
 import type {
-  EventId,
   OnboardingTask as StoredOnboardingTask,
   Sponsor,
   Submission,
-  SubmissionForm,
   TaskTemplate,
 } from "@/data/types";
 import { canTransitionTask, type TaskStatus } from "@/lib/task-status";
@@ -38,10 +37,6 @@ type OnboardingTask = {
   status: TaskStatus;
   dueLabel?: string;
 };
-type PortalForm = SubmissionForm & {
-  kind?: "contact" | "group" | "submission_task";
-};
-
 const targetLabels: Record<TaskTarget, string> = {
   contact: "Contact Tasks",
   group: "Group Tasks",
@@ -93,17 +88,12 @@ function taskForDisplay(
 export default function TasksAdmin() {
   const repo = useRepo();
   const { event: activeEvent } = useCurrentEvent();
+  const navigate = useNavigate();
   const [tasks, setTasks] = useState<OnboardingTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string>();
   const [tab, setTab] = useState<"all" | TaskTarget>("all");
   const [query, setQuery] = useState("");
-  const [addOpen, setAddOpen] = useState(false);
-  const [eventId, setEventId] = useState<EventId>();
-  const [newTitle, setNewTitle] = useState("");
-  const [newTarget, setNewTarget] = useState<TaskTarget>("submission");
-  const [portalForms, setPortalForms] = useState<PortalForm[]>([]);
-  const [linkedFormId, setLinkedFormId] = useState("none");
   const [saving, setSaving] = useState(false);
   const [copyOpen, setCopyOpen] = useState(false);
   const [templates, setTemplates] = useState<TaskTemplate[]>([]);
@@ -112,7 +102,7 @@ export default function TasksAdmin() {
   const [copySubmissionId, setCopySubmissionId] = useState("");
   const [copyResult, setCopyResult] = useState<string>();
   const [sponsors, setSponsors] = useState<Sponsor[]>([]);
-  const [sponsorId, setSponsorId] = useState("none");
+  const listPath = activeEvent ? `/events/${activeEvent.slug}/portals/tasks` : "";
 
   const counts = useMemo(
     () => ({
@@ -139,30 +129,19 @@ export default function TasksAdmin() {
     setLoadError(undefined);
     try {
       const event = activeEvent;
-      setEventId(event?.id);
       if (!event) {
         setTasks([]);
-        setPortalForms([]);
         return;
       }
-      const [eventTasks, forms, nextTemplates, nextSubmissions, nextSponsors] =
+      const [eventTasks, nextTemplates, nextSubmissions, nextSponsors] =
         await Promise.all([
           repo.tasks.list({ eventId: event.id }),
-          repo.forms.list({ eventId: event.id }),
           repo.taskTemplates.list({ eventId: event.id }),
           repo.submissions.list({ eventId: event.id }),
           repo.sponsors.list({ eventId: event.id }),
         ]);
       setSponsors(nextSponsors);
       setTasks(eventTasks.map((task) => taskForDisplay(task, nextSponsors)));
-      setPortalForms(
-        (forms as PortalForm[]).filter(
-          (form) =>
-            form.kind === "contact" ||
-            form.kind === "group" ||
-            form.kind === "submission_task",
-        ),
-      );
       setTemplates(nextTemplates);
       setSubmissions(
         nextSubmissions.filter((submission) => submission.speakerIds.length),
@@ -183,48 +162,6 @@ export default function TasksAdmin() {
     void loadTasks();
   }, [loadTasks]);
 
-  const createTask = async () => {
-    const title = newTitle.trim();
-    if (!eventId) {
-      setLoadError("Configure an event before creating onboarding tasks.");
-      return;
-    }
-    if (!title) {
-      setLoadError("Enter a title for the task.");
-      return;
-    }
-    setSaving(true);
-    setLoadError(undefined);
-    try {
-      if (newTarget === "sponsor" && sponsorId === "none") {
-        setLoadError("Select a sponsor for this task.");
-        setSaving(false);
-        return;
-      }
-      await repo.tasks.create({
-        eventId,
-        title,
-        targetType: newTarget,
-        sponsorId: newTarget === "sponsor" ? (sponsorId as never) : undefined,
-        linkedFormId:
-          newTarget !== "sponsor" && linkedFormId !== "none"
-            ? (linkedFormId as never)
-            : undefined,
-      });
-      setNewTitle("");
-      setNewTarget("submission");
-      setLinkedFormId("none");
-      setSponsorId("none");
-      setAddOpen(false);
-      await loadTasks();
-    } catch (error) {
-      setLoadError(
-        error instanceof Error ? error.message : "Could not create this task.",
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
   const applyTemplate = async () => {
     if (!copyTemplateId || !copySubmissionId) return;
     setSaving(true);
@@ -270,12 +207,17 @@ export default function TasksAdmin() {
       header: "Task",
       kind: "row-header",
       cell: (task) => (
-        <div className="min-w-0">
+        <Button
+          type="button"
+          variant="ghost"
+          className="h-auto min-w-0 justify-start p-0 text-left hover:bg-transparent"
+          onClick={() => navigate(`${listPath}/${task.id}/edit`)}
+        >
           <p className="truncate font-semibold text-foreground">{task.title}</p>
           <p className="mt-0.5 text-xs font-normal text-muted-foreground">
             {task.source === "agent" ? "Operations Agent" : task.source === "manual" ? "Manual" : "Automatic"}
           </p>
-        </div>
+        </Button>
       ),
     },
     { key: "target", header: "Assigned to", width: "14rem", cell: (task) => <span className="text-muted-foreground">{task.targetLabel}</span> },
@@ -374,115 +316,6 @@ export default function TasksAdmin() {
             )}
           </section>
         )}
-        {addOpen && (
-          <section
-            className={cardSurfaceClasses("default", "p-5")}
-            aria-label="Add onboarding task"
-          >
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <h2 className="text-base font-semibold">Add task</h2>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setAddOpen(false)}
-              >
-                Close
-              </Button>
-            </div>
-            <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_12rem_14rem_auto] lg:items-end">
-              <div className="space-y-2">
-                <Label htmlFor="task-title">Task title</Label>
-                <Input
-                  id="task-title"
-                  value={newTitle}
-                  onChange={(event) => setNewTitle(event.target.value)}
-                  placeholder="e.g. Upload speaker headshot"
-                  disabled={saving}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="task-target">Target type</Label>
-                <Select
-                  value={newTarget}
-                  onValueChange={(value) => {
-                    setNewTarget(value as TaskTarget);
-                    setSponsorId("none");
-                  }}
-                  disabled={saving}
-                >
-                  <SelectTrigger id="task-target">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="contact">Contact</SelectItem>
-                    <SelectItem value="group">Group</SelectItem>
-                    <SelectItem value="submission">Submission</SelectItem>
-                    <SelectItem value="sponsor">Sponsor</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {newTarget === "sponsor" ? (
-                <div className="space-y-2">
-                  <Label htmlFor="task-sponsor">Sponsor</Label>
-                  <Select
-                    value={sponsorId}
-                    onValueChange={setSponsorId}
-                    disabled={saving}
-                  >
-                    <SelectTrigger id="task-sponsor">
-                      <SelectValue placeholder="Choose sponsor" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Choose sponsor</SelectItem>
-                      {sponsors.map((sponsor) => (
-                        <SelectItem key={sponsor.id} value={sponsor.id}>
-                          {sponsor.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <Label htmlFor="task-portal-form">
-                    Linked portal form{" "}
-                    <span className="text-muted-foreground">(optional)</span>
-                  </Label>
-                  <Select
-                    value={linkedFormId}
-                    onValueChange={setLinkedFormId}
-                    disabled={saving}
-                  >
-                    <SelectTrigger id="task-portal-form">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No form linked</SelectItem>
-                      {portalForms.map((form) => (
-                        <SelectItem key={form.id} value={form.id}>
-                          {form.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void createTask()}
-                disabled={saving || !eventId}
-              >
-                {saving ? "Creating…" : "Create task"}
-              </Button>
-            </div>
-          </section>
-        )}
-
         {loadError && (
           <p role="alert" className="text-sm text-destructive">
             {loadError}
@@ -522,7 +355,6 @@ export default function TasksAdmin() {
                 size="sm"
                 onClick={() => {
                   setCopyOpen((open) => !open);
-                  setAddOpen(false);
                 }}
               >
                 Copy from…
@@ -533,10 +365,8 @@ export default function TasksAdmin() {
                 type="button"
                 variant="accent"
                 size="sm"
-                onClick={() => {
-                  setAddOpen((open) => !open);
-                  setCopyOpen(false);
-                }}
+                onClick={() => navigate(`${listPath}/new`)}
+                disabled={!activeEvent}
               >
                 Add
               </Button>
@@ -552,7 +382,7 @@ export default function TasksAdmin() {
               icon={ClipboardList}
               title={tasks.length ? "No tasks match this view" : "No tasks yet"}
               message={tasks.length ? "Clear the search or choose another task type." : "Add a task when onboarding work is ready."}
-              action={tasks.length ? <Button variant="outline" size="sm" onClick={() => { setQuery(""); setTab("all"); }}>Clear filters</Button> : <Button variant="accent" size="sm" onClick={() => setAddOpen(true)}>Add task</Button>}
+              action={tasks.length ? <Button variant="outline" size="sm" onClick={() => { setQuery(""); setTab("all"); }}>Clear filters</Button> : <Button variant="accent" size="sm" onClick={() => navigate(`${listPath}/new`)}>Add task</Button>}
             />
           }
           loading={loading}

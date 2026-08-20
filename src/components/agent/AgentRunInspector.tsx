@@ -159,7 +159,7 @@ export function AgentRunInspector({
       )}
       {run.status === "failed" && (
         <Button variant="outline" size="sm" onClick={() => void onRetry()}>
-          Retry run
+          Retry review
         </Button>
       )}
       {cancellable && (

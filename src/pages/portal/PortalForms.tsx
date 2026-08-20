@@ -1,13 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Copy, LockKeyhole, Plus, Search, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Copy, Eye, GripVertical, LockKeyhole, MoreHorizontal, Plus, Search, Trash2 } from "lucide-react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { RichTextEditor } from "@/components/editor/RichTextEditor";
 import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { TemplateGallery } from "@/components/forms/TemplateGallery";
+import { FieldInspector } from "@/components/forms/FieldInspector";
+import { FormPreviewHost } from "@/components/forms/FormPreviewHost";
+import { PagesRail } from "@/components/forms/PagesRail";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
 import { FormField } from "@/components/shared/FormField";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
+import { cardSurfaceClasses } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   Popover,
@@ -17,9 +28,8 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { SkeletonList } from "@/components/shared/SkeletonList";
 import { FilterMenu } from "@/components/shared/StatusTabs";
-import { WizardShell } from "@/components/shared/WizardShell";
 import { useRepo } from "@/data/repo";
-import type { Event, FieldDefinition, SubmissionForm } from "@/data/types";
+import type { Event, FieldDefinition, FormPage, PublicSubmissionFormConfig, SubmissionForm } from "@/data/types";
 
 type PortalFormKind = "contact" | "group" | "submission_task";
 type PortalField = {
@@ -30,6 +40,7 @@ type PortalField = {
   required?: boolean;
   maxChars?: number;
   options?: string[];
+  showIf?: { fieldId: string; equals: string };
 };
 type PortalForm = {
   id?: string;
@@ -37,6 +48,7 @@ type PortalForm = {
   title: string;
   kind: PortalFormKind;
   fields: PortalField[];
+  pages: FormPage[];
   sectionTitle: string;
   instructions: string;
   sendConfirmationEmail: boolean;
@@ -49,8 +61,10 @@ type StoredForm = SubmissionForm & {
   kind?: PortalFormKind;
   version?: number;
   sections?: {
+    id?: string;
     key: string;
     title: string;
+    pageHeading?: string;
     description?: string;
     fieldIds: string[];
   }[];
@@ -96,6 +110,7 @@ const newForm = (): PortalForm => ({
   title: "",
   kind: "contact",
   fields: [],
+  pages: [{ id: "portal", kind: "custom", label: "Form questions", pageHeading: "Form", fieldIds: [] }],
   sectionTitle: "Form questions",
   instructions: "",
   sendConfirmationEmail: true,
@@ -103,6 +118,32 @@ const newForm = (): PortalForm => ({
     "<p>Thank you for submitting your form. Here is a link to your submission.</p>",
   version: 1,
 });
+
+export function PortalFormsEmptyState({
+  onChooseTemplate,
+  onStartBlank,
+}: {
+  onChooseTemplate: () => void;
+  onStartBlank: () => void;
+}) {
+  return (
+    <EmptyState
+      icon={Plus}
+      title="Create your first portal form"
+      message="Choose a template to get started, or build a blank form."
+      action={
+        <>
+          <Button variant="accent" size="sm" onClick={onChooseTemplate}>
+            Choose a template
+          </Button>
+          <Button variant="outline" size="sm" onClick={onStartBlank}>
+            Start blank
+          </Button>
+        </>
+      }
+    />
+  );
+}
 
 function FieldLibrary({
   fields,
@@ -130,12 +171,7 @@ function FieldLibrary({
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 space-y-3 p-3">
-        <div>
-          <p className="text-sm font-medium">Add form question</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Reuse a shared field or create a new one.
-          </p>
-        </div>
+        <p className="text-sm font-medium">Add question</p>
         <div className="grid grid-cols-2 gap-2">
           <Button
             type="button"
@@ -165,10 +201,11 @@ function FieldLibrary({
         </div>
         <div className="max-h-40 space-y-1 overflow-y-auto">
           {matches.map((field) => (
-            <button
+            <Button
               key={field.id}
               type="button"
-              className="w-full rounded-md px-3 py-2 text-left text-sm hover:bg-muted"
+              variant="ghost"
+              className="h-auto w-full justify-start px-3 py-2 text-left"
               onClick={() =>
                 onAdd({
                   ...field,
@@ -181,7 +218,7 @@ function FieldLibrary({
               <span className="text-xs text-muted-foreground">
                 {field.type}
               </span>
-            </button>
+            </Button>
           ))}
         </div>
       </PopoverContent>
@@ -189,8 +226,9 @@ function FieldLibrary({
   );
 }
 
-function FormEditor({
+export function PortalFormEditor({
   form,
+  event,
   library,
   saving,
   error,
@@ -198,6 +236,7 @@ function FormEditor({
   onCancel,
 }: {
   form: PortalForm;
+  event: Event;
   library: PortalField[];
   saving: boolean;
   error?: string;
@@ -205,19 +244,100 @@ function FormEditor({
   onCancel: () => void;
 }) {
   const [draft, setDraft] = useState(form);
-  const [step, setStep] = useState(0);
+  const [activePageId, setActivePageId] = useState(form.pages[0]?.id ?? "portal");
+  const [selectedFieldId, setSelectedFieldId] = useState<string>();
+  const [editingPageIntro, setEditingPageIntro] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
   const update = <K extends keyof PortalForm>(key: K, value: PortalForm[K]) =>
     setDraft((current) => ({ ...current, [key]: value }));
   const valid = Boolean(draft.name.trim() && draft.title.trim());
+  const activePage = draft.pages.find((page) => page.id === activePageId) ?? draft.pages[0];
+  const activeFields = (activePage?.fieldIds ?? []).flatMap((id) => {
+    const field = draft.fields.find((candidate) => candidate.id === id);
+    return field ? [field] : [];
+  });
+  const updatePage = (id: string, patch: Partial<FormPage>) => update("pages", draft.pages.map((page) => page.id === id ? { ...page, ...patch } : page));
+  const updateField = (id: string, patch: Partial<PortalField>) =>
+    update("fields", draft.fields.map((field) => field.id === id ? { ...field, ...patch } : field));
+  const previewConfig: PublicSubmissionFormConfig = {
+    event: { name: event.name, slug: event.slug, timezone: event.timezone, startDate: event.startDate, endDate: event.endDate, ...(event.accentColor ? { accentColor: event.accentColor } : {}) },
+    form: { externalTitle: draft.title, pageHeading: "Form", kind: draft.kind, collectParticipants: false, showWelcomeMessage: false, pages: draft.pages.map((page) => ({ ...page, fieldKeys: page.fieldIds })), sections: [], participantRoles: [], crossFieldLimits: [], allowMultipleDrafts: false, autoRedirectToPortal: false, confirmationEnabled: draft.sendConfirmationEmail, fields: draft.fields.map((field) => ({ key: field.id, label: field.label, type: toStoredType(field.type), required: Boolean(field.required), ...(field.maxChars ? { maxChars: field.maxChars } : {}), ...(field.options ? { options: field.options } : {}), ...(field.showIf ? { showIf: { fieldKey: field.showIf.fieldId, equals: field.showIf.equals } } : {}) })) },
+  };
+  const addPage = () => {
+    const page = { id: `page-${Date.now()}`, kind: "custom" as const, label: "New page", pageHeading: "New page", fieldIds: [] };
+    update("pages", [...draft.pages, page]);
+    setActivePageId(page.id);
+    setSelectedFieldId(undefined);
+    setEditingPageIntro(false);
+  };
+  const duplicatePage = (id: string) => {
+    const source = draft.pages.find((page) => page.id === id);
+    if (!source) return;
+    const sourceFields = source.fieldIds.flatMap((fieldId) => {
+      const field = draft.fields.find((candidate) => candidate.id === fieldId);
+      return field ? [field] : [];
+    });
+    const clonedIds = new Map(sourceFields.flatMap((field, index) => {
+      const nextId = `field-${Date.now()}-${index}`;
+      return [[field.id, nextId], ...(field.recordId ? [[field.recordId, nextId] as const] : [])];
+    }));
+    const copies = sourceFields.map((field) => ({
+      ...field,
+      id: clonedIds.get(field.id)!,
+      recordId: undefined,
+      showIf: field.showIf && clonedIds.has(field.showIf.fieldId)
+        ? { ...field.showIf, fieldId: clonedIds.get(field.showIf.fieldId)! }
+        : undefined,
+    }));
+    const page = { ...source, id: `page-${Date.now()}`, label: `${source.label} copy`, fieldIds: copies.map((field) => field.id) };
+    update("fields", [...draft.fields, ...copies]);
+    update("pages", [...draft.pages, page]);
+    setActivePageId(page.id);
+    setSelectedFieldId(copies[0]?.id);
+    setEditingPageIntro(false);
+  };
+  const removePage = (id: string) => {
+    if (draft.pages.length === 1) return;
+    const page = draft.pages.find((candidate) => candidate.id === id);
+    const remaining = draft.pages.filter((candidate) => candidate.id !== id);
+    update("pages", remaining);
+    update("fields", draft.fields.filter((field) => !page?.fieldIds.includes(field.id)));
+    setActivePageId(remaining[0]?.id ?? "");
+    setSelectedFieldId(undefined);
+    setEditingPageIntro(false);
+  };
+  const movePage = (id: string, direction: "up" | "down") => {
+    const index = draft.pages.findIndex((page) => page.id === id);
+    const target = direction === "up" ? index - 1 : index + 1;
+    if (index < 0 || target < 0 || target >= draft.pages.length) return;
+    const pages = [...draft.pages];
+    [pages[index], pages[target]] = [pages[target], pages[index]];
+    update("pages", pages);
+  };
+  const moveField = (id: string, direction: "up" | "down") => {
+    if (!activePage) return;
+    const index = activePage.fieldIds.indexOf(id);
+    const target = direction === "up" ? index - 1 : index + 1;
+    if (index < 0 || target < 0 || target >= activePage.fieldIds.length) return;
+    const fieldIds = [...activePage.fieldIds];
+    [fieldIds[index], fieldIds[target]] = [fieldIds[target], fieldIds[index]];
+    updatePage(activePage.id, { fieldIds });
+  };
+  const selectedField = activeFields.find((field) => field.id === selectedFieldId);
+  const inspectorField = selectedField ? { ...selectedField, type: toStoredType(selectedField.type) } : null;
+  const conditionSources = activeFields
+    .filter((field) => field.id !== selectedFieldId && field.type === "select" && field.options?.length)
+    .map((field) => ({ ...field, recordId: field.recordId ?? field.id, type: toStoredType(field.type) }));
   return (
     <div className="space-y-4">
       <ContentToolbar
         ariaLabel="Portal form actions"
-        utilities={
-          <Button type="button" variant="outline" size="sm" onClick={onCancel}>
-            Cancel
+        utilities={<>
+          <Button type="button" variant="outline" size="sm" aria-pressed={previewing} onClick={() => setPreviewing((current) => !current)}>
+            <Eye className="h-4 w-4" /> {previewing ? "Back to editor" : "Preview"}
           </Button>
-        }
+          <Button type="button" variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
+        </>}
         primaryAction={
           <Button
             type="button"
@@ -235,21 +355,17 @@ function FormEditor({
           {error}
         </p>
       )}
-      <WizardShell
-        steps={[
-          { id: "setup", label: "Form setup" },
-          { id: "questions", label: "Form questions" },
-          { id: "settings", label: "Settings" },
-        ]}
-        activeStep={step}
-        onStepChange={setStep}
-        onBack={() => setStep((current) => Math.max(0, current - 1))}
-        onNext={() =>
-          step < 2 ? setStep((current) => current + 1) : onSave(draft)
-        }
-      >
-        {step === 0 ? (
-          <div className="space-y-6">
+      {previewing ? (
+        <div className="min-h-[calc(100dvh-11rem)]"><FormPreviewHost config={previewConfig} /></div>
+      ) : (
+      <div className="grid min-h-[calc(100dvh-11rem)] gap-4 lg:grid-cols-[18rem_minmax(0,1fr)] min-[1180px]:grid-cols-[18rem_minmax(30rem,1fr)_24rem]">
+        <aside className={cardSurfaceClasses("default", "h-fit p-3 lg:sticky lg:top-4")}>
+          <PagesRail pages={draft.pages} activePageId={activePageId} fieldCountByPageId={Object.fromEntries(draft.pages.map((page) => [page.id, page.fieldIds.length]))} onSelect={(id) => { setActivePageId(id); setSelectedFieldId(draft.pages.find((page) => page.id === id)?.fieldIds[0]); setEditingPageIntro(false); }} onAdd={addPage} onDuplicate={duplicatePage} onRemove={removePage} onRename={(id, label) => updatePage(id, { label })} onMove={movePage} />
+          <Button type="button" variant={activePageId === "" ? "muted" : "ghost"} className="mt-3 w-full justify-start" onClick={() => { setActivePageId(""); setSelectedFieldId(undefined); setEditingPageIntro(false); }}>Form settings</Button>
+        </aside>
+        <section className={cardSurfaceClasses("default", "min-w-0 overflow-hidden p-5 sm:p-7")}>
+          {!activePage ? <div className="mx-auto max-w-2xl space-y-6">
+            <h2 className="text-xl font-semibold tracking-tight">Form settings</h2>
             <FormField label="Name *">
               <Input
                 value={draft.name}
@@ -262,135 +378,65 @@ function FormEditor({
                 onChange={(event) => update("title", event.target.value)}
               />
             </FormField>
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Portal form type">
               {kinds.map((kind) => (
-                <button
+                <Button
                   key={kind}
                   type="button"
+                  variant={draft.kind === kind ? "muted" : "ghost"}
+                  role="radio"
+                  aria-checked={draft.kind === kind}
                   onClick={() => update("kind", kind)}
-                  className={
-                    draft.kind === kind
-                      ? cardSurfaceClasses("default", "bg-muted p-4 text-left")
-                      : "rounded-lg bg-background p-4 text-left hover:bg-muted/70"
-                  }
+                  className="h-auto items-start justify-start p-3 text-left"
                 >
-                  <p className="font-semibold">{kindCopy[kind].label}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {kindCopy[kind].description}
-                  </p>
-                </button>
+                  <span><span className="block font-semibold">{kindCopy[kind].label}</span><span className="mt-1 block whitespace-normal text-xs font-normal text-muted-foreground">{kindCopy[kind].description}</span></span>
+                </Button>
               ))}
             </div>
-          </div>
-        ) : step === 1 ? (
-          <div className="space-y-6">
-            <FormField label="Section title">
-              <Input
-                value={draft.sectionTitle}
-                onChange={(event) => update("sectionTitle", event.target.value)}
-              />
-            </FormField>
-            <FormField label="Description & instructions">
-              <RichTextEditor
-                value={draft.instructions}
-                onChange={(value) => update("instructions", value)}
-              />
-            </FormField>
             <div className="flex items-center justify-between">
-              <div>
-                <h2 className="font-semibold">Form questions</h2>
-                <p className="text-sm text-muted-foreground">
-                  Add shared fields so they stay available in both form
-                  builders.
-                </p>
-              </div>
-              <FieldLibrary
-                fields={library}
-                onAdd={(field) => update("fields", [...draft.fields, field])}
-              />
+              <span className="text-sm font-medium">Confirmation email</span>
+              <Switch checked={draft.sendConfirmationEmail} onCheckedChange={(value) => update("sendConfirmationEmail", value)} />
             </div>
-            <div className="space-y-3">
-              {draft.fields.map((field) => (
+            {draft.sendConfirmationEmail && <FormField label="Confirmation email body"><RichTextEditor value={draft.confirmationBody} onChange={(value) => update("confirmationBody", value)} /></FormField>}
+          </div> : <div className="mx-auto w-full max-w-3xl space-y-7">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Page</p><h2 className="mt-1 truncate text-xl font-semibold tracking-tight">{activePage.label}</h2></div>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setEditingPageIntro((current) => !current)}>{editingPageIntro ? "Done" : "Edit intro"}</Button>
+            </div>
+            {editingPageIntro && <div className="space-y-4"><FormField label="Page heading"><Input value={activePage.pageHeading} onChange={(event) => updatePage(activePage.id, { pageHeading: event.target.value })} /></FormField><FormField label="Description"><RichTextEditor value={activePage.description ?? ""} onChange={(value) => updatePage(activePage.id, { description: value })} /></FormField></div>}
+            <section className="space-y-3">
+              <div className="flex items-center justify-between"><h3 className="text-sm font-semibold">Questions</h3><FieldLibrary fields={library} onAdd={(field) => { update("fields", [...draft.fields, field]); updatePage(activePage.id, { fieldIds: [...activePage.fieldIds, field.id] }); setSelectedFieldId(field.id); }} /></div>
+              <div className="space-y-2">
+              {activeFields.map((field, index) => (
                 <div
                   key={field.id}
-                  className="flex flex-wrap items-center gap-3 rounded-lg bg-background p-4"
+                  draggable
+                  onDragStart={(event) => event.dataTransfer.setData("text/plain", field.id)}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    const sourceId = event.dataTransfer.getData("text/plain");
+                    const sourceIndex = activePage.fieldIds.indexOf(sourceId);
+                    if (sourceIndex < 0 || sourceIndex === index) return;
+                    const fieldIds = [...activePage.fieldIds];
+                    const [moved] = fieldIds.splice(sourceIndex, 1);
+                    fieldIds.splice(index, 0, moved);
+                    updatePage(activePage.id, { fieldIds });
+                  }}
+                  className={`flex min-h-14 items-center gap-2 rounded-md px-2 py-1.5 ${selectedFieldId === field.id ? "bg-primary/10 text-primary" : "bg-background hover:bg-muted/70"}`}
                 >
-                  <LockKeyhole className="h-4 w-4 text-muted-foreground" />
-                  <Input
-                    className="min-w-40 flex-1"
-                    value={field.label}
-                    onChange={(event) =>
-                      update(
-                        "fields",
-                        draft.fields.map((item) =>
-                          item.id === field.id
-                            ? { ...item, label: event.target.value }
-                            : item,
-                        ),
-                      )
-                    }
-                  />
-                  <label className="flex items-center gap-2 text-sm">
-                    Required{" "}
-                    <Switch
-                      checked={Boolean(field.required)}
-                      onCheckedChange={(required) =>
-                        update(
-                          "fields",
-                          draft.fields.map((item) =>
-                            item.id === field.id ? { ...item, required } : item,
-                          ),
-                        )
-                      }
-                    />
-                  </label>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    aria-label={`Remove ${field.label}`}
-                    onClick={() =>
-                      update(
-                        "fields",
-                        draft.fields.filter((item) =>
-                          item.id === field.id ? false : true,
-                        ),
-                      )
-                    }
-                  >
-                    <Trash2 />
-                  </Button>
+                  <GripVertical className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  <button type="button" aria-label={`Edit ${field.label || "untitled field"}`} className="min-w-0 flex-1 rounded-sm px-2 py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => setSelectedFieldId(field.id)}><span className="block truncate text-sm font-medium">{field.label || "Untitled field"}</span><span className="block text-xs text-muted-foreground">{field.type}</span></button>
+                  {field.required && <span className="hidden rounded bg-muted px-2 py-1 text-xs text-muted-foreground sm:inline">Required</span>}
+                  <DropdownMenu><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon" aria-label={`Actions for ${field.label}`}><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-40"><DropdownMenuItem disabled={index === 0} onSelect={() => moveField(field.id, "up")}><ArrowUp className="mr-2 h-4 w-4" />Move up</DropdownMenuItem><DropdownMenuItem disabled={index === activeFields.length - 1} onSelect={() => moveField(field.id, "down")}><ArrowDown className="mr-2 h-4 w-4" />Move down</DropdownMenuItem><DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => { update("fields", draft.fields.filter((item) => item.id !== field.id)); updatePage(activePage.id, { fieldIds: activePage.fieldIds.filter((fieldId) => fieldId !== field.id) }); if (selectedFieldId === field.id) setSelectedFieldId(undefined); }}><Trash2 className="mr-2 h-4 w-4" />Remove</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
                 </div>
               ))}
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between rounded-lg bg-background p-4">
-              <div>
-                <p className="font-semibold">Send Confirmation Email</p>
-                <p className="text-sm text-muted-foreground">
-                  Send speakers a copy after they submit this form.
-                </p>
               </div>
-              <Switch
-                checked={draft.sendConfirmationEmail}
-                onCheckedChange={(value) =>
-                  update("sendConfirmationEmail", value)
-                }
-              />
-            </div>
-            {draft.sendConfirmationEmail && (
-              <FormField label="Confirmation email body">
-                <RichTextEditor
-                  value={draft.confirmationBody}
-                  onChange={(value) => update("confirmationBody", value)}
-                />
-              </FormField>
-            )}
-          </div>
-        )}
-      </WizardShell>
+            </section>
+          </div>}
+        </section>
+        <aside className={cardSurfaceClasses("default", "h-fit p-5 lg:col-start-2 min-[1180px]:sticky min-[1180px]:top-4 min-[1180px]:col-start-3")} aria-label="Question inspector"><FieldInspector field={inspectorField as never} conditionSources={conditionSources as never} onChange={(patch) => { if (!selectedFieldId) return; const { type, showIf, ...rest } = patch; updateField(selectedFieldId, { ...rest, ...(type ? { type: toDynamicType(type) } : {}), ...(Object.prototype.hasOwnProperty.call(patch, "showIf") ? { showIf } : {}) }); }} onClose={() => setSelectedFieldId(undefined)} /></aside>
+      </div>)}
     </div>
   );
 }
@@ -398,6 +444,10 @@ function FormEditor({
 export default function PortalForms() {
   const repo = useRepo();
   const { event: activeEvent } = useCurrentEvent();
+  const { formId } = useParams();
+  const location = useLocation();
+  const creating = formId === "new" || location.pathname.endsWith("/new");
+  const navigate = useNavigate();
   const [event, setEvent] = useState<Event>();
   const [forms, setForms] = useState<PortalForm[]>([]);
   const [library, setLibrary] = useState<PortalField[]>([]);
@@ -434,13 +484,15 @@ export default function PortalForms() {
             required: field.required,
             maxChars: field.maxChars,
             options: field.options,
+            showIf: field.showIf,
           } satisfies PortalField,
         ]),
       );
       const portalForms = (storedForms as StoredForm[])
         .filter((form) => form.kind && kinds.includes(form.kind))
         .map((form) => {
-          const page = form.pages?.find((item) => item.kind === "custom");
+          const pages = form.pages?.filter((item) => item.kind === "custom") ?? [];
+          const page = pages[0];
           const section = form.sections?.find((item) => item.key === "portal");
           const settings = form.portalFormSettings;
           return {
@@ -448,7 +500,8 @@ export default function PortalForms() {
             name: form.internalName ?? form.name,
             title: form.externalTitle ?? form.name,
             kind: form.kind!,
-            fields: (page?.fieldIds ?? section?.fieldIds ?? []).flatMap((id) => byId.get(id) ?? []),
+            fields: [...new Map((pages.length ? pages.flatMap((item) => item.fieldIds) : section?.fieldIds ?? []).flatMap((id) => { const field = byId.get(id); return field ? [[id, field] as const] : []; })).values()],
+            pages: pages.length ? pages : [{ id: section?.id ?? "portal", kind: "custom" as const, label: section?.title ?? "Form questions", pageHeading: section?.pageHeading ?? "Form", description: section?.description, fieldIds: section?.fieldIds ?? [] }] as FormPage[],
             sectionTitle: page?.label ?? section?.title ?? "Form questions",
             instructions: page?.description ?? section?.description ?? "",
             sendConfirmationEmail: settings?.sendConfirmationEmail ?? true,
@@ -472,12 +525,22 @@ export default function PortalForms() {
   useEffect(() => {
     void load();
   }, [load]);
+  const listPath = activeEvent ? `/events/${activeEvent.slug}/portals/forms` : "/events";
+  useEffect(() => {
+    if ((!formId && !creating) || loading) return;
+    if (creating) {
+      if (!editing) setShowGallery(true);
+      return;
+    }
+    const match = forms.find((form) => form.id === formId);
+    if (match) setEditing(match);
+  }, [creating, editing, formId, forms, loading]);
   const save = async (form: PortalForm) => {
     if (!event) return;
     setSaving(true);
     setError(undefined);
     try {
-      const fields = await Promise.all(
+      const firstPassFields = await Promise.all(
         form.fields.map(async (field) => ({
           ...field,
           recordId: await repo.forms.saveField({
@@ -489,9 +552,34 @@ export default function PortalForms() {
             required: Boolean(field.required),
             maxChars: field.maxChars,
             options: field.options,
+            showIf: undefined,
           }),
         })),
       );
+      const persistedIds = new Map(firstPassFields.flatMap((field) => [
+        [field.id, field.recordId!],
+        ...(field.recordId ? [[field.recordId, field.recordId] as const] : []),
+      ]));
+      const fields = await Promise.all(firstPassFields.map(async (field) => {
+        const showIf = field.showIf && persistedIds.has(field.showIf.fieldId)
+          ? { ...field.showIf, fieldId: persistedIds.get(field.showIf.fieldId)! }
+          : undefined;
+        if (!showIf) return field;
+        await repo.forms.saveField({
+          eventId: event.id,
+          id: field.recordId,
+          label: field.label.trim() || "Untitled field",
+          type: toStoredType(field.type),
+          locked: false,
+          required: Boolean(field.required),
+          maxChars: field.maxChars,
+          options: field.options,
+          showIf,
+        });
+        return { ...field, showIf };
+      }));
+      const fieldIds = new Map(fields.map((field) => [field.id, field.recordId!]));
+      const pages = form.pages.map((page) => ({ ...page, fieldIds: page.fieldIds.flatMap((fieldId) => fieldIds.get(fieldId) ?? []) }));
       const id = await repo.forms.save({
         id: form.id,
         eventId: event.id,
@@ -502,24 +590,15 @@ export default function PortalForms() {
         kind: form.kind,
         collectParticipants: false,
         showWelcomeMessage: false,
-        pages: [
-          {
-            id: "portal",
-            kind: "custom" as const,
-            label: form.sectionTitle.trim() || "Form questions",
-            pageHeading: "Form",
-            description: form.instructions || undefined,
-            fieldIds: fields.map((field) => field.recordId!),
-          },
-        ],
+        pages,
         sections: [
           {
-            id: "portal",
+            id: pages[0]?.id ?? "portal",
             key: "portal",
-            title: form.sectionTitle.trim() || "Form questions",
-            pageHeading: "Form",
-            description: form.instructions || undefined,
-            fieldIds: fields.map((field) => field.recordId!),
+            title: pages[0]?.label.trim() || "Form questions",
+            pageHeading: pages[0]?.pageHeading || "Form",
+            description: pages[0]?.description || undefined,
+            fieldIds: pages[0]?.fieldIds ?? [],
           },
         ],
         participantRoles: [],
@@ -540,6 +619,7 @@ export default function PortalForms() {
       });
       setEditing(undefined);
       await load();
+      navigate(listPath);
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "Could not save portal form.",
@@ -591,6 +671,7 @@ export default function PortalForms() {
       throw new Error("The new form was created but could not be loaded.");
     setShowGallery(false);
     setEditing(created);
+    navigate(`${listPath}/${formId}/edit`, { replace: true });
   };
   const visible = useMemo(
     () => forms.filter((form) => tab === "all" || form.kind === tab),
@@ -609,13 +690,14 @@ export default function PortalForms() {
   if (editing)
     return (
       <AppLayout title={editing.id ? "Edit portal form" : "Create portal form"}>
-        <FormEditor
+        <PortalFormEditor
           form={editing}
+          event={event}
           library={library}
           saving={saving}
           error={error}
           onSave={save}
-          onCancel={() => setEditing(undefined)}
+          onCancel={() => { setEditing(undefined); navigate(listPath); }}
         />
       </AppLayout>
     );
@@ -676,7 +758,7 @@ export default function PortalForms() {
                   variant="accent"
                   size="sm"
                   disabled={!event}
-                  onClick={() => setShowGallery(true)}
+                  onClick={() => navigate(`${listPath}/new`)}
                 >
                   Add form
                 </Button>
@@ -739,7 +821,7 @@ export default function PortalForms() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => setEditing(form)}
+                        onClick={() => navigate(`${listPath}/${form.id}/edit`)}
                       >
                         Edit
                       </Button>
@@ -756,11 +838,9 @@ export default function PortalForms() {
                 ))}
               </div>
             ) : (
-              <EmptyState
-                icon={Plus}
-                title="No forms yet"
-                message="Create a form when you are ready to collect participant information."
-                action={<Button variant="accent" size="sm" onClick={() => setShowGallery(true)}>Add form</Button>}
+              <PortalFormsEmptyState
+                onChooseTemplate={() => setShowGallery(true)}
+                onStartBlank={() => setEditing(newForm())}
               />
             )}
           </>
@@ -769,4 +849,3 @@ export default function PortalForms() {
     </AppLayout>
   );
 }
-import { cardSurfaceClasses } from "@/components/ui/card";

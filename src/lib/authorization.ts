@@ -3,6 +3,12 @@
 // Error: Forbidden: …"). A surface that has a legitimate reduced view for non-organizers uses
 // this to fall back to that view instead of showing the failure as a page error.
 export function isForbiddenError(cause: unknown): boolean {
-  const message = cause instanceof Error ? cause.message : typeof cause === "string" ? cause : "";
+  const message = cause instanceof Error
+    ? cause.message
+    : typeof cause === "string"
+      ? cause
+      : cause && typeof cause === "object" && "message" in cause && typeof cause.message === "string"
+        ? cause.message
+        : "";
   return /forbidden/i.test(message);
 }

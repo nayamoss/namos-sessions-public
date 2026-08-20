@@ -1,6 +1,8 @@
 "use node";
 
 import { createClerkClient } from "@clerk/backend";
+import { v } from "convex/values";
+import { internalAction } from "./_generated/server";
 
 export type ManagedAllowance = { planSlug: string; runLimit: number; tokenLimit: number; reserveTokens: number };
 
@@ -21,10 +23,6 @@ export async function resolveManagedAllowance(billingOwnerUserId: string): Promi
   const secretKey = process.env.CLERK_SECRET_KEY;
   if (!secretKey) throw new Error("Namos-managed AI billing is not configured.");
   const clerk = createClerkClient({ secretKey });
-  const user = await clerk.users.getUser(billingOwnerUserId);
-  if (user.privateMetadata.namosDemoRole === "organizer" && typeof user.privateMetadata.namosDemoWorkspaceId === "string") {
-    return { planSlug: "demo", runLimit: 3, tokenLimit: 30_000, reserveTokens: 10_000 };
-  }
   const subscription = await clerk.billing.getUserBillingSubscription(billingOwnerUserId);
   const item = subscription.subscriptionItems.find((candidate) => candidate.status === "active" && candidate.plan);
   const plan = item?.plan;
@@ -35,3 +33,9 @@ export async function resolveManagedAllowance(billingOwnerUserId: string): Promi
   if (!allowance) throw new Error("This Namos plan has no managed AI allowance configured.");
   return { planSlug: plan.slug, runLimit: allowance.runs, tokenLimit: allowance.tokens, reserveTokens: Math.min(allowance.tokens, allowance.perRunTokens) };
 }
+
+// V8 actions can use this narrow bridge instead of importing Clerk's Node runtime directly.
+export const resolve = internalAction({
+  args: { billingOwnerUserId: v.string() },
+  handler: async (_ctx, args) => resolveManagedAllowance(args.billingOwnerUserId),
+});

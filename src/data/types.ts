@@ -18,7 +18,7 @@ export type SubmissionStatus =
   | "maybe" | "decline_queue" | "declined" | "withdrawn";
 
 export type EventStatus = "draft" | "published" | "archived";
-export interface Event { id: EventId; name: string; slug: string; type?: string; websiteUrl?: string; location?: string; timezone: string; startDate: number; endDate: number; description?: string; contactEmail?: string; logoFileId?: string; programPublishedAt?: number; scheduleStartTime?: string; scheduleEndTime?: string; theme?: string; logoStorageKey?: string; accentColor?: string; backgroundStorageKey?: string; industry?: string; exhibitorsEnabled: boolean; sponsorsEnabled: boolean; defaultOnboardingTemplateId?: string; status: EventStatus; }
+export interface Event { id: EventId; name: string; slug: string; type?: string; websiteUrl?: string; location?: string; timezone: string; startDate: number; endDate: number; description?: string; contactEmail?: string; logoFileId?: string; programPublishedAt?: number; scheduleStartTime?: string; scheduleEndTime?: string; theme?: string; logoStorageKey?: string; accentColor?: string; backgroundStorageKey?: string; industry?: string; readinessCategories?: Array<"agenda_conflicts" | "speaker_confirmations" | "onboarding_tasks" | "proposal_decisions" | "comms_delivery">; exhibitorsEnabled: boolean; sponsorsEnabled: boolean; defaultOnboardingTemplateId?: string; status: EventStatus; }
 
 export type ApiScope = "events:read" | "submissions:read" | "submissions:write" | "speakers:read" | "agenda:read" | "tasks:read";
 export interface ApiKey { id: string; label: string; keyPrefix: string; scopes: ApiScope[]; createdAt: number; lastUsedAt?: number; revokedAt?: number; }
@@ -147,7 +147,7 @@ export interface AgendaItem { id: AgendaItemId; eventId: EventId; title: string;
 export interface SpeakerAgendaItem extends AgendaItem { roomName: string; trackName?: string; }
 export interface AgendaConflict { itemA: AgendaItemId; itemB: AgendaItemId; reason: "room_overlap" | "speaker_overlap" | "speaker_unavailable" | "track_overlap"; speakerId?: SpeakerId; }
 export interface AgendaPlacementConflict { reason: "room_overlap" | "speaker_overlap" | "speaker_unavailable" | "track_overlap"; blocking: boolean; message: string; }
-export interface OnboardingTask { id: TaskId; eventId: EventId; speakerId?: SpeakerId; submissionId?: SubmissionId; sponsorId?: SponsorId; linkedFormId?: FormId; targetType: "contact" | "group" | "submission" | "sponsor"; title: string; source: "manual" | "auto" | "agent"; status: "pending" | "in_progress" | "completed"; dueDate?: number; completedAt?: number; createdAt?: number; updatedAt?: number; }
+export interface OnboardingTask { id: TaskId; eventId: EventId; speakerId?: SpeakerId; submissionId?: SubmissionId; sponsorId?: SponsorId; linkedFormId?: FormId; targetType: "contact" | "group" | "submission" | "sponsor"; title: string; description?: string; source: "manual" | "auto" | "agent"; status: "pending" | "in_progress" | "completed"; dueDate?: number; completedAt?: number; createdAt?: number; updatedAt?: number; }
 export type AgentRunStatus = "queued" | "running" | "needs_input" | "needs_approval" | "completed" | "failed" | "cancelled";
 export type AgentProviderMode = "managed" | "bring_your_own";
 export interface AgentRun { id: AgentRunId; eventId: EventId; threadId?: string; requestedByUserId: string; objective: string; status: AgentRunStatus; model: string; providerMode?: AgentProviderMode; idempotencyKey: string; stepCount: number; maxSteps: number; inputTokens?: number; outputTokens?: number; finalSummary?: string; error?: string; startedAt?: number; completedAt?: number; createdAt: number; updatedAt: number; }
@@ -193,7 +193,7 @@ export interface Organizer { id: string; organizationId?: string; userId: string
 export interface Organization { id: string; name: string; createdByUserId: string; createdAt: number; }
 // Onboarding-captured personalization for any signed-in user — see schema.ts's `userProfiles`
 // comment for why this is separate from Organizer.
-export interface UserProfile { id: string; userId: string; displayName?: string; signupRole?: "solo" | "team"; referralSource?: string; updatedAt: number; }
+export interface UserProfile { id: string; userId: string; firstName?: string; lastName?: string; displayName?: string; signupRole?: "solo" | "team"; referralSource?: string; updatedAt: number; }
 export interface EventMember {
   id: string;
   eventId: EventId;
@@ -289,15 +289,55 @@ export interface ContentImportResult {
 }
 export type NotionImportResult = ContentImportResult;
 export type AirtableImportResult = ContentImportResult;
+export type SlackNotificationKind =
+  | "submission_received"
+  | "reviewer_assigned"
+  | "evaluation_completed"
+  | "decision_sent"
+  | "comms_delivery_failed";
+export interface SlackChannel {
+  id: string;
+  name: string;
+  isPrivate: boolean;
+  isMember: boolean;
+}
+export interface SlackChannelBindingInput {
+  eventId: EventId;
+  channelId: string;
+  agentEnabled: boolean;
+  notificationsEnabled: boolean;
+  notificationKinds: SlackNotificationKind[];
+}
+type SlackWorkspaceStatus = {
+  workspaceId: string;
+  teamId: string;
+  teamName: string;
+  canDisconnectWorkspace: boolean;
+  lastError?: string;
+  updatedAt: number;
+};
+export type SlackIntegrationStatus =
+  | { state: "not_connected" }
+  | (SlackWorkspaceStatus & { state: "workspace_connected" })
+  | (SlackWorkspaceStatus & {
+      state: "connected" | "error";
+      channelId: string;
+      channelName: string;
+      isPrivate: boolean;
+      agentEnabled: boolean;
+      notificationsEnabled: boolean;
+      notificationKinds: SlackNotificationKind[];
+    });
 /** Organizer-safe projection. The API key itself is never returned. */
 export interface AgentProviderSetting {
   eventId: EventId;
   mode: AgentProviderMode;
   provider: "openai";
   credentialHint?: string;
-  status: "ready" | "error";
+  status: "ready" | "error" | "disabled";
   lastError?: string;
   managedAvailable: boolean;
+  managedDisabled: boolean;
   billingOwnerAssigned: boolean;
   managedUsage?: { periodStart: number; planSlug: string; runLimit: number; tokenLimit: number; usedRuns: number; usedTokens: number; reservedRuns: number; reservedTokens: number };
   updatedAt: number;
@@ -324,6 +364,11 @@ export interface Embed { id: EmbedId; eventId: EventId; name: string; format: "s
 export type EmbedWrite = Omit<Embed, "id" | "createdAt" | "updatedAt"> & { id?: EmbedId };
 export interface PublicEmbedSession { key: string; title: string; startTime?: number; endTime?: number; roomName?: string; trackKey?: string; trackName?: string; speakerNames?: string[]; }
 export interface PublicEmbedView { name: string; view: EmbedView; theme: EmbedTheme; primaryColor: string; dateFormat: EmbedDateFormat; timeFormat: EmbedTimeFormat; event: { name: string; timezone: string }; tracks: Array<{ key: string; name: string }>; sessions: PublicEmbedSession[]; speakers: Array<{ key: string; name: string; headshotUrl?: string; bio?: string; links?: PublicEmbedSpeakerLink[]; sessions?: Array<{ title: string; startTime?: number; roomName?: string }> }>; }
+export interface PublicEmbedShowcase {
+  eventName: string;
+  eventSlug: string;
+  embeds: Array<{ id: EmbedId; name: string; view: EmbedView }>;
+}
 // These are deliberately projection-only types for unauthenticated embeds. They contain no
 // database record ids, email addresses, internal statuses, or draft data. `sessionKey` is an
 // opaque public keys derived server-side solely for shareable attendee URLs and DOM anchors.

@@ -19,7 +19,13 @@ describe("readiness projection", () => {
   it("projects every outstanding category with a source destination", () => {
     const projected = groups();
     expect(projected.map(group => [group.category, group.items.length])).toEqual([["agenda_conflicts", 1], ["speaker_confirmations", 1], ["onboarding_tasks", 1], ["proposal_decisions", 1], ["comms_delivery", 1]]);
-    expect(projected.flatMap(group => group.items).map(item => item.to)).toEqual(expect.arrayContaining(["/program/agenda?selected=agenda-a", "/program/speakers?selected=speaker-ada", "/program/abstracts?selected=pending", "/program/communications?selected=failed"]));
+    expect(projected.flatMap(group => group.items).map(item => item.to)).toEqual(expect.arrayContaining([
+      "/events/readiness/program/agenda/agenda-a/edit",
+      "/events/readiness/program/speakers/speaker-ada/edit",
+      "/events/readiness/portals/tasks/overdue/edit",
+      "/events/readiness/program/abstracts/pending/edit",
+      "/events/readiness/program/communications?selected=failed",
+    ]));
   });
   it("keeps all five all-clear groups when there is no outstanding work", () => {
     const projected = projectReadinessGroups({ event, agenda: [], agendaConflicts: [], speakerRows: [], submissions: [], tasks: [], comms: [], now });

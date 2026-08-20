@@ -35,4 +35,13 @@ describe("saved public embed security contract", () => {
     expect(source).toContain("selectedTrackIds.has(item.trackId)");
     expect(source).toContain("sourceSessions.some((session) => session.speakerIds.includes(speaker._id))");
   });
+
+  it("exposes showcase metadata only for enabled embeds on a published event", () => {
+    const start = source.indexOf("export const listShowcase");
+    const body = source.slice(start, source.indexOf("export const get", start + 20));
+    expect(body).toContain('event.status !== "published"');
+    expect(body).toContain("candidate.enabled");
+    expect(body).toContain("candidate.name === sample.name");
+    expect(body).not.toContain("publicFeedProjection");
+  });
 });

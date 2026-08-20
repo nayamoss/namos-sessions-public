@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useMemo, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { DynamicFormRenderer, isFieldVisible, type DynamicField } from "@/components/shared/DynamicFormRenderer";
@@ -90,7 +90,7 @@ function BackButton({ onClick, disabled }: { onClick: () => void; disabled?: boo
 }
 
 /** Full-bleed wizard shell shared by every step, matching /onboarding's OnboardingWizard shell. */
-function WizardShell({ eventName, logoUrl, step, total, wide, sticky, children }: { eventName: string; logoUrl?: string; step: number; total: number; wide?: boolean; sticky?: boolean; children: ReactNode }) {
+function WizardShell({ eventName, logoUrl, step, total, sticky, children }: { eventName: string; logoUrl?: string; step: number; total: number; sticky?: boolean; children: ReactNode }) {
   // The real public page takes over the whole viewport (min-h-screen gives the flex column an
   // actual height to distribute, which is what makes `items-center` below center vertically);
   // the builder's preview host instead fills whatever bounded box it's placed in.
@@ -102,7 +102,7 @@ function WizardShell({ eventName, logoUrl, step, total, wide, sticky, children }
         <span className="text-xs font-medium text-muted-foreground">{step + 1} / {total}</span>
       </header>
       <main className="flex flex-1 items-center justify-center px-6 py-10 sm:px-10">
-        <div className={wide ? "w-full max-w-2xl animate-fade-in" : "w-full max-w-lg animate-fade-in"}>
+        <div className="w-full max-w-2xl animate-fade-in">
           {children}
         </div>
       </main>
@@ -118,7 +118,7 @@ function MessageShell({ eventName, logoUrl, children }: { eventName: string; log
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       <header className="px-6 py-6 sm:px-10"><Wordmark eventName={eventName} logoUrl={logoUrl} /></header>
       <main className="flex flex-1 items-center justify-center px-6 pb-16 sm:px-10">
-        <div className="w-full max-w-lg space-y-4">{children}</div>
+        <div className="w-full max-w-2xl space-y-4">{children}</div>
       </main>
     </div>
   );
@@ -192,6 +192,7 @@ export function PublicFormRenderer({
   secondsToRedirect,
   emailVerification,
   turnstileSlot,
+  submissionVerificationComplete = false,
   errors: externalErrors,
   loadErrors,
 }: {
@@ -207,6 +208,8 @@ export function PublicFormRenderer({
   emailVerification?: EmailVerificationController;
   /** Turnstile widget, rendered on the review step in "public" mode only. */
   turnstileSlot?: ReactNode;
+  /** True only after Turnstile has produced a current, non-expired token. */
+  submissionVerificationComplete?: boolean;
   errors?: string[];
   loadErrors?: string[];
 }) {
@@ -265,7 +268,7 @@ export function PublicFormRenderer({
       });
       participantLimits(activePage).flatMap(({ participant, limits: nextLimits }, index) => nextLimits.filter((limit) => !limit.valid).map((limit) => `${participant.role} ${index + 1}: ${limit.label} must be ${limit.maxCombinedChars.toLocaleString()} characters or fewer.`)).forEach((error) => nextErrors.push(error));
     }
-    if (activePage?.systemRole === "review" && !preview && !turnstileSlot) nextErrors.push("Complete submission verification before submitting.");
+    if (activePage?.systemRole === "review" && !preview && !submissionVerificationComplete) nextErrors.push("Complete submission verification before submitting.");
     setLocalErrors(nextErrors);
     return nextErrors.length === 0;
   };
@@ -277,6 +280,13 @@ export function PublicFormRenderer({
     await onSubmit();
   };
   const back = () => { setLocalErrors([]); setStep((value) => Math.max(0, value - 1)); };
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    if (event.defaultPrevented || event.key !== "Enter" || (!event.metaKey && !event.ctrlKey) || target.closest("[contenteditable=\"true\"]")) return;
+    event.preventDefault();
+    if (event.shiftKey) back();
+    else void next();
+  };
 
   const eventName = config.event.name;
 
@@ -291,7 +301,6 @@ export function PublicFormRenderer({
     );
   }
 
-  const wide = Boolean(activePage?.systemRole === "participant" || activePage?.systemRole === "review");
   const heading = step === 0 ? config.form.pageHeading
     : activePage?.systemRole === "account" ? "What should we call you?"
     : activePage?.systemRole === "participant" ? activePage.pageHeading || "Who's presenting?"
@@ -299,7 +308,7 @@ export function PublicFormRenderer({
     : activePage?.pageHeading || "Tell us more";
 
   return (
-    <div style={brandingStyle}><WizardShell eventName={eventName} logoUrl={config.event.logoUrl} step={step} total={totalSteps} wide={wide} sticky={mode === "public"}>
+    <div style={brandingStyle} onKeyDown={handleKeyDown}><WizardShell eventName={eventName} logoUrl={config.event.logoUrl} step={step} total={totalSteps} sticky={mode === "public"}>
       <h1 className="text-2xl font-semibold sm:text-3xl">{heading}</h1>
       {config.form.closeDate && step === 0 && (
         <p className="mt-3 rounded-[10px] bg-card px-3 py-2 text-sm text-muted-foreground">
@@ -391,11 +400,12 @@ export function PublicFormRenderer({
 
       {(errors.length > 0 || (loadErrors?.length ?? 0) > 0) && <div className="mt-5"><ErrorList errors={[...(loadErrors ?? []), ...errors]} /></div>}
 
-      <div className="mt-8 flex items-center gap-3">
+      <div className="mt-8 flex flex-wrap items-center gap-3">
         {step > 0 && <BackButton onClick={back} disabled={submitting} />}
-        <PrimaryButton type="button" busy={submitting} disabled={submitting || (activePage?.systemRole === "review" && !preview && !emailVerified)} onClick={() => void next()}>
+        <PrimaryButton type="button" busy={submitting} disabled={submitting || (activePage?.systemRole === "review" && !preview && (!emailVerified || !submissionVerificationComplete))} onClick={() => void next()}>
           {submitting ? "Submitting…" : step === totalSteps - 1 ? (preview ? "Submit (disabled in preview)" : "Submit proposal") : "Continue"}
         </PrimaryButton>
+        <p className="hidden items-center gap-1 text-xs text-muted-foreground sm:flex" aria-label={`Keyboard shortcuts: Command or Control Enter to ${step === totalSteps - 1 ? "submit" : "continue"}${step > 0 ? "; Shift Command or Control Enter to go back" : ""}`}><kbd className="rounded bg-card px-1.5 py-0.5 font-mono text-foreground">⌘</kbd><kbd className="rounded bg-card px-1.5 py-0.5 font-mono text-foreground">↵</kbd><span>{step === totalSteps - 1 ? "Submit" : "Continue"}</span>{step > 0 && <><span className="mx-1">·</span><kbd className="rounded bg-card px-1.5 py-0.5 font-mono text-foreground">⇧⌘</kbd><kbd className="rounded bg-card px-1.5 py-0.5 font-mono text-foreground">↵</kbd><span>Back</span></>}</p>
       </div>
     </WizardShell></div>
   );

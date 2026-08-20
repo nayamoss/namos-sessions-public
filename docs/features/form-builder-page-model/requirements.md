@@ -3,7 +3,17 @@
 **Type:** Improvement (architectural)
 **Status:** In Review
 **Priority:** High
-**Last Updated:** 2026-08-17
+**Last Updated:** 2026-08-19
+
+## Owner-approved UX amendment (2026-08-19)
+
+The interactive HTML prototype was reviewed in the browser and supersedes the early rail and
+preview details below where they conflict. The approved production interaction is deliberately
+quieter: the rail lists organizer-owned custom pages only; required Account, Participant, and
+Review stages remain enforced by the data model and public renderer but are not repeated as an
+"always included" block. Preview is a dedicated mode opened from the content toolbar, not a
+persistent third pane. These changes remove the cramped four-column layout and the extra helper
+copy the owner rejected while preserving every migration and public-flow requirement.
 
 ## Problem Statement
 
@@ -40,9 +50,8 @@ speaker will move through (not just settings categories), so that the builder ma
 actually building.
 
 **Acceptance Criteria:**
-- GIVEN I open the CFP form builder WHEN I look at the left rail THEN I see the ordered pages a
-  speaker will see (locked system pages like Account and Review, plus my own custom pages),
-  not a fixed list of settings categories.
+- GIVEN I open either builder WHEN I look at the left rail THEN I see the ordered custom pages I
+  can edit, not fixed settings categories or a redundant summary of locked system stages.
 - GIVEN I'm editing a custom page WHEN I add, remove, rename, or reorder it THEN the public form
   reflects that exact page order — no separate hard-coded stage list exists anymore.
 - GIVEN I'm editing any page WHEN I look at the preview THEN it renders using the same component
@@ -65,9 +74,8 @@ actually building.
   | `portal`) with an ordered `pages` array supporting `kind: "system" | "custom"` pages, on both
   the CFP and Portal form records (one shared table already; see design.md).
 - FR-002: System pages (`account`, `review`, and — for CFP — `participant` when participant
-  collection is on) are visible in the Pages rail but cannot be deleted, renamed as a type, or
-  reordered relative to their fixed anchor position (participant/review always trail custom
-  pages; account always leads).
+  collection is on) remain fixed and server-validated, but are omitted from the editable Pages
+  rail. The public renderer still includes them in their fixed anchor positions.
 - FR-003: Custom pages can be added, renamed, duplicated, removed, and reordered via accessible
   controls (explicit Move up / Move down at minimum — no drag-only interaction).
 - FR-004: Selecting a page in the rail shows only that page's fields in the center panel. Adding
@@ -81,10 +89,9 @@ actually building.
   (`SubmissionPage.tsx`), parameterized by a `mode: "public" | "preview"` prop, not by
   `CfpPreviewPanel.tsx`'s separately hand-maintained field-type mapping and step list. Preview
   mode disables real side effects (Turnstile, email verification, actual submission, analytics).
-- FR-007: The preview panel is persistent by default (not a header toggle competing with
-  Save/Copy link/etc.), and its internal simulated navigation is visually distinct from the
-  builder's real Back/Next (different variant/size/framing — never the same button pair twice on
-  screen).
+- FR-007: Preview is a dedicated mode opened from the toolbar below the identity-only page
+  title. It replaces the editor while open, uses preview-specific framing, and has no real
+  submission side effects, so its navigation cannot be confused with builder controls.
 - FR-008: Add a real progress indicator (filled/segmented bar, not just numbered circles) above
   the configuration area reflecting position in the organizer's settings flow.
 - FR-009: Accent color is edited once at the event level and read by both builders' previews —

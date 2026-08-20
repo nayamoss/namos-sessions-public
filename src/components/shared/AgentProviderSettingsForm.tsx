@@ -141,7 +141,17 @@ export function AgentProviderSettingsForm({
         <dl className="grid gap-2 text-sm sm:grid-cols-2">
           <div>
             <dt className="text-muted-foreground">Status</dt>
-            <dd>{setting?.status === "ready" ? "Ready" : "Needs attention"}</dd>
+            <dd>
+              {setting?.status === "disabled"
+                ? "Temporarily disabled"
+                : setting?.mode === "managed"
+                  ? setting.status === "ready"
+                    ? "Configured"
+                    : "Needs attention"
+                  : setting?.status === "ready"
+                    ? "Verified"
+                    : "Needs attention"}
+            </dd>
           </div>
           {setting?.credentialHint && (
             <div>
@@ -239,7 +249,9 @@ export function AgentProviderSettingsForm({
               </p>
               {setting && !setting.managedAvailable && (
                 <p className="mt-2 text-sm text-destructive">
-                  Managed AI is not configured on this deployment.
+                  {setting.managedDisabled
+                    ? "Managed AI is temporarily disabled. Bring your own key or contact support."
+                    : "Managed AI is not configured on this deployment."}
                 </p>
               )}
             </div>

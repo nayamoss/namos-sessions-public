@@ -259,7 +259,18 @@ export const demo = internalMutation({
 
     const embeds = await ctx.db.query("embeds").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect();
     const embedFields = { agenda: { title: true, time: true, room: true, track: true, speakers: true }, session: { title: true, time: true, room: true, track: true, speakers: true }, speaker: { name: true, headshot: true, bio: true, links: true, sessions: true } };
-    if (!embeds.some((embed) => embed.name === "Main event agenda")) await ctx.db.insert("embeds", { eventId, name: "Main event agenda", format: "styled_html", view: "agenda", enabled: true, theme: "system", primaryColor: "#E56B5D", dateFormat: "weekday_long", timeFormat: "12_hour", trackIds: [], fields: embedFields, createdAt: seededAt, updatedAt: now });
+    const showcaseEmbeds = [
+      ["Speaker gallery", "speaker_gallery"],
+      ["Schedule grid", "schedule_grid"],
+      ["Session list", "session_list"],
+      ["Speaker list", "speaker_list"],
+      ["Schedule itinerary", "schedule_itinerary"],
+      ["Main event agenda", "agenda"],
+    ] as const;
+    for (const [name, view] of showcaseEmbeds) {
+      if (embeds.some((embed) => embed.name === name)) continue;
+      await ctx.db.insert("embeds", { eventId, name, format: "styled_html", view, enabled: true, theme: "system", primaryColor: "#E56B5D", dateFormat: "weekday_long", timeFormat: "12_hour", trackIds: [], fields: embedFields, createdAt: seededAt, updatedAt: now });
+    }
     if (!embeds.some((embed) => embed.name === "Speaker gallery draft")) await ctx.db.insert("embeds", { eventId, name: "Speaker gallery draft", format: "styled_html", view: "speaker_gallery", enabled: false, theme: "system", primaryColor: "#E56B5D", dateFormat: "weekday_long", timeFormat: "12_hour", trackIds: [], fields: embedFields, createdAt: seededAt, updatedAt: now });
 
     return { eventId, created: eventWasMissing, speakers: speakers.length, submissions: submissionIds.length, cfpFormId: cfpForm._id, portalFormId: portalForm._id };

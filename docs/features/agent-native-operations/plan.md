@@ -50,7 +50,7 @@
 - Location: `/events/:eventSlug/program/agent`, Program sidebar after Readiness.
 - Shell: `AppLayout title="Operations Agent"`; selected run uses the existing inline flex `detail` pane.
 - Content root: `flex min-h-[calc(100vh-10rem)] flex-col gap-4`.
-- Toolbar: `ContentToolbar ariaLabel="Agent run controls"`; History styled popover utility; New run secondary button. No header action/search/tab.
+- Workspace controls: History popover and Start a review secondary action below the identity-only page header. The completed result and approvals precede a collapsed technical activity disclosure.
 - Empty state: `Bot` icon; title “Ask about this event”; message “Check readiness, investigate blockers, or prepare follow-up tasks.”; three outline suggestion buttons: “Check whether this event is ready to publish”, “Find accepted speakers who still need attention”, “Review failed communications and overdue tasks”. Suggestions fill, never auto-run.
 - Timeline: chronological user, assistant, progress, tool, clarification, proposal, approval, and error events; loading skeletons; source links; no hidden reasoning.
 - Composer: visible label, multiline textarea, helper/count, inline error, one accent Run/Continue button; Enter submit and Shift+Enter newline.

@@ -13,6 +13,8 @@ import type { Id } from "./_generated/dataModel";
 import { canonicalMessageDraftProposalPayload, canonicalProposalPayload } from "./agentProposal";
 import { decryptAgentApiKey } from "./agentProviderSecrets";
 import { resolveManagedAllowance } from "./agentBillingResolver";
+import { isManagedAiDisabled, MANAGED_AI_DISABLED_ERROR, MANAGED_AI_DISABLED_MESSAGE } from "./managedAi";
+import { buildDemoAcceptanceProposal, type DemoAcceptanceCandidate } from "./demoAgent";
 
 type RunToolCtx = ToolCtx & { runId: Id<"agent_runs">; eventId: Id<"events"> };
 
@@ -153,6 +155,7 @@ async function resolveApiKey(ctx: any, eventId: Id<"events">, providerMode: "man
 }
 
 function safeProviderError(error: unknown) {
+  if (error instanceof Error && error.message === MANAGED_AI_DISABLED_ERROR) return MANAGED_AI_DISABLED_MESSAGE;
   if (error instanceof Error && error.message === "MANAGED_KEY_MISSING") return "Namos-managed AI is temporarily unavailable. Choose Bring your own key in Settings, or contact support.";
   if (error instanceof Error && error.message === "BYOK_KEY_MISSING") return "This event's OpenAI key is unavailable. Reconnect it in Settings → Integrations.";
   const raw = error instanceof Error ? error.message : "The model provider failed.";
@@ -163,6 +166,27 @@ function safeProviderError(error: unknown) {
   return `Operations Agent failed: ${message.slice(0, 500)}`;
 }
 
+async function executeDeterministicDemoRun(ctx: any, runId: Id<"agent_runs">, state: any) {
+  if (!(await ctx.runMutation(internal.agentState.begin, { runId }))) return;
+  const billingOwnerUserId = state.event.billingOwnerUserId;
+  if (!billingOwnerUserId) throw new Error("This event needs a billing owner before Namos-managed AI can run.");
+  const allowance = await resolveManagedAllowance(billingOwnerUserId);
+  await ctx.runMutation(internal.agentBilling.reserve, { runId, billingOwnerUserId, planSlug: allowance.planSlug, runLimit: allowance.runLimit, tokenLimit: allowance.tokenLimit, reserveTokens: allowance.reserveTokens });
+  await ctx.runMutation(internal.agentState.append, { runId, type: "tool_call", message: "Inspecting accepted submissions and notification history.", toolName: "prepare_demo_acceptance_drafts", toolCallId: `demo-${runId}` });
+  const grounded = await ctx.runQuery(internal.agentData.demoAcceptanceCandidates, { eventId: state.run.eventId }) as { eventName: string; candidates: DemoAcceptanceCandidate[] };
+  await ctx.runMutation(internal.agentState.append, { runId, type: "tool_result", message: `Found ${grounded.candidates.length} accepted, unnotified submission${grounded.candidates.length === 1 ? "" : "s"}.`, toolName: "prepare_demo_acceptance_drafts", toolCallId: `demo-${runId}`, detailsJson: JSON.stringify({ resultCount: grounded.candidates.length }) });
+  const proposal = buildDemoAcceptanceProposal(grounded.eventName, grounded.candidates);
+  const usage = await ctx.runMutation(internal.agentProviderSettings.recordUsage, { runId, inputTokens: 0, outputTokens: 0 });
+  if (!proposal) {
+    await ctx.runMutation(internal.agentState.finish, { runId, summary: "No accepted speakers are waiting for notification. Nothing was changed.", stepCount: 1, inputTokens: 0, outputTokens: 0 });
+    await ctx.runMutation(internal.agentBilling.settle, { runId, ...usage });
+    return;
+  }
+  const payloadHash = createHash("sha256").update(proposal.canonicalPayload).digest("hex");
+  await ctx.runMutation(internal.agentState.saveMessageProposal, { runId, summary: proposal.summary, messages: proposal.messages, payloadHash, toolCallId: `demo-${runId}` });
+  await ctx.runMutation(internal.agentBilling.settle, { runId, ...usage });
+}
+
 export const executeSegment = internalAction({
   args: { runId: v.id("agent_runs") },
   handler: async (ctx, args) => {
@@ -170,11 +194,19 @@ export const executeSegment = internalAction({
     try {
       const state = await ctx.runQuery(internal.agentState.executionContext, args);
       if (!state.runnable) return;
-      if ((state.run.providerMode ?? "managed") === "managed" && !state.run.managedAllowanceId) {
-        const billingOwnerUserId = state.event.billingOwnerUserId;
-        if (!billingOwnerUserId) throw new Error("This event needs a billing owner before Namos-managed AI can run.");
-        const allowance = await resolveManagedAllowance(billingOwnerUserId);
-        await ctx.runMutation(internal.agentBilling.reserve, { runId: args.runId, billingOwnerUserId, planSlug: allowance.planSlug, runLimit: allowance.runLimit, tokenLimit: allowance.tokenLimit, reserveTokens: allowance.reserveTokens });
+      const demoWorkspace = await ctx.runQuery(internal.demoWorkspaces.getByEvent, { eventId: state.run.eventId });
+      if (demoWorkspace) {
+        await executeDeterministicDemoRun(ctx, args.runId, state);
+        return;
+      }
+      if ((state.run.providerMode ?? "managed") === "managed") {
+        if (isManagedAiDisabled()) throw new Error(MANAGED_AI_DISABLED_ERROR);
+        if (!state.run.managedAllowanceId) {
+          const billingOwnerUserId = state.event.billingOwnerUserId;
+          if (!billingOwnerUserId) throw new Error("This event needs a billing owner before Namos-managed AI can run.");
+          const allowance = await resolveManagedAllowance(billingOwnerUserId);
+          await ctx.runMutation(internal.agentBilling.reserve, { runId: args.runId, billingOwnerUserId, planSlug: allowance.planSlug, runLimit: allowance.runLimit, tokenLimit: allowance.tokenLimit, reserveTokens: allowance.reserveTokens });
+        }
       }
       const apiKey = await resolveApiKey(ctx, state.run.eventId, state.run.providerMode ?? "managed");
       const agent = operationsAgent(apiKey, state.run.model);
@@ -212,6 +244,8 @@ export const executeSegment = internalAction({
     } catch (error) {
       await ctx.runMutation(internal.agentBilling.release, { runId: args.runId });
       await ctx.runMutation(internal.agentState.fail, { runId: args.runId, message: safeProviderError(error), stepCount: steps });
+    } finally {
+      await ctx.scheduler.runAfter(0, internal.slackAgentActions.projectRunUpdate, { runId: args.runId });
     }
   },
 });

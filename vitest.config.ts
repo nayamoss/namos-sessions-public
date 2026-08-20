@@ -11,7 +11,12 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
-    include: ["src/**/*.{test,spec}.{ts,tsx}", "packages/**/*.{test,spec}.{ts,tsx}", "worker/**/*.{test,spec}.ts"],
+    include: ["src/**/*.{test,spec}.{ts,tsx}", "packages/**/*.{test,spec}.{ts,tsx}", "worker/**/*.{test,spec}.ts", "scripts/**/*.test.mjs"],
+    // The full browser-component suite can otherwise start more jsdom workers than a
+    // typical CI runner can execute concurrently. The resulting CPU starvation makes
+    // unrelated five-second tests fail nondeterministically while they are still rendering.
+    maxWorkers: 4,
+    testTimeout: 15_000,
   },
   resolve: {
     alias: {

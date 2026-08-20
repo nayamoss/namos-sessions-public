@@ -8,7 +8,7 @@ import {
   Search,
   Trash2,
 } from "lucide-react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
@@ -137,7 +137,7 @@ function AddSponsorPane({
     }
   };
   return (
-    <DetailPane title="Add sponsor" onClose={onClose}>
+    <section className={cardSurfaceClasses("default", "mx-auto max-w-3xl p-6")} aria-label="New sponsor">
       <form className="space-y-4" onSubmit={(event) => void submit(event)}>
         <div className="space-y-2">
           <Label htmlFor="sponsor-name">Sponsor name</Label>
@@ -225,7 +225,7 @@ function AddSponsorPane({
           </Button>
         </div>
       </form>
-    </DetailPane>
+    </section>
   );
 }
 
@@ -473,20 +473,20 @@ function SponsorDetailPane({
   };
   if (detail === undefined)
     return (
-      <DetailPane title="Sponsor" onClose={onClose}>
+      <section className={cardSurfaceClasses("default", "p-6")}>
         <p className="text-sm text-muted-foreground">Loading sponsor…</p>
-      </DetailPane>
+      </section>
     );
   if (!detail)
     return (
-      <DetailPane title="Sponsor" onClose={onClose}>
+      <section className={cardSurfaceClasses("default", "p-6")}>
         <p className="text-sm text-muted-foreground">
           This sponsor no longer exists.
         </p>
-      </DetailPane>
+      </section>
     );
   return (
-    <DetailPane title={detail.name} onClose={onClose}>
+    <section className={cardSurfaceClasses("default", "p-6")} aria-label={`Edit ${detail.name}`}>
       <div className="space-y-6">
         {message && (
           <p
@@ -843,7 +843,7 @@ function SponsorDetailPane({
           </AlertDialog>
         </section>
       </div>
-    </DetailPane>
+    </section>
   );
 }
 
@@ -999,6 +999,9 @@ function SponsorTiersPane({
 export default function Sponsors() {
   const repo = useRepo();
   const { event: activeEvent } = useCurrentEvent();
+  const navigate = useNavigate();
+  const { sponsorId } = useParams<{ sponsorId?: string }>();
+  const location = useLocation();
   const [params, setParams] = useSearchParams();
   const [event, setEvent] = useState<Event>();
   const [sponsors, setSponsors] = useState<Sponsor[]>([]);
@@ -1008,8 +1011,9 @@ export default function Sponsors() {
   const [error, setError] = useState<string>();
   const [search, setSearch] = useState("");
   const [tierFilter, setTierFilter] = useState("all");
-  const pane = params.get("pane");
-  const selected = params.get("selected");
+  const listPath = `/events/${activeEvent.slug}/program/sponsors`;
+  const pane = sponsorId === "new" || location.pathname.endsWith("/new") ? "add" : sponsorId ? "detail" : params.get("pane");
+  const selected = sponsorId && sponsorId !== "new" ? sponsorId : params.get("selected");
   const load = useCallback(async () => {
     setLoading(true);
     setError(undefined);
@@ -1038,15 +1042,26 @@ export default function Sponsors() {
   useEffect(() => {
     void load();
   }, [load]);
+  useEffect(() => {
+    if (sponsorId || !activeEvent?.slug) return;
+    const legacyPane = params.get("pane");
+    const legacyId = params.get("selected");
+    if (legacyPane === "add") navigate(`${listPath}/new`, { replace: true });
+    else if (legacyPane === "detail" && legacyId) navigate(`${listPath}/${encodeURIComponent(legacyId)}/edit`, { replace: true });
+  }, [activeEvent?.slug, listPath, navigate, params, sponsorId]);
 
-  const closePane = () =>
+  const closePane = () => {
+    if (sponsorId || location.pathname.endsWith("/new")) { navigate(listPath); return; }
     setParams((current) => {
       const next = new URLSearchParams(current);
       next.delete("pane");
       next.delete("selected");
       return next;
     });
-  const openPane = (nextPane: string, id?: string) =>
+  };
+  const openPane = (nextPane: string, id?: string) => {
+    if (nextPane === "add") { navigate(`${listPath}/new`); return; }
+    if (nextPane === "detail" && id) { navigate(`${listPath}/${encodeURIComponent(id)}/edit`); return; }
     setParams((current) => {
       const next = new URLSearchParams(current);
       next.set("pane", nextPane);
@@ -1054,6 +1069,7 @@ export default function Sponsors() {
       else next.delete("selected");
       return next;
     });
+  };
   const visible = useMemo(
     () =>
       sponsors.filter(
@@ -1137,8 +1153,9 @@ export default function Sponsors() {
         </div>
       </AppLayout>
     );
-  const detail =
-    event && pane === "add" ? (
+  if (event && pane === "add") {
+    return (
+      <AppLayout title="New sponsor">
       <AddSponsorPane
         event={event}
         tiers={tiers}
@@ -1148,25 +1165,30 @@ export default function Sponsors() {
           openPane("detail", id);
         }}
       />
-    ) : event && pane === "tiers" ? (
+      </AppLayout>
+    );
+  }
+  if (event && pane === "detail" && selected) {
+    return (
+      <AppLayout title={sponsors.find((sponsor) => sponsor.id === selected)?.name ?? "Sponsor"}>
+        <SponsorDetailPane
+          sponsorId={selected}
+          event={event}
+          tiers={tiers}
+          templates={templates}
+          onClose={closePane}
+          onChanged={load}
+          onRemoved={() => { closePane(); void load(); }}
+        />
+      </AppLayout>
+    );
+  }
+  const detail = event && pane === "tiers" ? (
       <SponsorTiersPane
         event={event}
         tiers={tiers}
         onClose={closePane}
         onChanged={load}
-      />
-    ) : event && pane === "detail" && selected ? (
-      <SponsorDetailPane
-        sponsorId={selected}
-        event={event}
-        tiers={tiers}
-        templates={templates}
-        onClose={closePane}
-        onChanged={load}
-        onRemoved={() => {
-          closePane();
-          void load();
-        }}
       />
     ) : undefined;
   return (

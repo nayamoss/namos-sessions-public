@@ -35,7 +35,7 @@ function portalTitle(pathname: string) {
 
 export function PortalLayout({ children }: { children: ReactNode }) {
   const location = useLocation();
-  const { eventName, selectedSpeaker, loading, error, identityLockedByClerk, handoffMismatch } = usePortalIdentity();
+  const { eventName, selectedSpeaker, loading, error, handoffMismatch } = usePortalIdentity();
   const [mismatchDismissed, setMismatchDismissed] = useState(false);
 
   return (
@@ -52,10 +52,7 @@ export function PortalLayout({ children }: { children: ReactNode }) {
             <Button type="button" variant="ghost" size="sm" onClick={() => setMismatchDismissed(true)}>Dismiss</Button>
           </section>
         )}
-        {/* Once the signed-in account resolves to a speaker, that identity is authoritative and
-            this notice stays hidden. There is no way to view or act as another speaker from
-            here — an account that doesn't match a speaker record simply has no portal access. */}
-        {!identityLockedByClerk && !selectedSpeaker && (
+        {!selectedSpeaker ? (
           <section className={cardSurfaceClasses("default", "bg-muted p-4")} role="status" aria-label="No speaker profile found">
             {loading ? (
               <SkeletonList rows={1} label="Checking your speaker access…" />
@@ -69,8 +66,7 @@ export function PortalLayout({ children }: { children: ReactNode }) {
               </>
             )}
           </section>
-        )}
-        {children}
+        ) : children}
       </div>
     </DashboardLayout>
   );

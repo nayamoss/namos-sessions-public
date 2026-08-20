@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { FileText, Presentation, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useRepo } from "@/data/repo";
@@ -115,10 +116,7 @@ export function SpeakerDocuments() {
 
   return (
     <section className={cardSurfaceClasses("default", "space-y-5 p-6")}>
-      <div>
-        <h2 className="text-base font-semibold">Slides and documents</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Upload files for one of your submissions. PDF, presentation, document, or text files up to 10 MB.</p>
-      </div>
+      <h2 className="text-base font-semibold">Slides and documents</h2>
       {submissions.length > 1 && (
         <div className="space-y-2">
           <label htmlFor="speaker-document-submission" className="text-sm font-medium">Submission</label>
@@ -133,7 +131,7 @@ export function SpeakerDocuments() {
         </div>
       )}
       {!submissions.length ? (
-        <p className="text-sm text-muted-foreground">Documents become available after you submit a session.</p>
+        <EmptyState compact icon={FileText} title="No submission available" />
       ) : (
         <>
           <div className="flex flex-wrap gap-2">
@@ -162,7 +160,7 @@ export function SpeakerDocuments() {
                 </li>
               ))}
             </ul>
-          ) : <p className="text-sm text-muted-foreground">No files uploaded for this submission.</p>}
+          ) : <EmptyState compact icon={FileText} title="No files uploaded" />}
         </>
       )}
     </section>

@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BookOpen, ChevronDown, ChevronUp, Plus } from "lucide-react";
-import { useSearchParams } from "react-router-dom";
+import { BookOpen, ChevronDown, ChevronUp } from "lucide-react";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
-import { DetailPane } from "@/components/shared/DetailPane";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { RichText } from "@/components/shared/RichText";
 import { RichTextEditor } from "@/components/editor/RichTextEditor";
@@ -33,17 +32,21 @@ export default function PortalResourcesAdmin() {
   const repo = useRepo();
   const { event } = useCurrentEvent();
   const [params, setParams] = useSearchParams();
+  const { resourceId } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [pages, setPages] = useState<PortalResourcePage[]>([]);
   const [draft, setDraft] = useState<Draft>(blank);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
-  const selectedId = params.get("selected");
+  const routeId = resourceId && resourceId !== "new" ? resourceId : undefined;
+  const selectedId = routeId ?? params.get("selected");
   const selected = useMemo(
     () => pages.find((page) => page.id === selectedId),
     [pages, selectedId],
   );
-  const creating = params.get("mode") === "new";
+  const creating = resourceId === "new" || location.pathname.endsWith("/new") || params.get("mode") === "new";
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -73,7 +76,8 @@ export default function PortalResourcesAdmin() {
       });
   }, [creating, selected]);
 
-  const close = () => setParams({});
+  const listPath = `/events/${event.slug}/portals/resources`;
+  const close = () => resourceId ? navigate(listPath) : setParams({});
   const save = async () => {
     setSaving(true);
     setError(undefined);
@@ -84,7 +88,7 @@ export default function PortalResourcesAdmin() {
         ...draft,
       });
       await load();
-      setParams({ selected: id });
+      navigate(`${listPath}/${id}/edit`, { replace: creating });
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -140,12 +144,8 @@ export default function PortalResourcesAdmin() {
     }
   };
 
-  const detail =
+  const editor =
     creating || selected ? (
-      <DetailPane
-        title={creating ? "New resource" : (selected?.title ?? "Resource")}
-        onClose={close}
-      >
         <div className="space-y-5">
           <div className="space-y-2">
             <Label htmlFor="resource-title">Title</Label>
@@ -237,11 +237,18 @@ export default function PortalResourcesAdmin() {
             </Button>
           </div>
         </div>
-      </DetailPane>
     ) : undefined;
 
+  if ((resourceId || params.get("mode") === "new" || params.get("selected")) && loading) {
+    return <AppLayout title={creating ? "New resource" : "Edit resource"}><p className="text-sm text-muted-foreground">Loading resource…</p></AppLayout>;
+  }
+  if (selectedId && !selected) {
+    return <AppLayout title="Resource not found"><EmptyState icon={BookOpen} title="Resource not found" action={<Button onClick={close}>Back to resources</Button>} /></AppLayout>;
+  }
+  if (editor) return <AppLayout title={creating ? "New resource" : (selected?.title ?? "Edit resource")}>{editor}</AppLayout>;
+
   return (
-    <AppLayout title="Portal resources" detail={detail}>
+    <AppLayout title="Portal resources">
       <div className="space-y-4">
         <ContentToolbar
           ariaLabel="Portal resource controls"
@@ -250,14 +257,13 @@ export default function PortalResourcesAdmin() {
               type="button"
               variant="accent"
               size="sm"
-              onClick={() => setParams({ mode: "new" })}
+              onClick={() => navigate(`${listPath}/new`)}
             >
-              <Plus className="h-4 w-4" />
               New resource
             </Button>
           }
         />
-        {error && !detail && (
+        {error && (
           <p role="alert" className="text-sm text-destructive">
             {error}
           </p>
@@ -280,7 +286,7 @@ export default function PortalResourcesAdmin() {
                   type="button"
                   variant="ghost"
                   className="h-auto min-w-0 flex-1 justify-start px-0 py-0 text-left hover:bg-transparent"
-                  onClick={() => setParams({ selected: page.id })}
+                  onClick={() => navigate(`${listPath}/${page.id}/edit`)}
                 >
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-medium">

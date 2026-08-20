@@ -163,6 +163,7 @@ export function CfpEmailVerificationPanel({ verification, emailValid }: { verifi
 
   return (
     <div className="space-y-2">
+      <div id="clerk-captcha" />
       <Button type="button" variant="outline" size="sm" disabled={!ready || !emailValid || status === "sending"} onClick={() => void sendCode()}>{status === "sending" ? "Sending…" : "Send verification code"}</Button>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     </div>

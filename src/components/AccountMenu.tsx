@@ -20,11 +20,10 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { ProfileSettingsDialog } from "@/components/ProfileSettingsDialog";
 import { FeedbackDialog } from "@/components/FeedbackDialog";
 import { resetAnalytics, setAnalyticsIdentity, track } from "@/lib/analytics";
-import { useOptionalSettingsModal } from "@/components/settings/SettingsModalContext";
 import { useOnboardingTourStore } from "@/lib/onboardingTourStore";
 
 /** Groups are separated by whitespace only — never a rule or divider. */
-const contentClass = cardSurfaceClasses("default", "bg-muted p-1.5 shadow-none");
+const contentClass = cardSurfaceClasses("default", "bg-popover p-1.5 shadow-none");
 const itemClass = "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm";
 const triggerFocusClass = "outline-none focus-visible:bg-accent/60";
 
@@ -80,7 +79,6 @@ function AdminModeMenuItem({ eventSlug }: { eventSlug?: string }) {
 // nests under one "Settings" submenu — keeping the top-level list short instead of stacking
 // Profile settings / Event settings / Speaker portal as separate rows.
 function MenuLinks({ context, eventSlug, onOpenProfileSettings }: { context: "admin" | "portal"; eventSlug?: string; onOpenProfileSettings?: () => void }) {
-  const settingsModal = useOptionalSettingsModal();
   const profileSettings = onOpenProfileSettings ? (
     <DropdownMenuItem onSelect={onOpenProfileSettings} className={itemClass}>
       <UserRound className="h-4 w-4 shrink-0" />
@@ -119,16 +117,17 @@ function MenuLinks({ context, eventSlug, onOpenProfileSettings }: { context: "ad
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent className={cn("w-52", contentClass)}>
         {profileSettings}
-        {/* Goes through the settings-modal context (not a plain Link) so it opens as an
-        overlay instead of a page navigation — the whole point of the settings-modal-refactor.
-        Falls back to a real navigation only when no SettingsModalProvider is mounted. */}
-        <DropdownMenuItem onSelect={() => settingsModal?.openSettings("event")} className={itemClass} disabled={!settingsModal && !eventSlug}>
-          <Settings2 className="h-4 w-4 shrink-0" />
-          Event settings
+        <DropdownMenuItem asChild>
+          <Link to={eventSlug ? `/events/${eventSlug}/settings/event` : "/events"} className={itemClass}>
+            <Settings2 className="h-4 w-4 shrink-0" />
+            Event settings
+          </Link>
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => settingsModal?.openSettings("organization")} className={itemClass}>
-          <Building2 className="h-4 w-4 shrink-0" />
-          Organization settings
+        <DropdownMenuItem asChild>
+          <Link to="/settings/organization" className={itemClass}>
+            <Building2 className="h-4 w-4 shrink-0" />
+            Organization settings
+          </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Link to="/portal" className={itemClass} onClick={() => track("cta_converted", { destination: "portal" })}>
@@ -247,6 +246,8 @@ function ClerkAccountMenu({ collapsed, context }: { collapsed: boolean; context:
   // Clerk instance has first/last name collection disabled, so `user.firstName` is never
   // populated by our own onboarding flow (only by an OAuth provider, if used).
   const [profileDisplayName, setProfileDisplayName] = useState<string>();
+  const [profileFirstName, setProfileFirstName] = useState<string>();
+  const [profileLastName, setProfileLastName] = useState<string>();
   const [signupRole, setSignupRole] = useState<"solo" | "team">();
   const [profileSettingsOpen, setProfileSettingsOpen] = useState(false);
   useEffect(() => {
@@ -255,8 +256,8 @@ function ClerkAccountMenu({ collapsed, context }: { collapsed: boolean; context:
     // Optional chain, not just a try/catch around the call: some test fixtures provide a
     // partial mock Repository without a `profiles` key at all.
     void repo.profiles?.getMine()
-      .then((profile) => { if (active) { setProfileDisplayName(profile?.displayName); setSignupRole(profile?.signupRole); } })
-      .catch(() => { if (active) { setProfileDisplayName(undefined); setSignupRole(undefined); } });
+      .then((profile) => { if (active) { setProfileDisplayName(profile?.displayName); setProfileFirstName(profile?.firstName); setProfileLastName(profile?.lastName); setSignupRole(profile?.signupRole); } })
+      .catch(() => { if (active) { setProfileDisplayName(undefined); setProfileFirstName(undefined); setProfileLastName(undefined); setSignupRole(undefined); } });
     return () => { active = false; };
   }, [repo]);
 
@@ -274,10 +275,12 @@ function ClerkAccountMenu({ collapsed, context }: { collapsed: boolean; context:
     if (user?.id) setAnalyticsIdentity(user.id, { role: context === "portal" ? "speaker" : "organizer", ...(signupRole ? { signupRole } : {}) });
   }, [context, signupRole, user?.id]);
 
-  async function saveProfileName(displayName: string) {
+  async function saveProfileName(firstName: string, lastName?: string) {
     if (!repo?.profiles) throw new Error("Profile settings are unavailable right now.");
-    await repo.profiles.save({ displayName });
-    setProfileDisplayName(displayName);
+    await repo.profiles.save({ firstName, lastName });
+    setProfileFirstName(firstName);
+    setProfileLastName(lastName);
+    setProfileDisplayName([firstName, lastName].filter(Boolean).join(" "));
   }
 
   async function uploadProfilePhoto(file: File) {
@@ -297,7 +300,8 @@ function ClerkAccountMenu({ collapsed, context }: { collapsed: boolean; context:
         <ProfileSettingsDialog
           open={profileSettingsOpen}
           onOpenChange={setProfileSettingsOpen}
-          displayName={userName}
+          firstName={profileFirstName || user?.firstName || profileDisplayName?.split(/\s+/)[0] || ""}
+          lastName={profileLastName || user?.lastName || (profileFirstName ? undefined : profileDisplayName?.split(/\s+/).slice(1).join(" "))}
           avatarUrl={avatarUrl}
           onSaveName={saveProfileName}
           onUploadPhoto={uploadProfilePhoto}

@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { createAirtableTransport } from "@/data/airtable";
-import { defaultEmbed, embedViewLabels, iframeHeight, iframeSnippet, isHexColor, publicEmbedUrl } from "@/lib/public-embed";
+import { defaultEmbed, embedViewLabels, iframeHeight, iframeSnippet, isHexColor, publicEmbedOrigin, publicEmbedUrl } from "@/lib/public-embed";
 import type { EmbedId, EventId } from "@/data/types";
 
 describe("saved public embed helpers", () => {
   const id = "k57j59xq5q6yyx123" as EmbedId;
   it("uses only an opaque embed id in permanent URLs and copy-ready iframe code", () => {
+    expect(publicEmbedOrigin("https://app.example")).toBe("https://app.example");
     expect(publicEmbedUrl("https://app.example", id)).toBe("https://app.example/embed/k57j59xq5q6yyx123");
     expect(iframeSnippet("https://app.example", id, "speaker_gallery")).toContain('loading="lazy"');
     expect(iframeSnippet("https://app.example", id, "speaker_gallery")).toContain('referrerpolicy="strict-origin-when-cross-origin"');

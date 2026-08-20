@@ -14,8 +14,11 @@ type Workspace = {
 
 type CookiePayload = { workspaceId: string; csrf: string; expiresAt: number };
 type LimitResult = { allowed: boolean; retryAfterSeconds: number };
+type WorkspaceCreationMode = "interactive" | "public-entry";
 const cookieName = "__Host-namos_demo_v2";
 const maxCookieAgeSeconds = 24 * 60 * 60;
+const hourMs = 60 * 60 * 1_000;
+const dayMs = 24 * hourMs;
 
 function json(status: number, body: object, headers: HeadersInit = {}) {
   return Response.json(body, { status, headers: { "cache-control": "no-store", ...headers } });
@@ -133,12 +136,39 @@ async function ticket(env: Env, userId: string, redirectUrl: string) {
   return url.toString();
 }
 
-function roleDestination(request: Request, workspace: Pick<Workspace, "eventSlug">, role: DemoRole) {
-  const path = role === "organizer"
+const proofRoles: Record<string, DemoRole> = {
+  "control-room": "organizer",
+  walkthrough: "organizer",
+  "operations-agent": "organizer",
+  resources: "speaker",
+  inbox: "organizer",
+  publication: "organizer",
+  reset: "organizer",
+};
+
+// `proof` (demo-proof.ts walkthrough requirements) and `entry` (a quick-launch
+// destination like the schedule studio) both want to redirect a role switch
+// somewhere other than the role's default landing page. `entry` wins when both
+// are present — it names an explicit destination, where `proof` only names
+// which requirement is being verified.
+function roleDestination(request: Request, workspace: Pick<Workspace, "eventSlug">, role: DemoRole, proof?: string, entry?: string) {
+  const proofPath = proof && proofRoles[proof] === role
+    ? {
+        "control-room": `/events/${workspace.eventSlug}/dashboard`,
+        walkthrough: `/events/${workspace.eventSlug}/dashboard`,
+        "operations-agent": `/events/${workspace.eventSlug}/program/agent`,
+        resources: "/portal/resources",
+        inbox: "/demo/inbox",
+        publication: `/e/${workspace.eventSlug}`,
+        reset: `/events/${workspace.eventSlug}/dashboard`,
+      }[proof]
+    : undefined;
+  const entryPath = role === "organizer" && entry === "schedule-studio" ? `/events/${workspace.eventSlug}/program/agenda` : undefined;
+  const path = entryPath ?? proofPath ?? (role === "organizer"
     ? `/events/${workspace.eventSlug}/dashboard`
     : role === "reviewer"
       ? `/events/${workspace.eventSlug}/program/evaluation`
-      : "/portal";
+      : "/portal");
   return new URL(path, new URL(request.url).origin).toString();
 }
 
@@ -149,18 +179,29 @@ async function requireWorkspace(request: Request, env: Env, csrf = false) {
   return result.workspace ? { cookie, workspace: result.workspace as Workspace } : null;
 }
 
-async function createWorkspace(request: Request, env: Env, judgeEntry = false) {
-  if (!judgeEntry && !sameOrigin(request)) return json(403, { error: "request_rejected" });
+function demoStart(request: Request, headers: HeadersInit = {}) {
+  return new Response(null, {
+    status: 302,
+    headers: { location: new URL("/demo/start?autolaunch=organizer", request.url).toString(), "cache-control": "no-store", ...headers },
+  });
+}
+
+async function createWorkspace(request: Request, env: Env, mode: WorkspaceCreationMode = "interactive") {
+  if (mode === "interactive" && !sameOrigin(request)) return json(403, { error: "request_rejected" });
   const ip = requestIp(request);
   if (!ip) return json(403, { error: "request_rejected" });
-  let body: { turnstileToken?: string } = {};
-  if (!judgeEntry) {
-    try { body = await request.json<{ turnstileToken?: string }>(); }
+  let body: { turnstileToken?: string; proof?: string } = {};
+  if (mode === "interactive") {
+    try { body = await request.json<{ turnstileToken?: string; proof?: string }>(); }
     catch { return json(400, { error: "invalid_request" }); }
   }
-  const allowed = await rateLimit(env, judgeEntry ? "judge-entry" : "create-v2", ip, judgeEntry ? 10 : 3, 60 * 60 * 1_000);
+  const allowed = await rateLimit(env, mode === "public-entry" ? "public-entry" : "create-v2", ip, 3, hourMs);
   if (!allowed.allowed) return json(429, { error: "rate_limited" }, { "retry-after": String(allowed.retryAfterSeconds) });
-  if (!judgeEntry && (!body.turnstileToken || !(await verifyTurnstile(request, env, body.turnstileToken)))) return json(403, { error: "verification_failed" });
+  if (mode === "public-entry") {
+    const global = await rateLimit(env, "public-entry-global", "all", 50, dayMs);
+    if (!global.allowed) return json(429, { error: "rate_limited" }, { "retry-after": String(global.retryAfterSeconds) });
+  }
+  if (mode === "interactive" && (!body.turnstileToken || !(await verifyTurnstile(request, env, body.turnstileToken)))) return json(403, { error: "verification_failed" });
 
   const workspaceId = crypto.randomUUID();
   const clerk = createClerkClient({ secretKey: env.CLERK_SECRET_KEY });
@@ -189,12 +230,11 @@ async function createWorkspace(request: Request, env: Env, judgeEntry = false) {
     const reviewerUserId = users.reviewer;
     const speakerUserId = users.speaker;
     if (!organizerUserId || !reviewerUserId || !speakerUserId) throw new Error("Demo users were not created.");
-    const destination = judgeEntry ? `/events/demo-${workspaceId}/program/agenda` : `/events/demo-${workspaceId}/dashboard`;
-    const signInUrl = await ticket(env, organizerUserId, new URL(destination, new URL(request.url).origin).toString());
     const workspace = await convex(env, { action: "provision", workspaceId, organizerUserId, reviewerUserId, speakerUserId, organizerEmail: emails.organizer, reviewerEmail: emails.reviewer, speakerEmail: emails.speaker }) as unknown as Workspace;
     const csrf = crypto.randomUUID();
     const cookie = await signCookie(env, { workspaceId, csrf, expiresAt: workspace.absoluteExpiresAt });
-    if (judgeEntry) return new Response(null, { status: 302, headers: { location: signInUrl, "set-cookie": setCookie(cookie), "cache-control": "no-store" } });
+    if (mode === "public-entry") return demoStart(request, { "set-cookie": setCookie(cookie) });
+    const signInUrl = await ticket(env, organizerUserId, roleDestination(request, workspace, "organizer", body.proof));
     return json(201, { workspace: { ...workspace, userIds: undefined }, csrf, signInUrl }, { "set-cookie": setCookie(cookie) });
   } catch {
     await Promise.allSettled(Object.values(users).map((userId) => clerk.users.deleteUser(userId)));
@@ -202,16 +242,10 @@ async function createWorkspace(request: Request, env: Env, judgeEntry = false) {
   }
 }
 
-async function judgeScheduleStudio(request: Request, env: Env) {
-  const key = new URL(request.url).searchParams.get("access");
-  const configuredKey = (env as Env & { DEMO_JUDGE_ACCESS_KEY?: string }).DEMO_JUDGE_ACCESS_KEY;
-  if (!configuredKey || !key || key !== configuredKey) return json(404, { error: "not_found" });
+async function publicDemoEntry(request: Request, env: Env) {
   const active = await requireWorkspace(request, env);
-  if (active) {
-    const destination = new URL(`/events/${active.workspace.eventSlug}/program/agenda`, new URL(request.url).origin).toString();
-    return new Response(null, { status: 302, headers: { location: await ticket(env, active.workspace.userIds.organizer, destination), "cache-control": "no-store" } });
-  }
-  return createWorkspace(request, env, true);
+  if (active) return demoStart(request);
+  return createWorkspace(request, env, "public-entry");
 }
 
 async function state(request: Request, env: Env) {
@@ -225,13 +259,21 @@ async function switchRole(request: Request, env: Env) {
   const active = await requireWorkspace(request, env, true);
   if (!active) return json(401, { error: "workspace_expired" }, { "set-cookie": clearCookie() });
   let role: DemoRole;
-  try { role = (await request.json<{ role: DemoRole }>()).role; }
+  let proof: string | undefined;
+  let entry: string | undefined;
+  try {
+    const body = await request.json<{ role: DemoRole; proof?: string; entry?: string }>();
+    role = body.role;
+    proof = body.proof;
+    entry = body.entry;
+  }
   catch { return json(400, { error: "invalid_request" }); }
   if (!["organizer", "reviewer", "speaker"].includes(role)) return json(400, { error: "invalid_role" });
+  if (entry && (role !== "organizer" || entry !== "schedule-studio")) return json(400, { error: "invalid_entry" });
   const result = await convex(env, { action: "switch", workspaceId: active.cookie.workspaceId, role });
   const workspace = result.workspace as Workspace | null;
   if (!workspace) return json(401, { error: "workspace_expired" }, { "set-cookie": clearCookie() });
-  return json(200, { workspace: { ...workspace, userIds: undefined }, signInUrl: await ticket(env, active.workspace.userIds[role], roleDestination(request, workspace, role)) });
+  return json(200, { workspace: { ...workspace, userIds: undefined }, signInUrl: await ticket(env, active.workspace.userIds[role], roleDestination(request, workspace, role, proof, entry)) });
 }
 
 async function resetWorkspace(request: Request, env: Env) {
@@ -257,8 +299,10 @@ export async function handleDemoRequest(request: Request, env: Env) {
   if (!configured(env)) return json(404, { error: "not_found" });
   const { pathname } = new URL(request.url);
   try {
+    if (pathname === "/demo" && request.method === "HEAD") return new Response(null, { status: 200, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+    if (pathname === "/demo" && request.method === "GET") return await publicDemoEntry(request, env);
     if (pathname === "/api/demo/workspaces" && request.method === "POST") return await createWorkspace(request, env);
-    if (pathname === "/demo/schedule-studio" && request.method === "GET") return await judgeScheduleStudio(request, env);
+    if (pathname === "/demo/schedule-studio" && (request.method === "GET" || request.method === "HEAD")) return new Response(null, { status: 302, headers: { location: new URL("/demo", request.url).toString(), "cache-control": "no-store" } });
     if (pathname === "/api/demo/workspaces/current" && request.method === "GET") return await state(request, env);
     if (pathname === "/api/demo/workspaces/current/role" && request.method === "POST") return await switchRole(request, env);
     if (pathname === "/api/demo/workspaces/current/reset" && request.method === "POST") return await resetWorkspace(request, env);

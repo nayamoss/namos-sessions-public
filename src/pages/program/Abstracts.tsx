@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import { ChevronDown, ChevronUp, Download, Plus, Search } from "lucide-react";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { ChevronDown, ChevronUp, Download, Search } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
 import { DataGrid, type DataGridColumn } from "@/components/shared/DataGrid";
-import { DetailPane } from "@/components/shared/DetailPane";
 import { DecisionButtons } from "@/components/shared/DecisionButtons";
 import { ExpandableText } from "@/components/shared/ExpandableText";
 import { StarRating } from "@/components/shared/StarRating";
 import { FilterMenu } from "@/components/shared/StatusTabs";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
+import { cardSurfaceClasses } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -541,6 +541,10 @@ function ColumnsControl({
 export default function Abstracts() {
   const repo = useRepo();
   const { event: activeEvent } = useCurrentEvent();
+  const navigate = useNavigate();
+  const { abstractId } = useParams<{ abstractId?: string }>();
+  const location = useLocation();
+  const creating = abstractId === "new" || location.pathname.endsWith("/new");
   const [searchParams, setSearchParams] = useSearchParams();
   const [event, setEvent] = useState<Event>();
   const [rows, setRows] = useState<AbstractRow[]>([]);
@@ -559,7 +563,10 @@ export default function Abstracts() {
   const [taggingId, setTaggingId] = useState<string>();
   const [decisionFeedback, setDecisionFeedback] = useState<string>();
   const [updatingDecisionId, setUpdatingDecisionId] = useState<string>();
-  const [addOpen, setAddOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(creating);
+  useEffect(() => {
+    if (creating) setAddOpen(true);
+  }, [creating]);
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState<string>();
   const [draft, setDraft] = useState<AbstractDraft>({
@@ -648,10 +655,13 @@ export default function Abstracts() {
       ),
     [query, rows, status],
   );
-  const selectedRow = useMemo(
-    () => rows.find((row) => row.id === searchParams.get("selected")),
-    [rows, searchParams],
-  );
+  const listPath = `/events/${activeEvent.slug}/program/abstracts`;
+  const selectedId = abstractId && abstractId !== "new" ? abstractId : searchParams.get("selected");
+  const selectedRow = useMemo(() => rows.find((row) => row.id === selectedId), [rows, selectedId]);
+  useEffect(() => {
+    if (abstractId || !searchParams.get("selected")) return;
+    navigate(`${listPath}/${encodeURIComponent(searchParams.get("selected")!)}/edit`, { replace: true });
+  }, [abstractId, listPath, navigate, searchParams]);
   const updateStatus = async (id: string, nextStatus: SubmissionStatus) => {
     const current = rows.find((row) => row.id === id);
     if (!current || current.status === nextStatus) return;
@@ -805,6 +815,7 @@ export default function Abstracts() {
       status: "pending",
     });
     setAddOpen(true);
+    navigate(`${listPath}/new`);
   };
   const createAbstract = async () => {
     if (!event) return;
@@ -821,15 +832,15 @@ export default function Abstracts() {
     setAdding(true);
     setAddError(undefined);
     try {
-      await repo.submissions.createAdmin({
+      const created = await repo.submissions.createAdmin({
         eventId: event.id,
         formId: draft.formId,
         title: draft.title,
         description: draft.description || undefined,
         status: draft.status,
       });
-      setAddOpen(false);
       await loadRows();
+      navigate(`${listPath}/${created.id}/edit`);
     } catch (error) {
       setAddError(
         error instanceof Error
@@ -998,11 +1009,7 @@ export default function Abstracts() {
     .filter((column): column is DataGridColumn<AbstractRow> => Boolean(column));
 
   const addDetail = (
-    <DetailPane title="Add submission" onClose={() => setAddOpen(false)}>
-      <p className="-mt-3 text-base text-muted-foreground">
-        Create an organizer-owned row for this event’s review queue. No speaker
-        is added automatically.
-      </p>
+    <section className={cardSurfaceClasses("default", "mx-auto max-w-3xl space-y-5 p-6")} aria-label="New submission">
       <div className="space-y-5">
         <div className="space-y-2">
           <Label htmlFor="abstract-source">Source form</Label>
@@ -1095,7 +1102,7 @@ export default function Abstracts() {
           <Button
             type="button"
             variant="outline"
-            onClick={() => setAddOpen(false)}
+            onClick={() => { setAddOpen(false); navigate(listPath); }}
             disabled={adding}
           >
             Cancel
@@ -1110,9 +1117,10 @@ export default function Abstracts() {
           </Button>
         </div>
       </div>
-    </DetailPane>
+    </section>
   );
   const closeSelected = () => {
+    if (abstractId) { navigate(listPath); return; }
     const next = new URLSearchParams(searchParams);
     next.delete("selected");
     setSearchParams(next);
@@ -1120,7 +1128,7 @@ export default function Abstracts() {
     setDecisionResults([]);
   };
   const selectedDetail = selectedRow ? (
-    <DetailPane title={selectedRow.title} onClose={closeSelected}>
+    <section className={cardSurfaceClasses("default", "space-y-6 p-6")} aria-label={`Edit ${selectedRow.title}`}>
       <div className="mb-5">
         <DecisionButtons
           status={selectedRow.status}
@@ -1267,13 +1275,12 @@ export default function Abstracts() {
           </div>
         </section>
       )}
-    </DetailPane>
+    </section>
   ) : undefined;
+  if (creating || addOpen) return <AppLayout title="New submission">{addDetail}</AppLayout>;
+  if (abstractId) return <AppLayout title={selectedRow?.title ?? "Submission"}>{loading ? <p className="text-sm text-muted-foreground">Loading submission…</p> : selectedDetail ?? <EmptyState title="Submission not found" message="This submission may have been removed." action={<Button variant="outline" onClick={closeSelected}>Back to submissions</Button>} />}</AppLayout>;
   return (
-    <AppLayout
-      title="Submissions"
-      detail={addOpen ? addDetail : selectedDetail}
-    >
+    <AppLayout title="Submissions">
       <div className="space-y-3">
         {loadError && (
           <p role="alert" className="text-sm text-destructive">
@@ -1364,7 +1371,7 @@ export default function Abstracts() {
                   </Button>
                 ) : (
                   <Button variant="accent" size="sm" onClick={openAddAbstract}>
-                    <Plus /> Add abstract
+                    Add abstract
                   </Button>
                 )
               }

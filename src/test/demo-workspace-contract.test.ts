@@ -32,26 +32,46 @@ describe("demo workspace server boundary", () => {
     expect(fixture).toContain('scheduleStartTime: "08:00"');
     expect(fixture).toContain('title: "Upload final slides"');
     expect(fixture).toContain('name: "Reviewed acceptance"');
-    expect(fixture).toContain("await deleteDemoFixture(ctx, workspace.eventId, workspace.organizerUserId)");
+    expect(fixture).toContain("await deleteDemoFixture(ctx, workspace.eventId, workspace.organizationId, workspace.organizerUserId)");
     expect(fixture).toContain("await seedDemoFixture(ctx, { eventId: workspace.eventId");
+    for (const resetOwnedTable of [
+      "agent_action_proposals", "communication_drafts", "agent_runs", "comms_log", "onboarding_tasks",
+      "speaker_documents", "crm_event_contacts", "crm_sources", "crm_oauth_pending", "crm_oauth_states",
+    ]) expect(fixture).toContain(`"${resetOwnedTable}"`);
+    expect(fixture).toContain("ctx.storage.delete");
+    expect(fixture).toContain('ctx.db.query("demo_deliveries")');
   });
 
-  it("keeps the one-click judge entry capability scoped and rate limited", () => {
+  it("deletes workspace fixtures and identities on the configured 15-minute cleanup schedule", () => {
+    const fixture = readFileSync(resolve(process.cwd(), "convex/demoWorkspaces.ts"), "utf8");
+    const worker = readFileSync(resolve(process.cwd(), "worker/demo.ts"), "utf8");
+    const entry = readFileSync(resolve(process.cwd(), "worker/index.ts"), "utf8");
+    const config = readFileSync(resolve(process.cwd(), "wrangler.jsonc"), "utf8");
+    expect(fixture).toContain("workspace.expiresAt <= args.now || workspace.absoluteExpiresAt <= args.now");
+    expect(fixture).toContain('withIndex("by_expiresAt", (q) => q.lte("expiresAt", args.now))');
+    expect(worker).toContain("clerk.users.deleteUser(userId)");
+    expect(entry).toContain("await cleanupDemoWorkspaces(env)");
+    expect(config).toContain('"crons": ["*/15 * * * *"]');
+  });
+
+  it("keeps the public one-click entry scoped and rate limited", () => {
     const worker = readFileSync(resolve(process.cwd(), "worker/demo.ts"), "utf8");
     expect(worker).toContain('pathname === "/demo/schedule-studio"');
-    expect(worker).toContain("DEMO_JUDGE_ACCESS_KEY");
-    expect(worker).toContain('judge-entry');
+    expect(worker).not.toContain("DEMO_JUDGE_ACCESS_KEY");
+    expect(worker).toContain('pathname === "/demo"');
+    expect(worker).toContain('"public-entry-global", "all", 50');
     expect(worker).toContain("/program/agenda");
   });
 
-  it("captures all demo email before integration resolution and grants only a bounded agent allowance", () => {
+  it("captures all demo email before integration resolution and resolves agent allowance from Clerk plan configuration", () => {
     const delivery = readFileSync(resolve(process.cwd(), "convex/emailDelivery.ts"), "utf8");
     const allowance = readFileSync(resolve(process.cwd(), "convex/agentBillingResolver.ts"), "utf8");
     const capturePosition = delivery.indexOf("captureDeliveryForEvent");
     const providerPosition = delivery.indexOf("const integration = await resolveEventIntegration", capturePosition);
     expect(capturePosition).toBeGreaterThan(0);
     expect(providerPosition).toBeGreaterThan(capturePosition);
-    expect(allowance).toContain('namosDemoRole === "organizer"');
-    expect(allowance).toContain('planSlug: "demo", runLimit: 3, tokenLimit: 30_000, reserveTokens: 10_000');
+    expect(allowance).toContain("CLERK_AGENT_PLAN_ALLOWANCES");
+    expect(allowance).not.toContain("namosDemoRole");
+    expect(allowance).not.toContain('planSlug: "demo"');
   });
 });

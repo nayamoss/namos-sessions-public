@@ -95,6 +95,16 @@ describe("shared component canon", () => {
     expect(violations).toEqual([]);
   });
 
+  it("keeps table rows unstriped across the application", () => {
+    const violations = sourceFiles(sourceRoot).flatMap((file) => {
+      const source = readFileSync(file, "utf8");
+      return /(?:even|odd):bg-|nth-child\((?:even|odd)\)/.test(source)
+        ? [relative(sourceRoot, file).replaceAll("\\", "/")]
+        : [];
+    });
+    expect(violations).toEqual([]);
+  });
+
   it("keeps raw buttons outside reusable UI components explicitly classified", () => {
     const allowed = new Set([
       "components/AccountMenu.tsx",

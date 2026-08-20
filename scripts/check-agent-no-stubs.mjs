@@ -6,7 +6,7 @@ const productFiles = [
   "convex/agentState.ts",
   "convex/agentData.ts",
   "convex/agentWorkflow.ts",
-  "src/pages/program/AgentOperations.tsx",
+  "src/components/agent/AgentWorkspace.tsx",
   "src/components/agent/AgentComposer.tsx",
   "src/components/agent/AgentTimeline.tsx",
   "src/components/agent/AgentRunInspector.tsx",
@@ -23,7 +23,7 @@ const required = [
   ["convex/agentRuntime.ts", "internal.agentData.eventOverview"],
   ["convex/agentRuns.ts", "validateAndCreateTask"],
   ["convex/agentRuns.ts", "expectedPayloadHash"],
-  ["src/pages/program/AgentOperations.tsx", "agentRuns.create"],
+  ["src/components/agent/AgentWorkspace.tsx", "agentRuns.create"],
 ];
 
 const sources = new Map(await Promise.all(productFiles.map(async (file) => [file, await readFile(file, "utf8")] )));

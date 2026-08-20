@@ -1,5 +1,10 @@
 # Organizer-Owned Form Page Model — Technical Design
 
+> **Final UX amendment (2026-08-19):** The owner-approved HTML prototype supersedes the early
+> persistent-preview and visible-system-page details in this document. Production uses a
+> custom-pages-only rail and a dedicated Preview mode. System pages remain in the authoritative
+> page model and public flow, with their anchors enforced server-side.
+
 ## Database / Schema Changes
 
 ### Current Schema (affected tables)
@@ -161,9 +166,10 @@ doesn't need a new endpoint — just internal logic changes.
 **`FormPreviewHost`**
 - File: `src/components/forms/FormPreviewHost.tsx`
 - Props: `{ config: PublicSubmissionFormConfig /* built from live draft */ }`
-- Location: right-side pane in both builders, persistent (not a header toggle)
+- Location: dedicated Preview mode in both builders, opened from the content toolbar
 - Elements: renders the shared public-form component (extracted from `SubmissionPage.tsx`) in `mode="preview"` — same field rendering, same step list derived from `pages`, same progress bar as the real public page; wrapped in a distinct browser/device-chrome frame with a "Preview — reflects unsaved edits" label
-- Behavior: internal Back/Continue navigate the preview's own step state only; styled with a visibly different button treatment (e.g. `variant="ghost"`, different size) than the builder's real Back/Next so no two button pairs on screen share both variant and size (per FR-007)
+- Behavior: internal Back/Continue navigate preview state only; leaving Preview returns to the
+  same local draft without saving or resetting it
 - Data: reads a live-derived `PublicSubmissionFormConfig` built from the builder's in-memory `pages`/fields state (replaces `previewDraft` useMemo pattern, `SubmissionFormBuilder.tsx:1041-1092`); no network calls, no Turnstile, no submit, no analytics (`mode="preview"` short-circuits all of these in the shared renderer)
 
 **`ProgressTrack`** (inside `WizardShell.tsx`, not a separate file)

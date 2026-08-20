@@ -129,3 +129,20 @@ export async function isEventOrganizer(ctx: QueryCtx | MutationCtx, eventId: Id<
   if (event && (await isOrganizerOf(ctx, identity, event.organizationId))) return true;
   return (await getEventMembership(ctx, eventId, identity))?.role === "organizer";
 }
+
+// Scheduled adapters (Slack today) have no browser identity. They may act only for a stored
+// Clerk subject that still has organizer access at execution time; the external identity
+// mapping is never itself authority.
+export async function assertEventOrganizerByUserId(
+  ctx: QueryCtx | MutationCtx,
+  eventId: Id<"events">,
+  userId: string,
+): Promise<void> {
+  const event = await ctx.db.get(eventId);
+  if (!event?.organizationId) throw new Error("Forbidden: event organizer access required.");
+  const [organizer, member] = await Promise.all([
+    ctx.db.query("organizers").withIndex("by_org_userId", (q) => q.eq("organizationId", event.organizationId).eq("userId", userId)).unique(),
+    ctx.db.query("event_members").withIndex("by_event_userId", (q) => q.eq("eventId", eventId).eq("userId", userId)).unique(),
+  ]);
+  if (!organizer && member?.role !== "organizer") throw new Error("Forbidden: event organizer access required.");
+}

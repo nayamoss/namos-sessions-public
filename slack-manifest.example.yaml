@@ -1,0 +1,38 @@
+display_information:
+  name: Namos Sessions
+  description: Event-scoped operations and selected notifications
+  background_color: "#0b63f6"
+features:
+  bot_user:
+    display_name: Namos
+    always_online: false
+  slash_commands:
+    - command: /namos
+      url: https://YOUR-CONVEX-DEPLOYMENT.convex.site/slack/commands
+      description: Ask Namos about this event
+      usage_hint: help | status | ask <objective>
+      should_escape: false
+oauth_config:
+  redirect_urls:
+    - https://YOUR-CONVEX-DEPLOYMENT.convex.site/oauth/slack/callback
+  scopes:
+    bot:
+      - app_mentions:read
+      - chat:write
+      - commands
+      - channels:read
+      - groups:read
+      - im:history
+      - im:read
+settings:
+  event_subscriptions:
+    request_url: https://YOUR-CONVEX-DEPLOYMENT.convex.site/slack/events
+    bot_events:
+      - app_mention
+      - message.im
+  interactivity:
+    is_enabled: true
+    request_url: https://YOUR-CONVEX-DEPLOYMENT.convex.site/slack/interactions
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false

@@ -157,7 +157,7 @@ function DataGridContent<Row extends { id: string }>({
       ? "sticky top-0 z-10 bg-card text-xs text-muted-foreground"
     : "bg-muted/35 text-sm font-medium text-muted-foreground";
   const tableViewportClass = isEmbedded
-    ? "max-h-[calc(100dvh-11rem)] overflow-auto"
+    ? "overflow-x-auto"
     : isMatrix
       ? "max-h-[38rem] overflow-auto"
       : "overflow-x-auto rounded-lg bg-card shadow-sm ring-1 ring-inset ring-foreground/10";
@@ -301,8 +301,8 @@ function DataGridContent<Row extends { id: string }>({
                     activatable && selected === row.id
                       ? "cursor-pointer border-b border-border bg-primary/10 outline-none ring-2 ring-inset ring-ring/20"
                       : activatable
-                        ? `${isEmbedded ? "even:bg-muted/20" : "even:bg-muted/20"} cursor-pointer outline-none hover:bg-muted/40 focus-visible:bg-muted/40`
-                        : "even:bg-muted/20"
+                        ? "cursor-pointer outline-none hover:bg-muted/40 focus-visible:bg-muted/40"
+                        : undefined
                   }
                 >
                   {selectable && <td data-label="Select" className="w-12 px-4 py-3" onClick={(event) => event.stopPropagation()}><Checkbox aria-label={`Select ${getRowLabel(row)}`} checked={selectedIds?.includes(row.id)} onCheckedChange={(checked) => onSelectionChange?.(checked ? [...(selectedIds ?? []), row.id] : (selectedIds ?? []).filter((id) => id !== row.id))} /></td>}

@@ -4,13 +4,10 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Compact density: scales every rem-based Tailwind dimension (spacing, sizing,
-   radius) app-wide from one lever. Stays relative to the browser's default font
-   size, so a user who raises it still gets larger UI — it is not a px pin.
-   The --text-* tokens below are corrected back up so labels land at the 12-13px
-   industry floor instead of compounding down to ~8.8px. */
+/* Keep rem-based dimensions aligned with the browser default so zoom and user
+   font preferences scale the product predictably. */
 html {
-  font-size: 80%;
+  font-size: 100%;
 }
 
 html,
@@ -27,16 +24,15 @@ body.demo-workspace-active {
   :root {
     color-scheme: light;
 
-    /* Compact type scale — wired to Tailwind's text-* utilities in tailwind.config.ts.
-       rem values are pre-multiplied for the 80% root above; comments are the real px. */
-    --text-xs: 0.9375rem; /* 12px */
-    --text-sm: 1.015625rem; /* 13px */
-    --text-base: 1.09375rem; /* 14px */
-    --text-lg: 1.25rem; /* 16px */
-    --text-xl: 1.40625rem; /* 18px */
-    --text-2xl: 1.640625rem; /* 21px */
-    --text-3xl: 2.03125rem; /* 26px */
-    --text-4xl: 2.34375rem; /* 30px */
+    /* Standard product type scale, wired to Tailwind's text-* utilities. */
+    --text-xs: 0.75rem;
+    --text-sm: 0.875rem;
+    --text-base: 1rem;
+    --text-lg: 1.125rem;
+    --text-xl: 1.25rem;
+    --text-2xl: 1.5rem;
+    --text-3xl: 1.875rem;
+    --text-4xl: 2.25rem;
 
     /* Namos product palette — electric-blue primary actions with soft neutrals.
        --muted/--secondary/--surface-sunken must stay a visible step darker than
@@ -208,6 +204,16 @@ body.demo-workspace-active {
 }
 
 @layer components {
+  :where(
+    button,
+    [role="button"],
+    [role="combobox"],
+    input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="color"]):not(.sr-only),
+    textarea
+  ) {
+    min-height: 2.5rem;
+  }
+
   .touch-target {
     min-height: 2.5rem;
   }
@@ -348,8 +354,20 @@ select:focus-visible,
 [data-slot="textarea"]:focus-visible {
   border: none !important;
   outline: none !important;
-  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.4) !important;
+  box-shadow: none !important;
+  --tw-ring-shadow: none !important;
   --tw-shadow: none !important;
+}
+
+/* Focus is communicated with surface/color changes instead of solid outlines. */
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+[role="combobox"]:focus-visible,
+[role="tab"]:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+  --tw-ring-shadow: none !important;
 }
 
 [data-slot="card"] {

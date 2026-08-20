@@ -1,6 +1,7 @@
-import type { ReactNode } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cardSurfaceClasses } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 export type WizardStep = { id: string; label: string };
@@ -31,8 +32,22 @@ export function WizardShell({
 }) {
   const progress =
     steps.length < 2 ? 100 : (activeStep / (steps.length - 1)) * 100;
+  const nextLabel = activeStep === steps.length - 1 ? finalLabel : "Next";
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    if (
+      event.defaultPrevented ||
+      event.key !== "Enter" ||
+      (!event.metaKey && !event.ctrlKey) ||
+      target.closest("[contenteditable=\"true\"]")
+    )
+      return;
+    event.preventDefault();
+    if (event.shiftKey) onBack();
+    else onNext();
+  };
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" onKeyDown={handleKeyDown}>
       <div
         className="space-y-2"
         aria-label={`Step ${activeStep + 1} of ${steps.length}`}
@@ -97,21 +112,34 @@ export function WizardShell({
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>{footerStart}</div>
-        <div className="ml-auto flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onBack}
-            disabled={activeStep === 0}
+        <div className="ml-auto flex items-center gap-3">
+          <p
+            className="hidden items-center gap-1 text-xs text-muted-foreground sm:flex"
+            aria-label={`Keyboard shortcuts: Command or Control Enter for ${nextLabel}; Shift Command or Control Enter for back`}
           >
-            Back
-          </Button>
-          <Button variant="accent" size="sm" onClick={onNext}>
-            {activeStep === steps.length - 1 ? finalLabel : "Next"}
-          </Button>
+            <kbd className="rounded bg-muted px-1.5 py-0.5 font-mono text-foreground">⌘</kbd>
+            <kbd className="rounded bg-muted px-1.5 py-0.5 font-mono text-foreground">↵</kbd>
+            <span>{nextLabel}</span>
+            <span className="mx-1">·</span>
+            <kbd className="rounded bg-muted px-1.5 py-0.5 font-mono text-foreground">⇧⌘</kbd>
+            <kbd className="rounded bg-muted px-1.5 py-0.5 font-mono text-foreground">↵</kbd>
+            <span>Back</span>
+          </p>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onBack}
+              disabled={activeStep === 0}
+            >
+              Back
+            </Button>
+            <Button variant="accent" size="sm" onClick={onNext}>
+              {nextLabel}
+            </Button>
+          </div>
         </div>
       </div>
     </div>
   );
 }
-import { cardSurfaceClasses } from "@/components/ui/card";
