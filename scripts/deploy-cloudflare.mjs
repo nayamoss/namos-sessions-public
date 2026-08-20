@@ -36,6 +36,16 @@ assertCleanTree();
 validateWranglerConfig(config);
 
 for (const name of requiredWranglerVars) buildEnvironment[name] = process.env[name] || config.vars[name];
+for (const [name, value] of Object.entries(config.vars)) {
+  if (name.startsWith("VITE_") && !buildEnvironment[name]) buildEnvironment[name] = value;
+}
+const deployedCommit = spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" });
+if (deployedCommit.status !== 0 || !deployedCommit.stdout.trim()) {
+  console.error("Refusing to deploy: the exact source commit could not be determined.");
+  process.exit(1);
+}
+buildEnvironment.VITE_DEMO_DEPLOY_COMMIT = deployedCommit.stdout.trim();
+buildEnvironment.VITE_DEMO_VERIFIED_AT = new Date().toISOString();
 
 function run(command, args, env = process.env) {
   const result = spawnSync(command, args, { env, stdio: "inherit", shell: process.platform === "win32" });

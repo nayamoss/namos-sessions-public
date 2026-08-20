@@ -45,7 +45,7 @@ export default function Library() {
       setError(
         cause instanceof Error
           ? cause.message
-          : "Could not load the tag library.",
+          : "Could not load tags.",
       );
     } finally {
       setLoading(false);
@@ -112,7 +112,7 @@ export default function Library() {
     <>
       <div className="space-y-4">
         <ContentToolbar
-          ariaLabel="Library actions"
+          ariaLabel="Tag actions"
           primaryAction={
             <Button
               variant="accent"
@@ -130,7 +130,7 @@ export default function Library() {
           </p>
         )}
         {loading ? (
-          <SkeletonList rows={4} label="Loading tag library…" />
+          <SkeletonList rows={4} label="Loading tags…" />
         ) : !event ? (
           <Card className="p-6">
             <p className="text-base text-muted-foreground">
@@ -142,7 +142,7 @@ export default function Library() {
             <div>
               <h2 className="text-base font-semibold">Tags</h2>
               <p className="mt-1 text-base text-muted-foreground">
-                Organize submissions with a reusable event-level library.
+                Create reusable tags to organize submissions for this event.
               </p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end">

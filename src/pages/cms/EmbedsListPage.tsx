@@ -17,7 +17,12 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import { useRepo } from "@/data/repo";
 import type { Embed } from "@/data/types";
-import { embedViewLabels, embedWriteFromEmbed, iframeSnippet } from "@/lib/public-embed";
+import {
+  embedViewLabels,
+  embedWriteFromEmbed,
+  iframeSnippet,
+  publicEmbedOrigin,
+} from "@/lib/public-embed";
 
 type StatusFilter = "all" | "enabled" | "disabled";
 
@@ -59,7 +64,7 @@ export default function EmbedsListPage() {
   }, [embeds, query, status]);
 
   async function copy(embed: Embed) {
-    const code = iframeSnippet(window.location.origin, embed.id, embed.view);
+    const code = iframeSnippet(publicEmbedOrigin(window.location.origin), embed.id, embed.view);
     try {
       await navigator.clipboard.writeText(code);
       toast({ title: "Embed code copied" });
@@ -90,7 +95,7 @@ export default function EmbedsListPage() {
     setBusyId(embed.id);
     try {
       const id = await repo.publicEmbeds.duplicate({ eventId: event.id, embedId: embed.id });
-      navigate(route(`/${id}`));
+      navigate(route(`/${id}/edit`));
     } catch {
       toast({ title: "Embed could not be duplicated", variant: "destructive" });
       setBusyId(undefined);
@@ -197,7 +202,7 @@ export default function EmbedsListPage() {
                       <button
                         type="button"
                         className="min-w-0 flex-1 rounded-sm text-left focus-visible:outline-none"
-                        onClick={() => navigate(route(`/${embed.id}`))}
+                        onClick={() => navigate(route(`/${embed.id}/edit`))}
                       >
                         <h3 className="truncate font-medium">{embed.name}</h3>
                         <p className="mt-1 text-sm text-muted-foreground">{embedViewLabels[embed.view]}</p>
@@ -213,7 +218,7 @@ export default function EmbedsListPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onSelect={() => navigate(route(`/${embed.id}`))}>Edit</DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => navigate(route(`/${embed.id}/edit`))}>Edit</DropdownMenuItem>
                           <DropdownMenuItem onSelect={() => void duplicate(embed)}>Duplicate</DropdownMenuItem>
                           <DropdownMenuItem onSelect={() => void toggle(embed)}>{embed.enabled ? "Disable" : "Enable"}</DropdownMenuItem>
                           <DropdownMenuItem className="text-destructive" onSelect={() => setDeleting(embed)}>Delete</DropdownMenuItem>

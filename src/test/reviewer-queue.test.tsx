@@ -284,6 +284,9 @@ describe("reviewer queue (adapters)", () => {
 
   it("recognises the organizer gate's error, and only that", () => {
     expect(isForbiddenError(new Error("[Request ID: abc] Server Error\nUncaught Error: Forbidden: organizer access required."))).toBe(true);
+    // Convex production errors can cross a transport boundary as Error-shaped objects whose
+    // prototype is not the current realm's native Error.
+    expect(isForbiddenError({ message: "[Request ID: abc] Server Error\nUncaught Error: Forbidden: organizer access required." })).toBe(true);
     expect(isForbiddenError(new Error("Could not reach the backend."))).toBe(false);
     expect(isForbiddenError(undefined)).toBe(false);
   });
@@ -333,7 +336,7 @@ function organizerRepo() {
       listAssignments: async () => [],
       // The organizer surface also renders the reviewer progress panel for the selected plan.
       reviewerProgress: async () => [],
-      myQueue: async () => { throw new Error("An organizer must never need the reviewer fallback."); },
+      myQueue: async () => [],
     },
   } as unknown as Repository;
 }

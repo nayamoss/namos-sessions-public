@@ -4,7 +4,7 @@ import { Inbox } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function EmptyState({ message, title, action, icon: Icon, compact = false, className }: {
-  message: ReactNode;
+  message?: ReactNode;
   title?: ReactNode;
   action?: ReactNode;
   icon?: LucideIcon;
@@ -19,7 +19,7 @@ export function EmptyState({ message, title, action, icon: Icon, compact = false
       </span>
       <div className="max-w-lg">
         {title && <p className="font-medium">{title}</p>}
-        <p className={cn("text-sm text-muted-foreground", title && "mt-1")}>{message}</p>
+        {message && <p className={cn("text-sm text-muted-foreground", title && "mt-1")}>{message}</p>}
       </div>
       {action && <div className="flex flex-wrap justify-center gap-2">{action}</div>}
     </div>

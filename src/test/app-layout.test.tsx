@@ -33,14 +33,13 @@ describe("AppLayout", () => {
     container.remove();
 
     const accountMenuSource = readFileSync(join(process.cwd(), "src/components/AccountMenu.tsx"), "utf8");
-    // The destination moved from a route link to the settings overlay in #231, so assert the
-    // entry point that exists now. What this test protects is unchanged: organization settings
-    // are reachable from the account menu and not from a floating sidebar button.
-    expect(accountMenuSource).toContain('openSettings("organization")');
+    // Organization settings remain reachable from the account menu while the compact event
+    // settings hub only contains event-scoped destinations.
+    expect(accountMenuSource).toContain('to="/settings/organization"');
     expect(accountMenuSource).toContain("Organization settings");
   });
 
-  it("keeps only the page title and notification control in shell chrome", () => {
+  it("keeps page headers identity-only and places workspace utilities in the body", () => {
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
@@ -65,10 +64,11 @@ describe("AppLayout", () => {
 
     expect(shell).toHaveClass("h-dvh");
     expect(shellHeader.querySelector("h1")).toHaveTextContent("Abstracts");
-    expect(shellHeader.querySelector('button[aria-label="Notifications"]')).toBeInTheDocument();
-    const headerUtilities = [...shellHeader.children].find((child) => child.classList.contains("ml-auto"));
-    expect(headerUtilities).toContainElement(shellHeader.querySelector('button[aria-label="Open command palette"]'));
-    expect(headerUtilities).toContainElement(shellHeader.querySelector('button[aria-label="Notifications"]'));
+    expect(shellHeader.querySelectorAll("h1")).toHaveLength(1);
+    expect(shellHeader.querySelector("button, input, select, a")).not.toBeInTheDocument();
+    const workspaceUtilities = content.querySelector<HTMLElement>('nav[aria-label="Workspace utilities"]')!;
+    expect(workspaceUtilities.querySelector('button[aria-label="Open command palette"]')).toBeInTheDocument();
+    expect(workspaceUtilities.querySelector('button[aria-label="Notifications"]')).toBeInTheDocument();
     expect(shellHeader.textContent).not.toContain("Add Abstract");
     expect(shellHeader.querySelector('input[aria-label="Search abstracts"]')).not.toBeInTheDocument();
     expect(content.textContent).toContain("Add Abstract");
@@ -193,7 +193,8 @@ describe("AppLayout", () => {
     container.remove();
   });
 
-  it("keeps multi-item navigation collapsible and presents Configure as one settings hub", () => {
+  it("keeps multi-item navigation collapsible and opens Configure as a compact hub", () => {
+    window.localStorage.removeItem("namos-sidebar-section-state");
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
@@ -210,14 +211,16 @@ describe("AppLayout", () => {
     const sections = [...container.querySelectorAll("nav section")];
     const programHeader = sections.find((section) => section.querySelector("h2")?.textContent === "Program")!;
     const programToggle = programHeader.querySelector("button")!;
-    const configureSection = sections.find((section) => section.querySelector('button[aria-label="Configure"]'))!;
-    const configureButton = configureSection.querySelector('button[aria-label="Configure"]')!;
+    const configureButton = container.querySelector<HTMLButtonElement>('button[aria-label="Configure"]')!;
 
-    // No active route inside Program, so it starts collapsed. Configuration
-    // intentionally is not another accordion: it opens the settings hub.
+    // No active route inside either group, so both start collapsed.
     expect(programToggle).toHaveAttribute("aria-expanded", "false");
-    expect(configureSection.querySelector("h2")).not.toBeInTheDocument();
-    expect(configureButton).toHaveTextContent("Configure");
+    expect(configureButton).toBeInTheDocument();
+    expect(configureButton.closest("section")?.querySelector("h2")).toBeNull();
+
+    act(() => configureButton.click());
+    expect(document.querySelector('[role="dialog"]')).toHaveTextContent("Event details");
+    expect(document.querySelector('[role="dialog"]')).toHaveTextContent("Embeds");
 
     act(() => programToggle.click());
     expect(programHeader.querySelector("button")).toHaveAttribute("aria-expanded", "true");

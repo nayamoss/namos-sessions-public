@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Archive, Database, Mail, Plus, RefreshCw, UsersRound } from "lucide-react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Archive, Database, Mail, RefreshCw, UsersRound } from "lucide-react";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
 import { DataGrid, type DataGridColumn } from "@/components/shared/DataGrid";
-import { DetailPane } from "@/components/shared/DetailPane";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { SkeletonList } from "@/components/shared/SkeletonList";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -53,7 +53,7 @@ function ContactPane({ contact, onClose, onSaved }: { contact?: CrmContact; onCl
     finally { setSaving(false); }
   };
 
-  return <DetailPane title={contact ? "Edit contact" : "Add contact"} onClose={onClose}>
+  const content = (
     <form className="space-y-5" onSubmit={(formEvent) => void submit(formEvent)}>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
         <div className="space-y-1.5"><Label htmlFor="crm-first-name">First name</Label><Input id="crm-first-name" value={firstName} onChange={(e) => setFirstName(e.target.value)} autoComplete="given-name" autoFocus disabled={saving} /></div>
@@ -68,7 +68,8 @@ function ContactPane({ contact, onClose, onSaved }: { contact?: CrmContact; onCl
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       <div className="flex flex-wrap justify-between gap-2">{contact ? <Button type="button" variant="outline" onClick={() => void unlink()} disabled={saving || Boolean(contact.speakerId)}>Remove from event</Button> : <span />}<div className="flex gap-2"><Button type="button" variant="outline" onClick={onClose} disabled={saving}>Cancel</Button><Button type="submit" disabled={saving}>{saving ? "Saving…" : "Save contact"}</Button></div></div>
     </form>
-  </DetailPane>;
+  );
+  return <AppLayout title={contact ? "Edit contact" : "New contact"}>{content}</AppLayout>;
 }
 
 function SourceDialog({ open, onOpenChange, onSaved, pendingId, pendingProvider }: { open: boolean; onOpenChange: (open: boolean) => void; onSaved: () => void; pendingId?: string; pendingProvider?: CrmSourceProvider }) {
@@ -140,6 +141,10 @@ export default function Contacts() {
   const repo = useRepo();
   const { event } = useCurrentEvent();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { contactId } = useParams();
+  const location = useLocation();
+  const creatingContact = contactId === "new" || location.pathname.endsWith("/new");
+  const navigate = useNavigate();
   const pendingId = searchParams.get("crm_oauth") ?? undefined;
   const pendingProvider = searchParams.get("provider") === "notion" ? "notion" : searchParams.get("provider") === "airtable" ? "airtable" : undefined;
   const [contacts, setContacts] = useState<CrmContact[]>([]);
@@ -151,8 +156,6 @@ export default function Contacts() {
   const [stage, setStage] = useState<CrmStage | "all">("all");
   const [segmentId, setSegmentId] = useState("all");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [detail, setDetail] = useState<CrmContact>();
-  const [adding, setAdding] = useState(false);
   const [bulkStage, setBulkStage] = useState<CrmStage>("contacted");
   const [busy, setBusy] = useState(false);
   const [backfillMessage, setBackfillMessage] = useState<string>();
@@ -195,15 +198,21 @@ export default function Contacts() {
 
   if (selectedBackend() !== "convex") return <AppLayout title="Contacts"><section className="flex min-h-64 flex-col items-center justify-center text-center"><UsersRound className="h-6 w-6 text-muted-foreground" aria-hidden="true" /><h2 className="mt-3 text-base font-semibold">Contacts require a managed workspace</h2><p className="mt-1 max-w-md text-sm text-muted-foreground">The organization CRM is available only when this workspace uses the managed Convex data service.</p></section></AppLayout>;
 
+  if (contactId || creatingContact) {
+    const creating = creatingContact;
+    const contact = creating ? undefined : contacts.find((row) => row.id === contactId);
+    if (loading) return <AppLayout title={creating ? "New contact" : "Edit contact"}><SkeletonList rows={4} label="Loading contact…" /></AppLayout>;
+    if (!creating && !contact) return <AppLayout title="Contact not found"><EmptyState icon={UsersRound} title="Contact not found" action={<Button onClick={() => navigate(`/events/${event.slug}/program/contacts`)}>Back to contacts</Button>} /></AppLayout>;
+    return <ContactPane contact={contact} onClose={() => navigate(`/events/${event.slug}/program/contacts`)} onSaved={() => void load()} />;
+  }
+
   const columns: DataGridColumn<CrmContact>[] = [
-    { key: "contact", header: "Contact", kind: "row-header", sortValue: (row) => `${row.lastName} ${row.firstName}`, cell: (row) => <div className="min-w-0"><Button type="button" variant="ghost" size="sm" className="h-auto max-w-full justify-start truncate p-0 font-medium hover:bg-transparent hover:underline" onClick={() => { setAdding(false); setDetail(row); }}>{row.firstName} {row.lastName}</Button><p className="truncate text-xs text-muted-foreground">{row.email}</p></div> },
+    { key: "contact", header: "Contact", kind: "row-header", sortValue: (row) => `${row.lastName} ${row.firstName}`, cell: (row) => <div className="min-w-0"><Button type="button" variant="ghost" size="sm" className="h-auto max-w-full justify-start truncate p-0 font-medium hover:bg-transparent hover:underline" onClick={() => navigate(`/events/${event.slug}/program/contacts/${row.id}/edit`)}>{row.firstName} {row.lastName}</Button><p className="truncate text-xs text-muted-foreground">{row.email}</p></div> },
     { key: "stage", header: "Stage", width: "11rem", sortValue: (row) => row.stage, cell: (row) => <span className="text-sm">{stageLabel[row.stage]}</span> },
     { key: "score", header: "Score", width: "6rem", align: "right", sortValue: (row) => row.score, cell: (row) => <span className="tabular-nums">{row.score}</span> },
     { key: "linked", header: "Speaker", width: "8rem", cell: (row) => <span className="text-sm text-muted-foreground">{row.speakerId ? "Linked" : "—"}</span> },
   ];
-  const detailPane = adding ? <ContactPane onClose={() => setAdding(false)} onSaved={() => void load()} /> : detail ? <ContactPane contact={detail} onClose={() => setDetail(undefined)} onSaved={() => void load()} /> : undefined;
-
-  return <AppLayout title="Contacts" detail={detailPane}>
+  return <AppLayout title="Contacts">
     <div className="space-y-4">
       <ContentToolbar ariaLabel="Contact directory controls" search={<Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search contacts" aria-label="Search contacts" />} utilities={<>
         <Select value={stage} onValueChange={(value) => setStage(value as CrmStage | "all")}><SelectTrigger className="w-[10rem]" aria-label="Filter by stage"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All stages</SelectItem>{stages.map((value) => <SelectItem key={value} value={value}>{stageLabel[value]}</SelectItem>)}</SelectContent></Select>
@@ -212,12 +221,12 @@ export default function Contacts() {
         <Button type="button" variant="outline" size="sm" onClick={() => void backfillSpeakers()} disabled={busy}><UsersRound className="h-4 w-4" aria-hidden="true" />Backfill speakers</Button>
         <Button type="button" variant="outline" size="sm" onClick={() => setSourceDialogOpen(true)}><Database className="h-4 w-4" aria-hidden="true" />Connect source</Button>
         <Button type="button" variant="outline" size="sm" onClick={() => void load()} disabled={loading}><RefreshCw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"} aria-hidden="true" />Refresh</Button>
-      </>} primaryAction={<Button type="button" size="sm" onClick={() => { setDetail(undefined); setAdding(true); }}><Plus className="h-4 w-4" aria-hidden="true" />Add contact</Button>} />
+      </>} primaryAction={<Button type="button" size="sm" onClick={() => navigate(`/events/${event.slug}/program/contacts/new`)}>Add contact</Button>} />
       {backfillMessage && <p role="status" className="text-sm text-muted-foreground">{backfillMessage}</p>}
       {sources.length > 0 && <section aria-label="CRM source sync" className="flex flex-wrap items-center gap-2 rounded-md bg-muted/50 px-3 py-2">{sources.map((source) => <div key={source.id} className="flex items-center gap-2 text-sm"><span>{source.provider === "airtable" ? "Airtable" : "Notion"}</span><span className={source.status === "error" ? "text-destructive" : "text-muted-foreground"}>{source.status === "error" ? source.lastError || "Needs attention" : source.lastSyncedAt ? "Synced" : "Ready to sync"}</span><Button type="button" variant="outline" size="sm" onClick={() => void syncSource(source.provider)} disabled={busy}>Sync now</Button></div>)}</section>}
       {sourceMessage && <p role="status" className="text-sm text-muted-foreground">{sourceMessage}</p>}
       {selectedIds.length > 0 && <section aria-label="Bulk contact actions" className="flex flex-wrap items-center gap-2 rounded-md bg-muted/50 px-3 py-2"><p className="mr-1 text-sm text-muted-foreground">{selectedIds.length} selected</p><Select value={bulkStage} onValueChange={(value) => setBulkStage(value as CrmStage)}><SelectTrigger className="w-[10rem]" aria-label="Bulk stage"><SelectValue /></SelectTrigger><SelectContent>{stages.filter((value) => value !== "archived").map((value) => <SelectItem key={value} value={value}>{stageLabel[value]}</SelectItem>)}</SelectContent></Select><Button type="button" variant="outline" size="sm" onClick={() => void applyBulkStage()} disabled={busy}>Update stage</Button><Button type="button" variant="outline" size="sm" onClick={() => void archiveSelected()} disabled={busy}><Archive className="h-4 w-4" aria-hidden="true" />Archive</Button><Button asChild type="button" variant="outline" size="sm"><Link to={`/events/${event.slug}/program/communications`} state={{ crmContactIds: selection }}><Mail className="h-4 w-4" aria-hidden="true" />Email selected</Link></Button></section>}
-      {error ? <section role="alert" className="flex min-h-64 flex-col items-center justify-center text-center"><h2 className="text-base font-semibold">Contacts unavailable</h2><p className="mt-1 max-w-md text-sm text-muted-foreground">{error}</p><Button className="mt-4" type="button" variant="outline" size="sm" onClick={() => void load()}>Try again</Button></section> : <DataGrid rows={visible} columns={columns} loading={loading} selectedIds={selectedIds} onSelectionChange={setSelectedIds} rowActivation="none" getRowLabel={(row) => `${row.firstName} ${row.lastName}`} ariaLabel="Contacts" empty={<EmptyState icon={UsersRound} title={search || stage !== "all" ? "No contacts match these filters" : "Start your event contact directory"} message={search || stage !== "all" ? "Try another search or filter." : "Add a prospect or backfill your existing speakers to build a reusable organization directory."} action={!search && stage === "all" ? <Button type="button" size="sm" onClick={() => setAdding(true)}>Add contact</Button> : undefined} />} />}
+      {error ? <section role="alert" className="flex min-h-64 flex-col items-center justify-center text-center"><h2 className="text-base font-semibold">Contacts unavailable</h2><p className="mt-1 max-w-md text-sm text-muted-foreground">{error}</p><Button className="mt-4" type="button" variant="outline" size="sm" onClick={() => void load()}>Try again</Button></section> : <DataGrid rows={visible} columns={columns} loading={loading} selectedIds={selectedIds} onSelectionChange={setSelectedIds} rowActivation="none" getRowLabel={(row) => `${row.firstName} ${row.lastName}`} ariaLabel="Contacts" empty={<EmptyState icon={UsersRound} title={search || stage !== "all" ? "No contacts match these filters" : "Start your event contact directory"} message={search || stage !== "all" ? "Try another search or filter." : "Add a prospect or backfill your existing speakers to build a reusable organization directory."} action={!search && stage === "all" ? <Button type="button" size="sm" onClick={() => navigate(`/events/${event.slug}/program/contacts/new`)}>Add contact</Button> : undefined} />} />}
     </div>
     <SourceDialog open={sourceDialogOpen} onOpenChange={setSourceDialogOpen} pendingId={pendingId} pendingProvider={pendingProvider} onSaved={() => { setSearchParams({}, { replace: true }); void load(); }} />
     <SegmentDialog open={segmentDialogOpen} onOpenChange={setSegmentDialogOpen} segment={selectedSegment} defaultStage={stage} onSaved={() => void load()} />

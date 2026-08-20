@@ -41,10 +41,12 @@ export function AgentTimeline({
   events,
   isLoading,
   presentation = "conversation",
+  status,
 }: {
   events: AgentRunEvent[];
   isLoading: boolean;
   presentation?: "conversation" | "run";
+  status?: "queued" | "running" | "needs_input" | "needs_approval" | "completed" | "failed" | "cancelled";
 }) {
   if (isLoading)
     return (
@@ -83,16 +85,19 @@ export function AgentTimeline({
     const activeTools = activity.filter(
       (event) => event.type === "tool_call",
     ).length;
+    const failure = [...activity].reverse().find((event) => event.type === "error");
+    const hasReviewActivity = activity.some(
+      (event) =>
+        event.type === "progress" ||
+        event.type === "tool_call" ||
+        event.type === "tool_result",
+    );
     return (
-      <div className="space-y-5" aria-label="Agent run">
+      <div className="space-y-4" aria-label="Agent run">
         {request && (
-          <section className="max-w-3xl">
-            <p className="text-sm font-medium text-muted-foreground">
-              Your request
-            </p>
-            <p className="mt-1 text-base font-medium leading-6 text-foreground">
-              {request.message}
-            </p>
+          <section className={cardSurfaceClasses("muted", "max-w-[85%] px-4 py-3")}>
+            <p className="sr-only">Your request</p>
+            <p className="text-sm font-medium leading-6 text-foreground">{request.message}</p>
           </section>
         )}
         {response ? (
@@ -108,22 +113,37 @@ export function AgentTimeline({
               <ReactMarkdown>{response.message}</ReactMarkdown>
             </div>
           </section>
+        ) : status === "failed" ? (
+          <section
+            className="max-w-3xl rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3"
+            aria-label="Review failed"
+          >
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <CircleAlert className="h-4 w-4 text-destructive" />
+              Review could not be completed
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {failure?.message ?? "Try the review again, or check your event AI settings."}
+            </p>
+          </section>
         ) : (
           <section
-            className={cardSurfaceClasses("muted", "max-w-3xl p-5")}
+            className={cardSurfaceClasses("muted", "max-w-3xl border px-4 py-3")}
             aria-live="polite"
           >
             <div className="flex items-center gap-2 text-sm font-medium">
               <Search className="h-4 w-4 text-muted-foreground" />
-              Review in progress
+              Checking this event
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              The agent is checking this event’s program data. Results will
-              appear here when the review is ready.
+              {completedTools > 0
+                ? `${completedTools} check${completedTools === 1 ? "" : "s"} completed. `
+                : "Starting the review. "}
+              Results will appear here when the review is ready.
             </p>
           </section>
         )}
-        {activity.length > 0 && (
+        {hasReviewActivity && (Boolean(response) || completedTools > 0) && (
           <details className={cardSurfaceClasses("muted", "group max-w-4xl")}>
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 text-sm font-medium marker:content-none">
               <span>

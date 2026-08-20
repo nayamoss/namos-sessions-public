@@ -457,6 +457,47 @@ export const getPublic = query({
   },
 });
 
+const showcaseEmbeds = [
+  { name: "Speaker gallery", view: "speaker_gallery" },
+  { name: "Schedule grid", view: "schedule_grid" },
+  { name: "Session list", view: "session_list" },
+  { name: "Speaker list", view: "speaker_list" },
+  { name: "Schedule itinerary", view: "schedule_itinerary" },
+  { name: "Main event agenda", view: "agenda" },
+] as const;
+
+/**
+ * Public metadata for the showcase page. Only enabled embeds belonging to a
+ * published event are returned; the embed contents still flow through
+ * `getPublic`, so this endpoint cannot widen the public data projection.
+ */
+export const listShowcase = query({
+  args: { eventSlug: v.string() },
+  handler: async (ctx, args) => {
+    const event = await ctx.db
+      .query("events")
+      .withIndex("by_slug", (q) => q.eq("slug", args.eventSlug))
+      .first();
+    if (!event || event.status !== "published") return null;
+
+    const eventEmbeds = await ctx.db
+      .query("embeds")
+      .withIndex("by_event", (q) => q.eq("eventId", event._id))
+      .collect();
+    const embeds = showcaseEmbeds.flatMap((sample) => {
+      const embed = eventEmbeds.find(
+        (candidate) =>
+          candidate.enabled &&
+          candidate.name === sample.name &&
+          candidate.view === sample.view,
+      );
+      return embed ? [{ id: embed._id, name: embed.name, view: embed.view }] : [];
+    });
+
+    return { eventName: event.name, eventSlug: event.slug, embeds };
+  },
+});
+
 // The four `/e/:eventSlug/:feed` URLs remain live until existing customers migrate.
 export const get = query({
   args: { eventSlug: v.string() },

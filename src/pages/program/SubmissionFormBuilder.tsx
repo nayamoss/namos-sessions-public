@@ -412,7 +412,7 @@ function FieldRows({
                   </FormField>
                   {(field.type === "dropdown" ||
                     field.type === "multiselect") && (
-                    <FormField label="Options" hint="One option per line">
+                    <FormField label="Options">
                       <Textarea
                         value={field.options?.join("\n") ?? ""}
                         onChange={(event) =>
@@ -436,14 +436,7 @@ function FieldRows({
               )}
               {!field.locked && (
                 <div className="mt-3 pl-7">
-                  <FormField
-                    label="Show only if"
-                    hint={
-                      conditionSources.length
-                        ? undefined
-                        : "Save this form once you've added a dropdown field to make other fields conditional on it."
-                    }
-                  >
+                  <FormField label="Show only if">
                     <div className="flex flex-wrap gap-2">
                       <Select
                         value={field.showIf?.fieldId ?? "always"}
@@ -605,7 +598,7 @@ function AppearanceStep({ event, onUpdate }: { event: Event; onUpdate: (patch: P
         {uploadError && <p role="alert" className="text-sm text-destructive">{uploadError}</p>}
       </div>
     </FormField>
-    <FormField label="Accent color" hint="Used for the progress bar and primary action.">
+    <FormField label="Accent color">
       <div className="flex flex-wrap items-center gap-3">
         <label className="relative h-10 w-10 cursor-pointer overflow-hidden rounded-md border border-input" style={{ backgroundColor: validColor ?? "#0066FF" }}><input aria-label="Choose accent color" type="color" className="absolute inset-0 cursor-pointer opacity-0" value={validColor ?? "#0066FF"} onChange={(input) => { setColorDraft(input.target.value); void onUpdate({ accentColor: input.target.value }); }} /></label>
         <Input aria-label="Accent color hex value" className="w-32 font-mono uppercase" value={colorDraft} onChange={(input) => setColorDraft(input.target.value)} onBlur={persistColor} />
@@ -1232,7 +1225,6 @@ export default function SubmissionFormBuilder() {
             label="Participants"
             checked={collectParticipants}
             onCheckedChange={setCollectParticipants}
-            hint="Collect speaker and participant information with each submission."
             surface
           />
         </div>
@@ -1244,7 +1236,6 @@ export default function SubmissionFormBuilder() {
             <FormField
               label="Internal form name"
               htmlFor="form-internal-name"
-              hint={`${internalName.length}/255`}
             >
               <Input
                 id="form-internal-name"
@@ -1256,7 +1247,6 @@ export default function SubmissionFormBuilder() {
             <FormField
               label="External form title"
               htmlFor="form-external-title"
-              hint={`${externalTitle.length}/255`}
             >
               <Input
                 id="form-external-title"
@@ -1266,10 +1256,7 @@ export default function SubmissionFormBuilder() {
               />
             </FormField>
           </div>
-          <FormField
-            label="Page heading"
-            hint={`${pageHeading.length}/15 characters`}
-          >
+          <FormField label="Page heading">
             {
               <Input
                 maxLength={15}
@@ -1497,10 +1484,7 @@ export default function SubmissionFormBuilder() {
     if (current.id === "settings")
       return (
         <div className="space-y-6">
-          <FormField
-            label="Close date"
-            hint="Submissions are closed automatically at this date and time."
-          >
+          <FormField label="Close date">
             <Input
               type="datetime-local"
               value={closeDate}
@@ -1511,7 +1495,6 @@ export default function SubmissionFormBuilder() {
             label="Set submission limit"
             checked={submissionLimit}
             onCheckedChange={setSubmissionLimit}
-            hint="Event max: 3 applies when no form-level limit is set."
             surface
           />
           {submissionLimit && (
@@ -1539,7 +1522,6 @@ export default function SubmissionFormBuilder() {
               checked={autoRedirect}
               onCheckedChange={setAutoRedirect}
               surface
-              hint="Redirect after 10 seconds, while retaining a visible portal link."
             />
             <FormField label="Success page message">
               <Textarea
@@ -1555,7 +1537,6 @@ export default function SubmissionFormBuilder() {
               checked={crossFieldEnabled}
               onCheckedChange={setCrossFieldEnabled}
               surface
-              hint="Cap the combined length of selected text fields and show a live counter to submitters."
             />
             {crossFieldEnabled && (
               <div className="grid gap-4 rounded-md bg-background p-4 md:grid-cols-2">
@@ -1616,32 +1597,24 @@ export default function SubmissionFormBuilder() {
       );
     return (
       <div className="space-y-6">
-        <div>
-          <h2 className="text-base font-semibold">Notifications</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Keep submitters and your program team informed.
-          </p>
-        </div>
+        <h2 className="text-base font-semibold">Notifications</h2>
         <ToggleField
           label="Send submission confirmation"
           checked={confirmationEnabled}
           onCheckedChange={setConfirmationEnabled}
           surface
-          hint="Required confirmation email containing a speaker-portal link."
         />
         <ToggleField
           label="Notify admins on new submissions"
           checked={false}
           onCheckedChange={() => undefined}
           surface
-          hint="Optional admin alert."
         />
         <ToggleField
           label="Notify admins on updated submissions"
           checked={false}
           onCheckedChange={() => undefined}
           surface
-          hint="Optional admin alert."
         />
       </div>
     );

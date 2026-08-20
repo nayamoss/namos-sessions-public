@@ -36,7 +36,7 @@ export function FieldInspector({ field, conditionSources, onChange, onClose }: {
   if (!field) return null;
   const conditionSource = conditionSources.find((candidate) => candidate.recordId === field.showIf?.fieldId);
   return (
-    <div className={cardSurfaceClasses("default", "space-y-5 p-6")}>
+    <div className="space-y-5">
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-base font-semibold">{field.locked ? "Locked field" : "Edit field"}</h3>
         <Button type="button" variant="ghost" size="icon" aria-label="Close field editor" onClick={onClose}>
@@ -101,10 +101,8 @@ export function FieldInspector({ field, conditionSources, onChange, onClose }: {
               </>
             )}
           </div>
-          {!conditionSources.length && <p className="mt-1 text-xs text-muted-foreground">Save this form once you've added a dropdown field to make other fields conditional on it.</p>}
         </FormField>
       )}
     </div>
   );
 }
-import { cardSurfaceClasses } from "@/components/ui/card";

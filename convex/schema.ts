@@ -31,6 +31,21 @@ const agentRunStatus = v.union(
   v.literal("cancelled"),
 );
 
+export const encryptedEnvelope = v.object({
+  version: v.literal(1),
+  iv: v.string(),
+  ciphertext: v.string(),
+  tag: v.string(),
+});
+
+export const slackNotificationKind = v.union(
+  v.literal("submission_received"),
+  v.literal("reviewer_assigned"),
+  v.literal("evaluation_completed"),
+  v.literal("decision_sent"),
+  v.literal("comms_delivery_failed"),
+);
+
 export default defineSchema({
   // The tenant boundary. Every event and every organizers row belongs to exactly one of
   // these. Created by convex/organizations.ts:createForCurrentUser when someone completes
@@ -72,6 +87,8 @@ export default defineSchema({
   // purely on Clerk's identity.subject, with no role/authorization meaning whatsoever.
   userProfiles: defineTable({
     userId: v.string(),
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
     displayName: v.optional(v.string()),
     signupRole: v.optional(v.union(v.literal("solo"), v.literal("team"))),
     referralSource: v.optional(v.string()),
@@ -164,6 +181,7 @@ export default defineSchema({
     scheduleStartTime: v.optional(v.string()),
     scheduleEndTime: v.optional(v.string()),
     theme: v.optional(v.string()), logoStorageKey: v.optional(v.string()), accentColor: v.optional(v.string()), backgroundStorageKey: v.optional(v.string()), industry: v.optional(v.string()),
+    readinessCategories: v.optional(v.array(v.union(v.literal("agenda_conflicts"), v.literal("speaker_confirmations"), v.literal("onboarding_tasks"), v.literal("proposal_decisions"), v.literal("comms_delivery")))),
     exhibitorsEnabled: v.boolean(), sponsorsEnabled: v.boolean(), defaultOnboardingTemplateId: v.optional(v.id("task_templates")),
     // The Clerk user whose subscription pays for Namos-managed AI. Optional for existing
     // events; an organization owner assigns it once before managed AI can be enabled.
@@ -364,11 +382,11 @@ export default defineSchema({
   crm_oauth_states: defineTable({
     stateHash: v.string(), provider: v.union(v.literal("notion"), v.literal("airtable")), eventId: v.id("events"), userId: v.string(),
     verifierEnvelope: v.optional(v.object({ version: v.literal(1), iv: v.string(), ciphertext: v.string(), tag: v.string() })), expiresAt: v.number(), createdAt: v.number(),
-  }).index("by_stateHash", ["stateHash"]),
+  }).index("by_stateHash", ["stateHash"]).index("by_event", ["eventId"]),
   crm_oauth_pending: defineTable({
     pendingId: v.string(), provider: v.union(v.literal("notion"), v.literal("airtable")), eventId: v.id("events"), userId: v.string(),
     credentialEnvelope: v.object({ version: v.literal(1), iv: v.string(), ciphertext: v.string(), tag: v.string() }), oauthExpiresAt: v.optional(v.number()), expiresAt: v.number(), createdAt: v.number(),
-  }).index("by_pendingId", ["pendingId"]),
+  }).index("by_pendingId", ["pendingId"]).index("by_event", ["eventId"]),
   speakers: defineTable({
     eventId: v.id("events"),
     contactId: v.optional(v.id("crm_contacts")),
@@ -462,6 +480,10 @@ export default defineSchema({
     promptVersion: v.string(),
     inputHash: v.string(),
     requestedByUserId: v.string(),
+    providerMode: v.optional(v.union(v.literal("managed"), v.literal("bring_your_own"))),
+    billingOwnerUserId: v.optional(v.string()),
+    managedAllowanceId: v.optional(v.id("agent_managed_allowances")),
+    managedReservedTokens: v.optional(v.number()),
     error: v.optional(v.string()),
     requestedAt: v.number(),
     completedAt: v.optional(v.number()),
@@ -884,6 +906,117 @@ export default defineSchema({
     credentialEnvelope: v.object({ version: v.literal(1), iv: v.string(), ciphertext: v.string(), tag: v.string() }),
     oauthExpiresAt: v.optional(v.number()), expiresAt: v.number(), createdAt: v.number(),
   }).index("by_pendingId", ["pendingId"]).index("by_event", ["eventId"]),
+  slack_workspaces: defineTable({
+    organizationId: v.id("organizations"),
+    slackTeamId: v.string(),
+    slackTeamName: v.string(),
+    botUserId: v.string(),
+    botTokenEnvelope: encryptedEnvelope,
+    scopes: v.array(v.string()),
+    status: v.union(v.literal("connected"), v.literal("error")),
+    lastError: v.optional(v.string()),
+    installedByUserId: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_team", ["slackTeamId"])
+    .index("by_org_team", ["organizationId", "slackTeamId"]),
+  slack_channel_bindings: defineTable({
+    organizationId: v.id("organizations"),
+    eventId: v.id("events"),
+    slackWorkspaceId: v.id("slack_workspaces"),
+    slackChannelId: v.string(),
+    slackChannelName: v.string(),
+    isPrivate: v.boolean(),
+    agentEnabled: v.boolean(),
+    notificationsEnabled: v.boolean(),
+    notificationKinds: v.array(slackNotificationKind),
+    createdByUserId: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_event", ["eventId"])
+    .index("by_workspace", ["slackWorkspaceId"])
+    .index("by_workspace_channel", ["slackWorkspaceId", "slackChannelId"]),
+  slack_user_mappings: defineTable({
+    organizationId: v.id("organizations"),
+    slackWorkspaceId: v.id("slack_workspaces"),
+    slackUserId: v.string(),
+    namosUserId: v.string(),
+    slackDisplayName: v.optional(v.string()),
+    linkedAt: v.number(),
+    lastVerifiedAt: v.number(),
+  })
+    .index("by_workspace_user", ["slackWorkspaceId", "slackUserId"])
+    .index("by_org_namos_user", ["organizationId", "namosUserId"]),
+  slack_oauth_states: defineTable({
+    stateHash: v.string(),
+    organizationId: v.id("organizations"),
+    eventId: v.id("events"),
+    userId: v.string(),
+    expiresAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_state_hash", ["stateHash"])
+    .index("by_expiry", ["expiresAt"]),
+  slack_link_tokens: defineTable({
+    tokenHash: v.string(),
+    slackWorkspaceId: v.id("slack_workspaces"),
+    eventId: v.id("events"),
+    slackUserId: v.string(),
+    expiresAt: v.number(),
+    consumedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_token_hash", ["tokenHash"])
+    .index("by_expiry", ["expiresAt"]),
+  slack_agent_threads: defineTable({
+    slackWorkspaceId: v.id("slack_workspaces"),
+    eventId: v.id("events"),
+    slackChannelId: v.string(),
+    slackThreadTs: v.string(),
+    slackUserId: v.string(),
+    agentRunId: v.id("agent_runs"),
+    lastProjectionKey: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_workspace_channel_thread", ["slackWorkspaceId", "slackChannelId", "slackThreadTs"])
+    .index("by_run", ["agentRunId"]),
+  slack_request_receipts: defineTable({
+    dedupeKey: v.string(),
+    kind: v.union(v.literal("event"), v.literal("command"), v.literal("interaction")),
+    slackTeamId: v.optional(v.string()),
+    status: v.union(v.literal("accepted"), v.literal("processed"), v.literal("failed")),
+    error: v.optional(v.string()),
+    receivedAt: v.number(),
+    processedAt: v.optional(v.number()),
+    expiresAt: v.number(),
+  })
+    .index("by_dedupe_key", ["dedupeKey"])
+    .index("by_expiry", ["expiresAt"]),
+  slack_delivery_outbox: defineTable({
+    eventId: v.id("events"),
+    bindingId: v.id("slack_channel_bindings"),
+    sourceNotificationId: v.optional(v.id("notifications")),
+    dedupeKey: v.string(),
+    kind: slackNotificationKind,
+    title: v.string(),
+    body: v.optional(v.string()),
+    linkPath: v.optional(v.string()),
+    relatedId: v.optional(v.string()),
+    status: v.union(v.literal("queued"), v.literal("sending"), v.literal("sent"), v.literal("failed")),
+    attempts: v.number(),
+    slackMessageTs: v.optional(v.string()),
+    lastError: v.optional(v.string()),
+    nextAttemptAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_dedupe_key", ["dedupeKey"])
+    .index("by_status_next_attempt", ["status", "nextAttemptAt"])
+    .index("by_event", ["eventId"]),
   // A browser receives only this opaque capability after a public CFP submission. The
   // server-side email handler exchanges it for the linked records, so database ids never
   // have to travel through the public form or its confirmation request.

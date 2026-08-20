@@ -4,7 +4,6 @@ import { Label } from "@/components/ui/label";
 export function FormField({ label, children, htmlFor }: {
   label: ReactNode;
   children: ReactNode;
-  hint?: ReactNode;
   htmlFor?: string;
 }) {
   return (

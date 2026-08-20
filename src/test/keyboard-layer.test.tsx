@@ -8,9 +8,20 @@ import { GlobalKeyboardShortcuts } from "@/components/GlobalKeyboardShortcuts";
 import { isKeyboardShortcutBlocked } from "@/lib/shortcuts";
 import { TEST_CLERK_PUBLISHABLE_KEY } from "./clerk-test-key";
 
+const setTheme = vi.fn();
+
+vi.mock("next-themes", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("next-themes")>();
+  return {
+    ...actual,
+    useTheme: () => ({ resolvedTheme: "light", setTheme }),
+  };
+});
+
 afterEach(() => {
   document.body.innerHTML = "";
   vi.restoreAllMocks();
+  setTheme.mockReset();
 });
 
 describe("keyboard layer", () => {
@@ -82,6 +93,26 @@ describe("keyboard layer", () => {
     act(() => trigger.click());
     expect(document.querySelector('input[aria-label="Command palette"]')).toBeInTheDocument();
 
+    act(() => root.unmount());
+  });
+
+  it("toggles dark mode with Option+Shift+D", () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    act(() => root.render(
+      <MemoryRouter>
+        <GlobalKeyboardShortcuts onOpenCommandPalette={() => undefined} />
+      </MemoryRouter>,
+    ));
+
+    act(() => document.dispatchEvent(new KeyboardEvent("keydown", {
+      code: "KeyD",
+      altKey: true,
+      shiftKey: true,
+    })));
+    expect(setTheme).toHaveBeenCalledWith("dark");
     act(() => root.unmount());
   });
 });

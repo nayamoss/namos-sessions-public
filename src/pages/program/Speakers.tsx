@@ -4,13 +4,13 @@ import {
   Check,
   CircleAlert,
   Columns3,
-  Plus,
   Search,
   Trash2,
   UserRoundCheck,
 } from "lucide-react";
 import {
   Link,
+  useLocation,
   useNavigate,
   useParams,
   useSearchParams,
@@ -19,7 +19,6 @@ import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
 import { DataGrid, type DataGridColumn } from "@/components/shared/DataGrid";
-import { DetailPane } from "@/components/shared/DetailPane";
 import {
   ActivityTimeline,
   type SpeakerTimelineEvent,
@@ -254,8 +253,23 @@ export function AddSpeakerPane({
   };
 
   return (
-    <DetailPane title="Add speaker" onClose={onClose}>
+    <section className={cardSurfaceClasses("default", "mx-auto max-w-3xl space-y-5 p-6")} aria-label="New speaker">
+      <h2 className="sr-only">Add speaker</h2>
+      <ContentToolbar
+        ariaLabel="New speaker actions"
+        utilities={
+          <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+        }
+        primaryAction={
+          <Button type="submit" form="new-speaker-form" disabled={saving}>
+            {saving ? "Adding…" : "Add speaker"}
+          </Button>
+        }
+      />
       <form
+        id="new-speaker-form"
         className="space-y-5"
         onSubmit={(submitEvent) => void createSpeaker(submitEvent)}
       >
@@ -317,21 +331,8 @@ export function AddSpeakerPane({
             {error}
           </p>
         )}
-        <div className="flex justify-end gap-2">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={onClose}
-            disabled={saving}
-          >
-            Cancel
-          </Button>
-          <Button type="submit" disabled={saving}>
-            {saving ? "Adding…" : "Add speaker"}
-          </Button>
-        </div>
       </form>
-    </DetailPane>
+    </section>
   );
 }
 
@@ -1534,6 +1535,7 @@ export default function Speakers() {
   const repo = useRepo();
   const { event: activeEvent } = useCurrentEvent();
   const navigate = useNavigate();
+  const location = useLocation();
   const { speakerId: routeSpeakerId } = useParams<{ speakerId?: string }>();
   const [params, setParams] = useSearchParams();
   const [event, setEvent] = useState<Event>();
@@ -1553,8 +1555,8 @@ export default function Speakers() {
   const view = parseSpeakerOperationsView(params.get("view"));
   const shouldFocusSearch = params.get("focus") === "search";
   const legacySelectedId = params.get("selected");
-  const selectedId = routeSpeakerId ?? legacySelectedId;
-  const addingSpeaker = params.get("mode") === "add";
+  const addingSpeaker = routeSpeakerId === "new" || location.pathname.endsWith("/new") || params.get("mode") === "add";
+  const selectedId = routeSpeakerId === "new" ? undefined : routeSpeakerId ?? legacySelectedId;
   const requestedSort = params.get("sort");
   const sortKey: SpeakerSortKey =
     requestedSort && speakerSortKeys.has(requestedSort as SpeakerSortKey)
@@ -1693,7 +1695,7 @@ export default function Speakers() {
   useEffect(() => {
     if (!legacySelectedId || routeSpeakerId || !activeEvent?.slug) return;
     navigate(
-      `/events/${activeEvent.slug}/program/speakers/${encodeURIComponent(legacySelectedId)}${listSearch}`,
+      `/events/${activeEvent.slug}/program/speakers/${encodeURIComponent(legacySelectedId)}/edit${listSearch}`,
       { replace: true },
     );
   }, [
@@ -1703,6 +1705,16 @@ export default function Speakers() {
     navigate,
     routeSpeakerId,
   ]);
+
+  useEffect(() => {
+    if (!routeSpeakerId || routeSpeakerId === "new" || location.pathname.endsWith("/edit") || !activeEvent?.slug) return;
+    navigate(`/events/${activeEvent.slug}/program/speakers/${encodeURIComponent(routeSpeakerId)}/edit${listSearch}`, { replace: true });
+  }, [activeEvent?.slug, listSearch, location.pathname, navigate, routeSpeakerId]);
+
+  useEffect(() => {
+    if (params.get("mode") !== "add" || routeSpeakerId || !activeEvent?.slug) return;
+    navigate(`/events/${activeEvent.slug}/program/speakers/new${listSearch}`, { replace: true });
+  }, [activeEvent?.slug, listSearch, navigate, params, routeSpeakerId]);
 
   useEffect(() => {
     if (
@@ -1774,25 +1786,16 @@ export default function Speakers() {
   const openSpeaker = (speakerId: string) => {
     if (!event?.slug) return;
     navigate(
-      `/events/${event.slug}/program/speakers/${encodeURIComponent(speakerId)}${listSearch}`,
+      `/events/${event.slug}/program/speakers/${encodeURIComponent(speakerId)}/edit${listSearch}`,
     );
   };
 
   const openAddSpeaker = () => {
-    setParams((current) => {
-      const next = new URLSearchParams(current);
-      next.delete("selected");
-      next.set("mode", "add");
-      return next;
-    });
+    if (event?.slug) navigate(`/events/${event.slug}/program/speakers/new${listSearch}`);
   };
 
   const closeAddSpeaker = () => {
-    setParams((current) => {
-      const next = new URLSearchParams(current);
-      next.delete("mode");
-      return next;
-    });
+    if (event?.slug) navigate(`/events/${event.slug}/program/speakers${listSearch}`);
     requestAnimationFrame(() => addButtonRef.current?.focus());
   };
 
@@ -1945,20 +1948,6 @@ export default function Speakers() {
     );
   }, [changeSort, hiddenColumns, sortDirection, sortKey]);
 
-  const detail =
-    addingSpeaker && event ? (
-      <AddSpeakerPane
-        event={event}
-        onClose={closeAddSpeaker}
-        onCreated={(speaker) => {
-          setSpeakers((items) => [...items, speaker]);
-          navigate(
-            `/events/${event.slug}/program/speakers/${encodeURIComponent(speaker.id)}${listSearch}`,
-          );
-        }}
-      />
-    ) : undefined;
-
   const speakerDetail =
     selectedRow && event ? (
       <SpeakerDetail
@@ -2067,11 +2056,24 @@ export default function Speakers() {
     );
   }
 
+  if (addingSpeaker && event) {
+    return (
+      <AppLayout title="New speaker">
+        <AddSpeakerPane
+          event={event}
+          onClose={closeAddSpeaker}
+          onCreated={(speaker) => {
+            setSpeakers((items) => [...items, speaker]);
+            navigate(`/events/${event.slug}/program/speakers/${encodeURIComponent(speaker.id)}/edit${listSearch}`);
+          }}
+        />
+      </AppLayout>
+    );
+  }
+
   return (
-    <AppLayout title="Speakers" detail={detail}>
-      <div
-        className={addingSpeaker ? "hidden space-y-3 lg:block" : "space-y-3"}
-      >
+    <AppLayout title="Speakers">
+      <div className="space-y-3">
         {loadError ? (
           <section
             className="flex min-h-48 flex-col items-center justify-center gap-3 text-center"
@@ -2220,7 +2222,7 @@ export default function Speakers() {
                     size="sm"
                     onClick={openAddSpeaker}
                   >
-                    <Plus /> Add speaker
+                    Add speaker
                   </Button>
                 }
               />
@@ -2248,11 +2250,6 @@ export default function Speakers() {
                 paginated
                 appearance="embedded"
                 itemLabel="speakers"
-                minWidth={columns.reduce(
-                  (total, column) =>
-                    total + Number.parseInt(column.width ?? "140", 10),
-                  0,
-                )}
                 getRowLabel={(row) => `Open details for ${row.name}`}
                 onRowActivated={(row) => openSpeaker(row.id)}
                 onRowRef={(row, element) => {

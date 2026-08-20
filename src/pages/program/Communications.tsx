@@ -432,7 +432,7 @@ export default function Communications() {
                   <Link
                     to={
                       activeEvent
-                        ? `/events/${activeEvent.slug}/program/communications/templates/new/edit`
+                        ? `/events/${activeEvent.slug}/program/communications/templates/new`
                         : "#"
                     }
                   >
@@ -478,7 +478,7 @@ export default function Communications() {
                         <Link
                           to={
                             activeEvent
-                              ? `/events/${activeEvent.slug}/program/communications/templates/new/edit`
+                              ? `/events/${activeEvent.slug}/program/communications/templates/new`
                               : "#"
                           }
                         >

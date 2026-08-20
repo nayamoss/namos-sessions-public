@@ -16,7 +16,7 @@ export function FormPreviewHost({ config }: { config: PublicSubmissionFormConfig
     if (state.step > pageCount) { state.setStep(0); clamped.current = true; }
   }, [pageCount, state]);
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-[14px] bg-muted/60 p-3">
+    <div role="region" aria-label="Call for proposals preview" className="flex h-full flex-col overflow-hidden rounded-[14px] bg-muted/60 p-3">
       <div className="mb-2 flex items-center justify-between px-1">
         <p className="text-xs font-medium text-muted-foreground">Preview — reflects unsaved edits</p>
       </div>

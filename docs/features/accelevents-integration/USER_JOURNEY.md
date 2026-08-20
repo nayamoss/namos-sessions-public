@@ -1,5 +1,13 @@
 # Accelevents One-Way Integration — User Journey
 
+> **2026-08-17.** This journey is unimplemented and unverified — no Accelevents code exists. When it
+> is walked, the completion bar is a **real disposable Accelevents event with real credentials**: a
+> speaker created remotely, a session created remotely, that session associated with that speaker
+> and read back, and a rerun performing zero remote writes. A mocked run, a recorded fixture, or a
+> "connected" UI with no credentials does not count. Where this document says the administrator is
+> gated by an admin allowlist, read `assertEventOrganizerAccess` instead — see
+> [`BRIEF-RECONCILIATION-2026-08-17.md`](./BRIEF-RECONCILIATION-2026-08-17.md).
+
 ## User
 
 An authenticated event administrator responsible for publishing an accepted conference program

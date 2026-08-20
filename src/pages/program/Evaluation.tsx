@@ -168,6 +168,25 @@ export default function Evaluation() {
     setLoading(true);
     setError(undefined);
     try {
+      // Resolve a reviewer's queue before touching organizer-only event tables. Besides avoiding
+      // a burst of expected authorization failures, this is independent of how a particular
+      // Convex client version serializes errors across realms.
+      const reviewerRows = await repo.evaluations.myQueue();
+      if (reviewerRows.length > 0) {
+        setReviewerOnly(true);
+        setSurface("queue");
+        setMyQueue(reviewerRows);
+        setEventId(undefined);
+        setPlans([]);
+        setAssignments([]);
+        setSubmissions([]);
+        setSpeakers([]);
+        setReviews([]);
+        setTags([]);
+        setTracks([]);
+        setSelectedPlanId(undefined);
+        return;
+      }
       const event = activeEvent ?? (await repo.events.list()).at(0);
       if (!event) {
         setEventId(undefined);

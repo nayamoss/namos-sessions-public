@@ -2,10 +2,12 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
-import { assertEventOrganizerAccess, isEventOrganizer } from "./functions";
+import { assertEventOrganizerAccess, assertEventOrganizerByUserId, isEventOrganizer } from "./functions";
 import { validateAndCreateTask } from "./tasks";
 import { internal } from "./_generated/api";
 import { workflow } from "./agentWorkflow";
+import { isManagedAiDisabled, MANAGED_AI_DISABLED_MESSAGE } from "./managedAi";
+import { releaseManagedAllowance } from "./agentBilling";
 
 const cancellableStatuses = new Set(["queued", "running", "needs_input", "needs_approval"]);
 
@@ -39,16 +41,11 @@ async function authorizedRun(ctx: MutationCtx, eventId: Id<"events">, runId: Id<
 
 async function releaseManagedReservation(ctx: MutationCtx, run: Doc<"agent_runs">) {
   if (!run.managedAllowanceId) return;
-  const allowance = await ctx.db.get(run.managedAllowanceId);
-  if (!allowance) return;
   const usage = await ctx.db.query("agent_usage_records").withIndex("by_run", (q) => q.eq("runId", run._id)).first();
   if (usage?.settledAt) return;
   const now = Date.now();
-  await ctx.db.patch(allowance._id, {
-    reservedRuns: Math.max(0, allowance.reservedRuns - 1),
-    reservedTokens: Math.max(0, allowance.reservedTokens - (run.managedReservedTokens ?? 0)),
-    updatedAt: now,
-  });
+  await releaseManagedAllowance(ctx, run.managedAllowanceId, run.managedReservedTokens ?? 0);
+  await ctx.db.patch(run._id, { managedAllowanceId: undefined, managedReservedTokens: undefined, updatedAt: now });
   if (usage) await ctx.db.patch(usage._id, { settledAt: now });
 }
 
@@ -119,50 +116,99 @@ function validateIdempotencyKey(value: string) {
   return key;
 }
 
+export async function createRunForUser(ctx: MutationCtx, args: { eventId: Id<"events">; requestedByUserId: string; objective: string; idempotencyKey: string }) {
+  await assertEventOrganizerByUserId(ctx, args.eventId, args.requestedByUserId);
+  const objective = args.objective.trim();
+  if (!objective) throw new Error("Enter an objective for this run.");
+  if (objective.length > 4000) throw new Error("An objective cannot exceed 4,000 characters.");
+  const idempotencyKey = validateIdempotencyKey(args.idempotencyKey);
+  const existing = await ctx.db.query("agent_runs").withIndex("by_requester_idempotency", (q) => q.eq("requestedByUserId", args.requestedByUserId).eq("idempotencyKey", idempotencyKey)).unique();
+  if (existing) {
+    if (existing.eventId !== args.eventId) throw new Error("This request key is already bound to another event.");
+    return { runId: existing._id };
+  }
+  const now = Date.now();
+  const providerSetting = await ctx.db.query("agent_provider_settings").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).unique();
+  const providerMode = providerSetting?.mode ?? "managed";
+  if (providerMode === "bring_your_own" && (!providerSetting?.credentialEnvelope || providerSetting.status !== "ready")) throw new Error("Reconnect this event's OpenAI key in Settings before starting a run.");
+  if (providerMode === "managed") {
+    if (isManagedAiDisabled()) throw new Error(MANAGED_AI_DISABLED_MESSAGE);
+    if (!process.env.OPENAI_API_KEY) throw new Error("Namos-managed AI is temporarily unavailable. Choose Bring your own key in Settings, or contact support.");
+    const event = await ctx.db.get(args.eventId);
+    if (!event?.billingOwnerUserId) throw new Error("This event needs a billing owner before Namos-managed AI can run.");
+  }
+  const runId = await ctx.db.insert("agent_runs", { eventId: args.eventId, requestedByUserId: args.requestedByUserId, objective, status: "queued", model: process.env.OPENAI_AGENT_MODEL ?? "gpt-5.6-terra", providerMode, idempotencyKey, stepCount: 0, maxSteps: 12, createdAt: now, updatedAt: now });
+  await ctx.db.insert("agent_run_events", { eventId: args.eventId, runId, sequence: 1, type: "user_message", message: objective, createdAt: now });
+  await workflow.start(ctx, internal.agentWorkflow.execute, { runId }, { startAsync: true });
+  return { runId };
+}
+
+export async function respondToRunForUser(ctx: MutationCtx, args: { eventId: Id<"events">; runId: Id<"agent_runs">; requestedByUserId: string; message: string; idempotencyKey: string }) {
+  await assertEventOrganizerByUserId(ctx, args.eventId, args.requestedByUserId);
+  const run = await ctx.db.get(args.runId);
+  if (!run || run.eventId !== args.eventId) throw new Error("Agent run not found for this event.");
+  const message = args.message.trim();
+  if (!message) throw new Error("Enter a reply to continue.");
+  if (message.length > 4000) throw new Error("A reply cannot exceed 4,000 characters.");
+  const idempotencyKey = validateIdempotencyKey(args.idempotencyKey);
+  const events = await ctx.db.query("agent_run_events").withIndex("by_run_sequence", (q) => q.eq("runId", run._id)).collect();
+  if (events.some((event) => event.detailsJson === JSON.stringify({ idempotencyKey }))) return { runId: run._id };
+  if (run.status !== "needs_input") throw new Error("This run is not waiting for input.");
+  const now = Date.now();
+  await ctx.db.insert("agent_run_events", { eventId: run.eventId, runId: run._id, sequence: (events.at(-1)?.sequence ?? 0) + 1, type: "user_message", message, detailsJson: JSON.stringify({ idempotencyKey }), createdAt: now });
+  await ctx.db.patch(run._id, { status: "queued", error: undefined, completedAt: undefined, updatedAt: now });
+  await workflow.start(ctx, internal.agentWorkflow.execute, { runId: run._id }, { startAsync: true });
+  return { runId: run._id };
+}
+
+export async function approveTaskProposalForUser(ctx: MutationCtx, args: { eventId: Id<"events">; proposalId: Id<"agent_action_proposals">; expectedPayloadHash: string; requestedByUserId: string }) {
+  await assertEventOrganizerByUserId(ctx, args.eventId, args.requestedByUserId);
+  const proposal = await ctx.db.get(args.proposalId);
+  if (!proposal || proposal.eventId !== args.eventId) throw new Error("Agent proposal not found for this event.");
+  const run = await ctx.db.get(proposal.runId);
+  if (!run || run.eventId !== args.eventId) throw new Error("Agent run not found for this event.");
+  if (args.expectedPayloadHash !== proposal.payloadHash) throw new Error("This proposal changed. Reload before approving.");
+  if (proposal.status === "applied") return { createdTaskIds: proposal.createdTaskIds ?? [] };
+  if (proposal.status !== "pending" || run.status !== "needs_approval") throw new Error("This proposal is no longer pending approval.");
+  if (proposal.kind !== "create_tasks" || !proposal.tasks) throw new Error("This is not a task proposal.");
+  const createdTaskIds: Id<"onboarding_tasks">[] = [];
+  for (const task of proposal.tasks) createdTaskIds.push(await validateAndCreateTask(ctx, { eventId: proposal.eventId, title: task.title, targetType: task.targetType, speakerId: task.speakerId, submissionId: task.submissionId, sponsorId: task.sponsorId, linkedFormId: task.linkedFormId, dueDate: task.dueDate, description: task.reason }, "agent"));
+  const now = Date.now();
+  await ctx.db.patch(proposal._id, { status: "applied", decidedByUserId: args.requestedByUserId, decidedAt: now, appliedAt: now, createdTaskIds, updatedAt: now });
+  await ctx.db.patch(run._id, { status: "completed", completedAt: now, updatedAt: now });
+  await appendEvent(ctx, run, "approval", `Approved and created ${createdTaskIds.length} task${createdTaskIds.length === 1 ? "" : "s"}.`);
+  return { createdTaskIds };
+}
+
+export async function rejectProposalForUser(ctx: MutationCtx, args: { eventId: Id<"events">; proposalId: Id<"agent_action_proposals">; requestedByUserId: string; reason?: string }) {
+  await assertEventOrganizerByUserId(ctx, args.eventId, args.requestedByUserId);
+  const proposal = await ctx.db.get(args.proposalId);
+  if (!proposal || proposal.eventId !== args.eventId) throw new Error("Task proposal not found for this event.");
+  const run = await ctx.db.get(proposal.runId);
+  if (!run || run.eventId !== args.eventId) throw new Error("Agent run not found for this event.");
+  if (proposal.status === "rejected") return { rejected: true as const };
+  if (proposal.status !== "pending") throw new Error("This proposal is no longer pending approval.");
+  const now = Date.now();
+  const decisionReason = args.reason?.trim().slice(0, 500) || undefined;
+  await ctx.db.patch(proposal._id, { status: "rejected", decidedByUserId: args.requestedByUserId, decisionReason, decidedAt: now, updatedAt: now });
+  await ctx.db.patch(run._id, { status: "completed", completedAt: now, updatedAt: now });
+  await appendEvent(ctx, run, "approval", decisionReason ? `Proposal rejected: ${decisionReason}` : "Proposal rejected by organizer.");
+  return { rejected: true as const };
+}
+
 export const create = mutation({
   args: { eventId: v.id("events"), objective: v.string(), idempotencyKey: v.string() },
   handler: async (ctx, args) => {
     const identity = await assertEventOrganizerAccess(ctx, args.eventId);
-    const objective = args.objective.trim();
-    if (!objective) throw new Error("Enter an objective for this run.");
-    if (objective.length > 4000) throw new Error("An objective cannot exceed 4,000 characters.");
-    const idempotencyKey = validateIdempotencyKey(args.idempotencyKey);
-    const existing = await ctx.db.query("agent_runs").withIndex("by_requester_idempotency", (q) => q.eq("requestedByUserId", identity.subject).eq("idempotencyKey", idempotencyKey)).unique();
-    if (existing) {
-      if (existing.eventId !== args.eventId) throw new Error("This request key is already bound to another event.");
-      return { runId: existing._id };
-    }
-    const now = Date.now();
-    const providerSetting = await ctx.db.query("agent_provider_settings").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).unique();
-    const providerMode = providerSetting?.mode ?? "managed";
-    if (providerMode === "bring_your_own" && (!providerSetting?.credentialEnvelope || providerSetting.status !== "ready")) throw new Error("Reconnect this event's OpenAI key in Settings before starting a run.");
-    if (providerMode === "managed") {
-      if (!process.env.OPENAI_API_KEY) throw new Error("Namos-managed AI is temporarily unavailable. Choose Bring your own key in Settings, or contact support.");
-      const event = await ctx.db.get(args.eventId);
-      if (!event?.billingOwnerUserId) throw new Error("This event needs a billing owner before Namos-managed AI can run.");
-    }
-    const runId = await ctx.db.insert("agent_runs", { eventId: args.eventId, requestedByUserId: identity.subject, objective, status: "queued", model: process.env.OPENAI_AGENT_MODEL ?? "gpt-5.6-terra", providerMode, idempotencyKey, stepCount: 0, maxSteps: 12, createdAt: now, updatedAt: now });
-    await ctx.db.insert("agent_run_events", { eventId: args.eventId, runId, sequence: 1, type: "user_message", message: objective, createdAt: now });
-    await workflow.start(ctx, internal.agentWorkflow.execute, { runId }, { startAsync: true });
-    return { runId };
+    return createRunForUser(ctx, { ...args, requestedByUserId: identity.subject });
   },
 });
 
 export const respond = mutation({
   args: { eventId: v.id("events"), runId: v.id("agent_runs"), message: v.string(), idempotencyKey: v.string() },
   handler: async (ctx, args) => {
-    const run = await authorizedRun(ctx, args.eventId, args.runId);
-    const message = args.message.trim();
-    if (!message) throw new Error("Enter a reply to continue.");
-    if (message.length > 4000) throw new Error("A reply cannot exceed 4,000 characters.");
-    const idempotencyKey = validateIdempotencyKey(args.idempotencyKey);
-    const events = await ctx.db.query("agent_run_events").withIndex("by_run_sequence", (q) => q.eq("runId", run._id)).collect();
-    if (events.some((event) => event.detailsJson === JSON.stringify({ idempotencyKey }))) return;
-    if (run.status !== "needs_input") throw new Error("This run is not waiting for input.");
-    const now = Date.now();
-    await ctx.db.insert("agent_run_events", { eventId: run.eventId, runId: run._id, sequence: (events.at(-1)?.sequence ?? 0) + 1, type: "user_message", message, detailsJson: JSON.stringify({ idempotencyKey }), createdAt: now });
-    await ctx.db.patch(run._id, { status: "queued", error: undefined, completedAt: undefined, updatedAt: now });
-    await workflow.start(ctx, internal.agentWorkflow.execute, { runId: run._id }, { startAsync: true });
+    const identity = await assertEventOrganizerAccess(ctx, args.eventId);
+    await respondToRunForUser(ctx, { ...args, requestedByUserId: identity.subject });
   },
 });
 
@@ -198,33 +244,7 @@ export const approveTaskProposal = mutation({
   args: { eventId: v.id("events"), proposalId: v.id("agent_action_proposals"), expectedPayloadHash: v.string() },
   handler: async (ctx, args) => {
     const identity = await assertEventOrganizerAccess(ctx, args.eventId);
-    const proposal = await ctx.db.get(args.proposalId);
-    if (!proposal || proposal.eventId !== args.eventId) throw new Error("Agent proposal not found for this event.");
-    const run = await ctx.db.get(proposal.runId);
-    if (!run || run.eventId !== args.eventId) throw new Error("Agent run not found for this event.");
-    if (args.expectedPayloadHash !== proposal.payloadHash) throw new Error("This proposal changed. Reload before approving.");
-    if (proposal.status === "applied") return { createdTaskIds: proposal.createdTaskIds ?? [] };
-    if (proposal.status !== "pending" || run.status !== "needs_approval") throw new Error("This proposal is no longer pending approval.");
-    const createdTaskIds: Id<"onboarding_tasks">[] = [];
-    if (proposal.kind !== "create_tasks" || !proposal.tasks) throw new Error("This is not a task proposal.");
-    for (const task of proposal.tasks) {
-      createdTaskIds.push(await validateAndCreateTask(ctx, {
-        eventId: proposal.eventId,
-        title: task.title,
-        targetType: task.targetType,
-        speakerId: task.speakerId,
-        submissionId: task.submissionId,
-        sponsorId: task.sponsorId,
-        linkedFormId: task.linkedFormId,
-        dueDate: task.dueDate,
-        description: task.reason,
-      }, "agent"));
-    }
-    const now = Date.now();
-    await ctx.db.patch(proposal._id, { status: "applied", decidedByUserId: identity.subject, decidedAt: now, appliedAt: now, createdTaskIds, updatedAt: now });
-    await ctx.db.patch(run._id, { status: "completed", completedAt: now, updatedAt: now });
-    await appendEvent(ctx, run, "approval", `Approved and created ${createdTaskIds.length} task${createdTaskIds.length === 1 ? "" : "s"}.`);
-    return { createdTaskIds };
+    return approveTaskProposalForUser(ctx, { ...args, requestedByUserId: identity.subject });
   },
 });
 
@@ -276,16 +296,6 @@ export const rejectProposal = mutation({
   args: { eventId: v.id("events"), proposalId: v.id("agent_action_proposals"), reason: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const identity = await assertEventOrganizerAccess(ctx, args.eventId);
-    const proposal = await ctx.db.get(args.proposalId);
-    if (!proposal || proposal.eventId !== args.eventId) throw new Error("Task proposal not found for this event.");
-    const run = await ctx.db.get(proposal.runId);
-    if (!run || run.eventId !== args.eventId) throw new Error("Agent run not found for this event.");
-    if (proposal.status === "rejected") return;
-    if (proposal.status !== "pending") throw new Error("This proposal is no longer pending approval.");
-    const now = Date.now();
-    const decisionReason = args.reason?.trim().slice(0, 500) || undefined;
-    await ctx.db.patch(proposal._id, { status: "rejected", decidedByUserId: identity.subject, decisionReason, decidedAt: now, updatedAt: now });
-    await ctx.db.patch(run._id, { status: "completed", completedAt: now, updatedAt: now });
-    await appendEvent(ctx, run, "approval", decisionReason ? `Proposal rejected: ${decisionReason}` : "Proposal rejected by organizer.");
+    await rejectProposalForUser(ctx, { ...args, requestedByUserId: identity.subject });
   },
 });

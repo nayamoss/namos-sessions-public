@@ -19,7 +19,7 @@ export type ShortcutBinding = {
   shift?: boolean;
 };
 
-export type ShortcutId = "palette" | "sidebar" | "rightPanel" | "help" | "voice";
+export type ShortcutId = "palette" | "sidebar" | "rightPanel" | "help" | "theme" | "voice";
 
 const CODE_LABELS: Record<string, string> = {
   Slash: "/",
@@ -95,6 +95,7 @@ export const SHORTCUTS: Record<ShortcutId, ShortcutBinding> = {
   sidebar: { code: "Slash", meta: true },
   rightPanel: { code: "Backslash", meta: true },
   help: { code: "Slash", shift: true },
+  theme: { code: "KeyD", alt: true, shift: true },
   // Deliberately Alt, not Cmd/Ctrl+Shift+V — that's "paste without
   // formatting" in every browser and OS. Matches Imori's binding exactly.
   voice: { code: "KeyV", alt: true },
@@ -153,6 +154,7 @@ export const SHORTCUT_HELP: readonly ShortcutHelpGroup[] = [
     group: "General",
     items: [
       { keys: ["?"], label: "Show keyboard shortcuts" },
+      { keys: formatShortcut(SHORTCUTS.theme), label: "Toggle light and dark mode" },
       { keys: formatShortcut(SHORTCUTS.voice), label: "Start voice chat with the Operations Agent" },
     ],
   },

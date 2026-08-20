@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Namos Sessions — Form builder prototype</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6f7f9;
+        --surface: #ffffff;
+        --soft: #eef1f5;
+        --soft-hover: #e7ebf0;
+        --text: #1b2230;
+        --muted: #667085;
+        --faint: #9299a7;
+        --blue: #0866ff;
+        --blue-hover: #0055dc;
+        --blue-soft: #eaf2ff;
+        --danger: #d94747;
+        --radius: 10px;
+        --shadow: 0 10px 30px rgb(22 31 49 / 0.12);
+      }
+
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--text);
+        font: 14px/1.45 Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      button, input, textarea { font: inherit; }
+      button { color: inherit; }
+      button, input, textarea { border: 0; }
+      button:focus-visible, input:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
+        outline: 3px solid rgb(8 102 255 / 0.22);
+        outline-offset: 2px;
+      }
+
+      .app {
+        display: grid;
+        grid-template-columns: 184px minmax(0, 1fr);
+        height: 100dvh;
+      }
+
+      .app-nav {
+        display: flex;
+        min-width: 0;
+        flex-direction: column;
+        padding: 18px 12px 14px;
+        background: var(--surface);
+      }
+      .brand { display: flex; align-items: center; justify-content: space-between; padding: 0 6px 18px; font-weight: 700; }
+      .event { display: flex; align-items: center; gap: 9px; padding: 10px 8px 16px; font-weight: 600; }
+      .event-dot { width: 7px; height: 7px; border-radius: 50%; background: #f3a000; flex: 0 0 auto; }
+      .nav-group { margin-top: 9px; }
+      .nav-label { padding: 8px 9px 5px; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+      .nav-item { display: flex; align-items: center; gap: 9px; min-height: 38px; padding: 0 10px; border-radius: 7px; color: #4b5565; }
+      .nav-item.active { background: var(--soft); color: var(--text); font-weight: 600; }
+      .nav-icon { width: 16px; color: var(--muted); text-align: center; }
+      .profile { margin-top: auto; display: flex; align-items: center; gap: 9px; padding: 9px 7px; }
+      .avatar { width: 27px; height: 27px; display: grid; place-items: center; border-radius: 50%; background: #dce8d8; font-size: 11px; }
+
+      .workspace { min-width: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr); }
+      .page-title { display: flex; align-items: center; min-height: 48px; padding: 0 20px; }
+      .page-title h1 { margin: 0; font-size: 19px; line-height: 1.2; letter-spacing: -.015em; }
+      .toolbar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 54px;
+        padding: 8px 20px;
+        background: var(--surface);
+      }
+      .toolbar-status { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+      .toolbar-status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #98a2b3; }
+      .toolbar-spacer { flex: 1; }
+      .button {
+        min-height: 36px;
+        padding: 0 14px;
+        border-radius: 7px;
+        background: var(--soft);
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 150ms ease, color 150ms ease, transform 80ms ease;
+      }
+      .button:hover { background: var(--soft-hover); }
+      .button:active { transform: translateY(1px); }
+      .button.primary { background: var(--blue); color: white; }
+      .button.primary:hover { background: var(--blue-hover); }
+      .button.ghost { background: transparent; color: var(--muted); }
+      .button.ghost:hover { background: var(--soft); color: var(--text); }
+      .button.icon { width: 34px; min-height: 34px; padding: 0; display: grid; place-items: center; }
+
+      .builder-wrap { min-width: 0; min-height: 0; padding: 14px 20px 20px; }
+      .builder {
+        display: grid;
+        grid-template-columns: 232px minmax(420px, 1fr) 310px;
+        gap: 14px;
+        height: 100%;
+        min-width: 0;
+      }
+      .panel {
+        min-width: 0;
+        min-height: 0;
+        overflow: auto;
+        border-radius: var(--radius);
+        background: var(--surface);
+      }
+      .pages-panel { padding: 16px 12px; }
+      .section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 0 5px; }
+      .section-heading h2, .inspector h2 { margin: 0; font-size: 14px; line-height: 1.35; }
+      .section-heading p { margin: 3px 0 0; color: var(--muted); font-size: 12px; }
+      .page-list { display: grid; gap: 4px; margin-top: 13px; }
+      .page-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 6px;
+        width: 100%;
+        min-height: 46px;
+        padding: 6px 6px 6px 10px;
+        border-radius: 8px;
+        background: transparent;
+        text-align: left;
+        cursor: pointer;
+      }
+      .page-row:hover { background: var(--soft); }
+      .page-row.selected { background: var(--blue-soft); color: #064aa9; }
+      .page-row-copy { min-width: 0; }
+      .page-name { display: block; overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+      .page-meta { display: block; margin-top: 1px; color: var(--muted); font-size: 11px; font-weight: 400; }
+      .page-menu { opacity: 0; }
+      .page-row:hover .page-menu, .page-row.selected .page-menu, .page-menu:focus-visible { opacity: 1; }
+      .add-page { width: 100%; margin-top: 8px; }
+      .menu-wrap { position: relative; }
+      .context-menu {
+        position: absolute;
+        z-index: 10;
+        top: 38px;
+        right: 2px;
+        display: none;
+        width: 164px;
+        padding: 6px;
+        border-radius: 9px;
+        background: var(--surface);
+        box-shadow: var(--shadow);
+      }
+      .context-menu.open { display: grid; }
+      .context-menu button { padding: 9px 10px; border-radius: 6px; background: transparent; text-align: left; cursor: pointer; }
+      .context-menu button:hover { background: var(--soft); }
+      .context-menu .danger { color: var(--danger); }
+      .settings-link { width: 100%; margin-top: 12px; padding: 10px; border-radius: 7px; background: transparent; text-align: left; font-weight: 600; cursor: pointer; }
+      .settings-link:hover { background: var(--soft); }
+
+      .canvas { padding: 25px clamp(22px, 4vw, 54px) 48px; }
+      .canvas-inner { width: min(100%, 720px); margin: 0 auto; }
+      .eyebrow { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+      .page-heading-row { display: flex; align-items: flex-start; gap: 14px; margin-top: 5px; }
+      .page-heading-copy { flex: 1; min-width: 0; }
+      .editable-title { margin: 0; font-size: 23px; letter-spacing: -.025em; }
+      .editable-description { margin: 4px 0 0; color: var(--muted); }
+      .field-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 34px; }
+      .field-section-head h3 { margin: 0; font-size: 13px; }
+      .field-list { display: grid; gap: 7px; margin-top: 10px; }
+      .field-row {
+        display: grid;
+        grid-template-columns: 28px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 9px;
+        min-height: 59px;
+        padding: 7px 10px;
+        border-radius: 8px;
+        background: var(--bg);
+        cursor: pointer;
+      }
+      .field-row:hover { background: var(--soft); }
+      .field-row.selected { background: var(--blue-soft); color: #064aa9; }
+      .field-row.selected .field-kind,
+      .field-row.selected .handle { color: #4774ad; }
+      .handle { color: var(--faint); font-size: 16px; text-align: center; cursor: grab; }
+      .field-label { font-weight: 600; }
+      .field-kind { color: var(--muted); font-size: 12px; }
+      .field-badges { display: flex; gap: 6px; }
+      .badge { padding: 4px 7px; border-radius: 999px; background: var(--soft); color: var(--muted); font-size: 11px; }
+      .locked-note { margin-top: 14px; padding: 12px 14px; border-radius: 8px; background: #f8f9fb; color: var(--muted); font-size: 12px; }
+
+      .inspector { padding: 18px; }
+      .inspector-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+      #closeInspector { visibility: hidden; }
+      .form-grid { display: grid; gap: 16px; }
+      .field-control { display: grid; gap: 6px; }
+      .field-control label { font-size: 12px; font-weight: 600; }
+      .input, .textarea, .select-button {
+        width: 100%;
+        min-height: 40px;
+        padding: 9px 11px;
+        border-radius: 7px;
+        background: var(--soft);
+        color: var(--text);
+        text-align: left;
+      }
+      .textarea { min-height: 78px; resize: vertical; }
+      .select-button { display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+      .toggle-row { display: flex; align-items: center; justify-content: space-between; min-height: 40px; }
+      .switch { width: 38px; height: 22px; padding: 3px; border-radius: 999px; background: var(--blue); cursor: pointer; }
+      .switch-knob { width: 16px; height: 16px; margin-left: auto; border-radius: 50%; background: white; }
+      .help { margin: -10px 0 0; color: var(--muted); font-size: 11px; }
+      .drawer-trigger { display: none; }
+
+      .preview-mode { display: none; height: 100%; }
+      .preview-mode.active { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 14px; }
+      .preview-surface { display: grid; place-items: center; min-width: 0; border-radius: var(--radius); background: var(--surface); }
+      .preview-form { width: min(620px, calc(100% - 48px)); }
+      .preview-brand { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; }
+      .progress-track { height: 3px; margin-top: 12px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+      .progress-value { width: 40%; height: 100%; background: var(--blue); }
+      .preview-copy { margin-top: 72px; }
+      .preview-copy h2 { margin: 0; font-size: 30px; letter-spacing: -.035em; }
+      .preview-copy p { margin: 8px 0 24px; color: var(--muted); }
+      .preview-question { margin: 25px 0; }
+      .preview-question label { display: block; margin-bottom: 7px; font-weight: 600; }
+      .preview-question .input { background: var(--bg); }
+      .preview-actions { display: flex; gap: 8px; }
+      .preview-info { padding: 18px; border-radius: var(--radius); background: var(--surface); }
+      .preview-info h3 { margin: 0 0 6px; font-size: 14px; }
+      .preview-info p { margin: 0; color: var(--muted); font-size: 12px; }
+      .preview-pages { display: grid; gap: 4px; margin-top: 18px; }
+      .preview-step { padding: 9px 10px; border-radius: 7px; color: var(--muted); font-size: 12px; }
+      .preview-step.active { background: var(--blue-soft); color: #064aa9; font-weight: 600; }
+
+      .prototype-note {
+        position: fixed;
+        right: 18px;
+        bottom: 16px;
+        z-index: 30;
+        padding: 8px 11px;
+        border-radius: 999px;
+        background: #202632;
+        color: white;
+        font-size: 11px;
+        box-shadow: var(--shadow);
+      }
+
+      @media (max-width: 1180px) {
+        .builder { grid-template-columns: 224px minmax(0, 1fr); }
+        .inspector {
+          position: fixed;
+          z-index: 20;
+          top: 116px;
+          right: 16px;
+          bottom: 18px;
+          width: min(330px, calc(100vw - 32px));
+          display: none;
+          box-shadow: var(--shadow);
+        }
+        .inspector.open { display: block; }
+        #closeInspector { visibility: visible; }
+        .drawer-trigger { display: inline-flex; }
+      }
+
+      @media (max-width: 840px) {
+        .app { grid-template-columns: 62px minmax(0, 1fr); }
+        .app-nav { align-items: center; padding-inline: 8px; }
+        .brand { padding-inline: 0; font-size: 0; }
+        .brand::before { content: "N"; font-size: 15px; }
+        .event span:not(.event-dot), .nav-label, .nav-item span:not(.nav-icon), .profile span:not(.avatar) { display: none; }
+        .nav-item { justify-content: center; width: 40px; padding: 0; }
+        .builder-wrap { padding-inline: 12px; }
+        .builder { grid-template-columns: 190px minmax(0, 1fr); gap: 10px; }
+        .canvas { padding-inline: 18px; }
+      }
+
+      @media (max-width: 650px) {
+        body { overflow: auto; }
+        .app { grid-template-columns: 1fr; height: auto; min-height: 100dvh; }
+        .app-nav { display: none; }
+        .workspace { min-height: 100dvh; }
+        .builder-wrap { min-height: calc(100dvh - 102px); }
+        .builder { grid-template-columns: 1fr; }
+        .pages-panel { display: none; }
+        .preview-mode.active { grid-template-columns: 1fr; }
+        .preview-info { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <aside class="app-nav" aria-label="Application navigation">
+        <div class="brand">Namos Sessions <span aria-hidden="true">◧</span></div>
+        <div class="event"><span class="event-dot"></span><span>Testy Conf</span></div>
+        <div class="nav-group">
+          <div class="nav-item"><span class="nav-icon">⌂</span><span>Dashboard</span></div>
+        </div>
+        <div class="nav-group">
+          <div class="nav-label">CFP</div>
+          <div class="nav-item active"><span class="nav-icon">◫</span><span>Calls for papers</span></div>
+          <div class="nav-item"><span class="nav-icon">▤</span><span>Submissions</span></div>
+          <div class="nav-item"><span class="nav-icon">✓</span><span>Judging</span></div>
+        </div>
+        <div class="nav-group">
+          <div class="nav-label">Program</div>
+          <div class="nav-item"><span class="nav-icon">♙</span><span>Speakers</span></div>
+          <div class="nav-item"><span class="nav-icon">□</span><span>Schedule</span></div>
+        </div>
+        <div class="profile"><span class="avatar">SM</span><span>Stacy Moses</span></div>
+      </aside>
+
+      <main class="workspace">
+        <header class="page-title"><h1>Call for papers</h1></header>
+
+        <div class="toolbar" aria-label="Form toolbar">
+          <div class="toolbar-status">Draft — not accepting submissions</div>
+          <div class="toolbar-spacer"></div>
+          <button class="button" id="previewToggle" type="button">Preview</button>
+          <button class="button primary" type="button">Save changes</button>
+        </div>
+
+        <div class="builder-wrap">
+          <section class="builder" id="builderView" aria-label="Form editor">
+            <aside class="panel pages-panel" aria-label="Form pages">
+              <div class="section-heading">
+                <div>
+                  <h2>Pages</h2>
+                  <p>What submitters complete.</p>
+                </div>
+              </div>
+
+              <div class="page-list" id="pageList">
+                <div class="page-row selected" data-page="Proposal details" tabindex="0" role="button" aria-pressed="true">
+                  <span class="page-row-copy"><span class="page-name">Proposal details</span><span class="page-meta">6 questions</span></span>
+                  <span class="menu-wrap">
+                    <button class="button icon ghost page-menu" type="button" aria-label="Page actions" aria-expanded="false">•••</button>
+                    <span class="context-menu" role="menu">
+                      <button type="button" role="menuitem">Rename</button>
+                      <button type="button" role="menuitem">Duplicate</button>
+                      <button type="button" role="menuitem">Move down</button>
+                      <button type="button" role="menuitem" class="danger">Remove</button>
+                    </span>
+                  </span>
+                </div>
+                <div class="page-row" data-page="Additional details" tabindex="0" role="button" aria-pressed="false">
+                  <span class="page-row-copy"><span class="page-name">Additional details</span><span class="page-meta">3 questions</span></span>
+                  <span class="menu-wrap">
+                    <button class="button icon ghost page-menu" type="button" aria-label="Page actions" aria-expanded="false">•••</button>
+                    <span class="context-menu" role="menu">
+                      <button type="button" role="menuitem">Rename</button>
+                      <button type="button" role="menuitem">Duplicate</button>
+                      <button type="button" role="menuitem">Move up</button>
+                      <button type="button" role="menuitem" class="danger">Remove</button>
+                    </span>
+                  </span>
+                </div>
+              </div>
+              <button class="button add-page" id="addPage" type="button">＋ Add page</button>
+
+              <button class="settings-link" type="button">Form settings</button>
+            </aside>
+
+            <section class="panel canvas" aria-label="Selected page editor">
+              <div class="canvas-inner">
+                <div class="eyebrow">Page</div>
+                <div class="page-heading-row">
+                  <div class="page-heading-copy">
+                    <h2 class="editable-title" id="canvasTitle">Proposal details</h2>
+                    <p class="editable-description">Ask for the core information reviewers need.</p>
+                  </div>
+                  <button class="button ghost" type="button">Edit intro</button>
+                </div>
+
+                <div class="field-section-head">
+                  <h3>Questions</h3>
+                  <button class="button" type="button">＋ Add question</button>
+                </div>
+
+                <div class="field-list">
+                  <div class="field-row" tabindex="0" role="button" aria-pressed="false">
+                    <span class="handle" aria-label="Drag to reorder">⠿</span>
+                    <span><span class="field-label">Title</span><br><span class="field-kind">Short answer · Always included</span></span>
+                    <span class="field-badges"><span class="badge">Required</span><span class="badge">Locked</span></span>
+                  </div>
+                  <div class="field-row selected" tabindex="0" role="button" aria-pressed="true">
+                    <span class="handle" aria-label="Drag to reorder">⠿</span>
+                    <span><span class="field-label">Description</span><br><span class="field-kind">Long answer · 5,000 character limit</span></span>
+                    <span class="field-badges"><span class="badge">Required</span></span>
+                  </div>
+                  <div class="field-row" tabindex="0" role="button" aria-pressed="false">
+                    <span class="handle" aria-label="Drag to reorder">⠿</span>
+                    <span><span class="field-label">Format</span><br><span class="field-kind">Dropdown · 4 options</span></span>
+                    <span class="field-badges"></span>
+                  </div>
+                  <div class="field-row" tabindex="0" role="button" aria-pressed="false">
+                    <span class="handle" aria-label="Drag to reorder">⠿</span>
+                    <span><span class="field-label">Tags</span><br><span class="field-kind">Multiple choice · 8 options</span></span>
+                    <span class="field-badges"></span>
+                  </div>
+                  <div class="field-row" tabindex="0" role="button" aria-pressed="false">
+                    <span class="handle" aria-label="Drag to reorder">⠿</span>
+                    <span><span class="field-label">Track</span><br><span class="field-kind">Dropdown · 6 options</span></span>
+                    <span class="field-badges"></span>
+                  </div>
+                  <div class="field-row" tabindex="0" role="button" aria-pressed="false">
+                    <span class="handle" aria-label="Drag to reorder">⠿</span>
+                    <span><span class="field-label">Level</span><br><span class="field-kind">Dropdown · 3 options</span></span>
+                    <span class="field-badges"></span>
+                  </div>
+                </div>
+
+                <div class="locked-note">Title is required by every call for papers. It stays in this page and cannot be removed.</div>
+              </div>
+            </section>
+
+            <aside class="panel inspector open" id="inspector" aria-label="Selected question settings">
+              <div class="inspector-header">
+                <h2>Edit question</h2>
+                <button class="button icon ghost" id="closeInspector" type="button" aria-label="Close question settings">×</button>
+              </div>
+              <div class="form-grid">
+                <div class="field-control">
+                  <label for="questionLabel">Label</label>
+                  <input class="input" id="questionLabel" value="Description" />
+                </div>
+                <div class="field-control">
+                  <label>Answer type</label>
+                  <button class="select-button" type="button" aria-haspopup="listbox"><span>Long answer</span><span>⌄</span></button>
+                </div>
+                <div class="toggle-row">
+                  <span><strong>Required</strong><br><span class="field-kind">Submitters must answer</span></span>
+                  <button class="switch" type="button" role="switch" aria-checked="true" aria-label="Required"><span class="switch-knob"></span></button>
+                </div>
+                <div class="field-control">
+                  <label for="maxLength">Maximum characters</label>
+                  <input class="input" id="maxLength" inputmode="numeric" value="5000" />
+                </div>
+                <div class="field-control">
+                  <label>Show this question when</label>
+                  <button class="select-button" type="button" aria-haspopup="listbox"><span>Always</span><span>⌄</span></button>
+                </div>
+                <p class="help">Conditional rules appear here only when this question needs one.</p>
+              </div>
+            </aside>
+          </section>
+
+          <section class="preview-mode" id="previewView" aria-label="Form preview">
+            <div class="preview-surface">
+              <div class="preview-form">
+                <div class="preview-brand"><strong>Testy Conf <span style="color: var(--blue)">●</span></strong><span>2 of 5</span></div>
+                <div class="progress-track"><div class="progress-value"></div></div>
+                <div class="preview-copy">
+                  <h2>Tell us about your proposal</h2>
+                  <p>Share the core information our reviewers need.</p>
+                  <div class="preview-question">
+                    <label for="previewTitle">Title</label>
+                    <input class="input" id="previewTitle" placeholder="Give your proposal a clear title" />
+                  </div>
+                  <div class="preview-question">
+                    <label for="previewDescription">Description</label>
+                    <textarea class="textarea" id="previewDescription" placeholder="What will people learn?"></textarea>
+                  </div>
+                  <div class="preview-actions">
+                    <button class="button ghost" type="button">Back</button>
+                    <button class="button primary" type="button">Continue →</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <aside class="preview-info">
+              <h3>Previewing the full form</h3>
+              <p>This mode uses the same page order submitters will see. Unsaved edits are included.</p>
+              <div class="preview-pages">
+                <div class="preview-step">Account</div>
+                <div class="preview-step active">Proposal details</div>
+                <div class="preview-step">Additional details</div>
+                <div class="preview-step">Participants</div>
+                <div class="preview-step">Review</div>
+              </div>
+            </aside>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <div class="prototype-note">Interactive HTML prototype · production UI unchanged</div>
+
+    <script>
+      const builderView = document.getElementById('builderView');
+      const previewView = document.getElementById('previewView');
+      const previewToggle = document.getElementById('previewToggle');
+      const inspector = document.getElementById('inspector');
+      const canvasTitle = document.getElementById('canvasTitle');
+
+      previewToggle.addEventListener('click', () => {
+        const enteringPreview = previewView.classList.toggle('active');
+        builderView.style.display = enteringPreview ? 'none' : '';
+        previewToggle.textContent = enteringPreview ? 'Back to editor' : 'Preview';
+        previewToggle.setAttribute('aria-pressed', String(enteringPreview));
+      });
+
+      document.getElementById('closeInspector').addEventListener('click', () => inspector.classList.remove('open'));
+
+      document.querySelectorAll('.field-row').forEach((row) => {
+        row.addEventListener('click', () => {
+          document.querySelectorAll('.field-row').forEach((item) => {
+            item.classList.remove('selected');
+            item.setAttribute('aria-pressed', 'false');
+          });
+          row.classList.add('selected');
+          row.setAttribute('aria-pressed', 'true');
+          const label = row.querySelector('.field-label').textContent;
+          document.getElementById('questionLabel').value = label;
+          inspector.classList.add('open');
+        });
+      });
+
+      document.getElementById('pageList').addEventListener('click', (event) => {
+        const menuButton = event.target.closest('.page-menu');
+        if (menuButton) {
+          event.stopPropagation();
+          const menu = menuButton.nextElementSibling;
+          document.querySelectorAll('.context-menu').forEach((item) => item !== menu && item.classList.remove('open'));
+          menu.classList.toggle('open');
+          menuButton.setAttribute('aria-expanded', String(menu.classList.contains('open')));
+          return;
+        }
+        const page = event.target.closest('.page-row');
+        if (!page) return;
+        document.querySelectorAll('.page-row').forEach((item) => {
+          item.classList.remove('selected');
+          item.setAttribute('aria-pressed', 'false');
+        });
+        page.classList.add('selected');
+        page.setAttribute('aria-pressed', 'true');
+        canvasTitle.textContent = page.dataset.page;
+      });
+
+      document.getElementById('addPage').addEventListener('click', () => {
+        const name = `New page ${document.querySelectorAll('.page-row').length + 1}`;
+        const row = document.createElement('div');
+        row.className = 'page-row';
+        row.dataset.page = name;
+        row.tabIndex = 0;
+        row.setAttribute('role', 'button');
+        row.setAttribute('aria-pressed', 'false');
+        row.innerHTML = `<span class="page-row-copy"><span class="page-name">${name}</span><span class="page-meta">0 questions</span></span><span>•••</span>`;
+        document.getElementById('pageList').appendChild(row);
+        row.click();
+      });
+
+      document.addEventListener('click', (event) => {
+        if (!event.target.closest('.menu-wrap')) document.querySelectorAll('.context-menu').forEach((item) => item.classList.remove('open'));
+      });
+    </script>
+  </body>
+</html>

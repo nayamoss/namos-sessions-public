@@ -5,6 +5,13 @@
 **Priority:** High
 **Last Updated:** 2026-08-12
 
+> **Brief-coverage audit, 2026-08-17:**
+> [`BRIEF-ADDENDUM-2026-08-17.md`](./BRIEF-ADDENDUM-2026-08-17.md). Kill My SaaS requirement 5 is
+> fully covered in source — drag-and-drop with a keyboard fallback, four conflict reasons, a publish
+> gate, and all five named views plus month and conflicts. The only gap is the seeded demo, which
+> schedules three sessions against ~63 accepted submissions. Seed change only; no agenda code work
+> is proposed.
+
 ## Problem Statement
 
 Agenda & Scheduling (Program > Agenda, Written Brief #5) has real shipped functionality — six

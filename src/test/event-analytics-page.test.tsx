@@ -53,7 +53,7 @@ describe("organizer analytics page", () => {
     empty.crm = { total: 0, prospect: 0, contacted: 0, qualified: 0, invited: 0, negotiating: 0, confirmed: 0, declined: 0, archived: 0 };
     const repo = { analytics: { summary: vi.fn().mockResolvedValue(empty) } } as unknown as Repository;
     await act(async () => root.render(<MemoryRouter><RepoContext.Provider value={repo}><EventAnalytics /></RepoContext.Provider></MemoryRouter>));
-    expect(container).toHaveTextContent("Your event snapshot starts here");
+    expect(container).toHaveTextContent("No event activity yet");
     expect(container).toHaveTextContent("Set up a call");
     act(() => root.unmount());
   });

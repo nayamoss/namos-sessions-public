@@ -37,7 +37,10 @@ export function AuthSplitLayout({ children }: { children: ReactNode }) {
         </p>
       </div>
       <div className="flex w-full flex-1 flex-col bg-[#F5F7FB] px-6 py-10 lg:w-1/2 lg:flex-none lg:justify-center lg:px-16 lg:py-16">
-        <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center lg:flex-none">{children}</div>
+        <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center lg:flex-none">
+          {children}
+          <p className="mt-6 text-center text-sm text-[#5B6472]">Want to look around first? <a href="/demo" className="font-semibold text-[#0066FF] hover:underline">Open live demo</a></p>
+        </div>
       </div>
     </div>
   );

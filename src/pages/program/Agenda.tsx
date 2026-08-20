@@ -1,6 +1,5 @@
-/* eslint-disable react-refresh/only-export-components -- Pure grouping helpers are exported for focused agenda-view tests. */
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import Papa from "papaparse";
 import { jsPDF } from "jspdf";
 import {
@@ -37,7 +36,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -293,6 +291,10 @@ function conflictSummary(
 export default function Agenda() {
   const repo = useRepo();
   const { event: activeEvent } = useCurrentEvent();
+  const navigate = useNavigate();
+  const { agendaId } = useParams<{ agendaId?: string }>();
+  const location = useLocation();
+  const creating = agendaId === "new" || location.pathname.endsWith("/new");
   const [params, setParams] = useSearchParams();
   const [event, setEvent] = useState<Event>();
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -324,6 +326,7 @@ export default function Agenda() {
     "all" | "published" | "draft"
   >("all");
   const [detailMode, setDetailMode] = useState<DetailMode>();
+  const listPath = `/events/${activeEvent.slug}/program/agenda`;
   const requestedSubmissionId = params.get("submission") ?? undefined;
   const [announcement, setAnnouncement] = useState("");
   const [loading, setLoading] = useState(true);
@@ -336,13 +339,9 @@ export default function Agenda() {
   const [undo, setUndo] = useState<{ previous?: AgendaItem; createdId?: string; title: string }>();
   const selectSession = useCallback(
     (id: string) => {
-      setParams((current) => {
-        const next = new URLSearchParams(current);
-        next.set("selected", id);
-        return next;
-      });
+      navigate(`${listPath}/${encodeURIComponent(id)}/edit`);
     },
-    [setParams],
+    [listPath, navigate],
   );
   const timeZone = event?.timezone ?? fallbackTimezone;
   const load = useCallback(async () => {
@@ -474,17 +473,20 @@ export default function Agenda() {
         byItem.set(item.id, [...(byItem.get(item.id) ?? []), conflict.title]);
     return byItem;
   }, [blockingConflicts]);
-  const selectedItem = params.get("selected")
-    ? itemById.get(params.get("selected")!)
+  const selectedId = agendaId && agendaId !== "new" ? agendaId : params.get("selected");
+  const selectedItem = selectedId
+    ? itemById.get(selectedId)
     : undefined;
   const requestedSubmission = submissions.find(
     (submission) => submission.id === requestedSubmissionId,
   );
   useEffect(() => {
-    if (params.get("mode") === "add" && requestedSubmission)
-      setDetailMode("create");
-  }, [params, requestedSubmission]);
+    if (agendaId || params.get("mode") !== "add") return;
+    const suffix = requestedSubmissionId ? `?submission=${encodeURIComponent(requestedSubmissionId)}` : "";
+    navigate(`${listPath}/new${suffix}`, { replace: true });
+  }, [agendaId, listPath, navigate, params, requestedSubmissionId]);
   const closeDetail = () => {
+    if (agendaId || creating) { navigate(listPath); return; }
     setDetailMode(undefined);
     setParams((current) => {
       const next = new URLSearchParams(current);
@@ -881,9 +883,8 @@ export default function Agenda() {
       ),
     },
   ];
-  const detail =
-    event && detailMode === "create" ? (
-      <DetailPane title="Add session" onClose={closeDetail}>
+  const primaryEditor =
+    event && creating ? (
         <AgendaSessionForm
           event={event}
           rooms={rooms}
@@ -908,7 +909,6 @@ export default function Agenda() {
           onSave={saveSession}
           onCancel={closeDetail}
         />
-      </DetailPane>
     ) : event && detailMode === "duplicate" ? (
       <DetailPane title="Duplicate day" onClose={closeDetail}>
         <DuplicateDayForm
@@ -919,7 +919,6 @@ export default function Agenda() {
         />
       </DetailPane>
     ) : event && selectedItem ? (
-      <DetailPane title="Edit session" onClose={closeDetail}>
         <AgendaSessionForm
           event={event}
           rooms={rooms}
@@ -941,8 +940,15 @@ export default function Agenda() {
           onCancel={closeDetail}
           onDelete={() => setPendingDelete(selectedItem)}
         />
-      </DetailPane>
     ) : undefined;
+  if (agendaId || creating) {
+    return (
+      <AppLayout title={creating ? "New session" : selectedItem?.title ?? "Session"}>
+        {loading ? <SkeletonList rows={4} label="Loading session…" /> : primaryEditor ?? <EmptyState title="Session not found" message="This session may have been removed." action={<Button variant="outline" onClick={closeDetail}>Back to schedule</Button>} />}
+      </AppLayout>
+    );
+  }
+  const detail = detailMode === "duplicate" ? primaryEditor : undefined;
   return (
     <AppLayout title="Schedule" detail={detail}>
       <div className="space-y-5">
@@ -954,29 +960,6 @@ export default function Agenda() {
             {error}
           </p>
         )}
-        <ToggleGroup
-          type="single"
-          value={view}
-          onValueChange={(value) => value && setView(value as AgendaView)}
-          aria-label="Schedule view"
-          className="flex-wrap justify-start gap-2"
-        >
-          {agendaViews.map((option) => (
-            <ToggleGroupItem
-              key={option.value}
-              value={option.value}
-              size="sm"
-              className="h-8 gap-1.5 px-3.5"
-            >
-              {option.label}
-              {option.value === "conflicts" && blockingConflicts.length > 0 && (
-                <span className="rounded-full bg-amber-500/20 px-1.5 text-xs font-semibold tabular-nums text-amber-800 dark:text-amber-200">
-                  {blockingConflicts.length}
-                </span>
-              )}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
         <ContentToolbar
           ariaLabel="Agenda controls"
           search={
@@ -996,6 +979,10 @@ export default function Agenda() {
           }
           utilities={
             <>
+              <Select value={view} onValueChange={(value) => setView(value as AgendaView)}>
+                <SelectTrigger className="h-8 w-40" aria-label="Schedule view"><SelectValue /></SelectTrigger>
+                <SelectContent>{agendaViews.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}{option.value === "conflicts" && blockingConflicts.length ? ` (${blockingConflicts.length})` : ""}</SelectItem>)}</SelectContent>
+              </Select>
               <Button
                 type="button"
                 variant="outline"
@@ -1153,17 +1140,10 @@ export default function Agenda() {
                   ? "Add a room in Event settings before scheduling sessions."
                   : undefined
               }
-              onClick={() => {
-                setDetailMode("create");
-                setParams((current) => {
-                  const next = new URLSearchParams(current);
-                  next.delete("selected");
-                  return next;
-                });
-              }}
+              onClick={() => navigate(`${listPath}/new`)}
               disabled={!event || !rooms.length}
             >
-              Add Session
+              Add session
             </Button>
           }
         />

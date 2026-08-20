@@ -1,5 +1,14 @@
 # Accelevents One-Way Integration — Implementation Plan
 
+> **Superseded in part, 2026-08-17.** Read
+> [`BRIEF-RECONCILIATION-2026-08-17.md`](./BRIEF-RECONCILIATION-2026-08-17.md) **before** starting
+> any task below. Nothing here is implemented. The scope, eligibility rules, idempotency model,
+> four-table schema, and the Phase 1 contract gate all still stand. What does **not** stand:
+> `EVENT_ADMIN_USER_IDS` (T006 — that mechanism does not exist and must not be created; use
+> `assertEventOrganizerAccess`), the Clerk-mounting refactor (T005 — already done), and two of the
+> three proposed secrets (T007 — only the encryption key is needed). T010–T011's service-secret-only
+> function design is replaced by organizer-gated Convex functions.
+
 ## Phase 1: External Contract Gate
 
 - [ ] T001: Obtain an owner-generated Accelevents API key with API access and create a disposable

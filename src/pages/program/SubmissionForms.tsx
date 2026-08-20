@@ -43,17 +43,16 @@ function createRows(forms: SubmissionForm[], submissions: Submission[]) {
     });
 }
 
-export default function SubmissionForms() {
+export default function SubmissionForms({ createMode = false }: { createMode?: boolean }) {
   const repo = useRepo();
   const { event: activeEvent } = useCurrentEvent();
   const navigate = useNavigate();
   const [status, setStatus] = useState<FormStatus>("all");
   const [forms, setForms] = useState<FormRow[]>([]);
   const [eventId, setEventId] = useState<EventId>();
-  // ?new=true lands here from the command palette's "Create a CFP" action, so
-  // the deep link opens the template gallery instead of just the list.
+  // Retain the query-based entry point for bookmarked legacy links.
   const [params, setParams] = useSearchParams();
-  const [showGallery, setShowGallery] = useState(() => params.get("new") === "true");
+  const [showGallery, setShowGallery] = useState(() => createMode || params.get("new") === "true");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string>();
 
@@ -93,13 +92,17 @@ export default function SubmissionForms() {
   // Navigating to ?new=true while already on this page must open the gallery
   // too — the initial state only runs on mount.
   useEffect(() => {
-    if (params.get("new") === "true") setShowGallery(true);
-  }, [params]);
+    if (createMode || params.get("new") === "true") setShowGallery(true);
+  }, [createMode, params]);
 
   const closeGallery = useCallback(() => {
+    if (createMode) {
+      navigate(`/events/${activeEvent.slug}/program/forms`);
+      return;
+    }
     setShowGallery(false);
     if (params.get("new")) setParams({}, { replace: true });
-  }, [params, setParams]);
+  }, [activeEvent.slug, createMode, navigate, params, setParams]);
 
   const visible = useMemo(
     () =>
@@ -134,7 +137,7 @@ export default function SubmissionForms() {
         <TemplateGallery
           appliesTo="cfp"
           onSelect={selectTemplate}
-          onBlank={() => navigate(`/events/${activeEvent.slug}/program/forms/new/edit`)}
+          onBlank={() => navigate(`/events/${activeEvent.slug}/program/forms/new?blank=1`)}
           onCancel={closeGallery}
         />
       </AppLayout>
@@ -167,7 +170,7 @@ export default function SubmissionForms() {
               type="button"
               variant="accent"
               size="sm"
-              onClick={() => setShowGallery(true)}
+              onClick={() => navigate(`/events/${activeEvent.slug}/program/forms/new`)}
             >
               Create a CFP
             </Button>
@@ -196,7 +199,7 @@ export default function SubmissionForms() {
                       Show all
                     </Button>
                   ) : (
-                    <Button variant="accent" size="sm" onClick={() => setShowGallery(true)}>
+                    <Button variant="accent" size="sm" onClick={() => navigate(`/events/${activeEvent.slug}/program/forms/new`)}>
                       Add call
                     </Button>
                   )

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CalendarDays, Copy, Trash2 } from "lucide-react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
 import { DetailPane } from "@/components/shared/DetailPane";
@@ -228,6 +228,7 @@ function EventEditor({
 export default function EventsLanding() {
   const repo = useRepo();
   const navigate = useNavigate();
+  const location = useLocation();
   const [params, setParams] = useSearchParams();
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
@@ -258,8 +259,9 @@ export default function EventsLanding() {
     void load();
   }, [load]);
   useEffect(() => {
-    if (params.get("new") === "1") setEditor({ mode: "new" });
-  }, [params]);
+    if (params.get("new") === "1") navigate("/events/new", { replace: true });
+    if (location.pathname === "/events/new") setEditor({ mode: "new" });
+  }, [location.pathname, navigate, params]);
   const visible = useMemo(
     () =>
       filter === "all"
@@ -360,6 +362,13 @@ export default function EventsLanding() {
         ) : null,
     },
   ];
+  if (location.pathname === "/events/new") {
+    return (
+      <AppLayout title="New event">
+        <EventCreationWizard events={events} onClose={() => navigate("/events")} onSaved={(_id, slug, formId) => navigate(formId ? `/events/${slug}/program/forms/${formId}/edit` : `/events/${slug}/dashboard`)} />
+      </AppLayout>
+    );
+  }
   return (
     <AppLayout
       title="Events"
@@ -398,7 +407,7 @@ export default function EventsLanding() {
             </div>
           }
           primaryAction={
-            <Button onClick={() => setEditor({ mode: "new" })}>
+            <Button onClick={() => navigate("/events/new")}>
               New event
             </Button>
           }
@@ -433,7 +442,7 @@ export default function EventsLanding() {
               title={events.length ? "No events match this status" : "Create your first event"}
               message={events.length ? "Choose another status to return to your event list." : "Set the dates, timezone, and call for papers so your team has a workspace to build the program."}
               action={events.length ? <Button variant="outline" onClick={() => setFilter("all")}>Show all events</Button> :
-                <Button onClick={() => setEditor({ mode: "new" })}>
+                <Button onClick={() => navigate("/events/new")}>
                   <CalendarDays className="mr-2 h-4 w-4" />
                   Create your first event
                 </Button>

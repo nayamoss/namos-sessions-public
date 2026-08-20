@@ -5,7 +5,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/use-toast";
 import { useRepo } from "@/data/repo";
 import type { EmbedId, EmbedWrite, Event, PublicEmbedView } from "@/data/types";
-import { iframeSnippet } from "@/lib/public-embed";
+import { iframeSnippet, publicEmbedOrigin, publicEmbedUrl } from "@/lib/public-embed";
 import { EmbedRenderer } from "./EmbedRenderer";
 
 interface EmbedPreviewPanelProps {
@@ -34,7 +34,8 @@ export function EmbedPreviewPanel({ embedId, isDirty, draft, event, mode, onMode
       .catch(() => setPreview(null));
   }, [draft, event.id, reload, repo]);
 
-  const code = embedId ? iframeSnippet(window.location.origin, embedId, draft.view) : "";
+  const embedOrigin = publicEmbedOrigin(window.location.origin);
+  const code = embedId ? iframeSnippet(embedOrigin, embedId, draft.view) : "";
   async function copy() {
     try {
       await navigator.clipboard.writeText(code);
@@ -65,7 +66,7 @@ export function EmbedPreviewPanel({ embedId, isDirty, draft, event, mode, onMode
             <RefreshCw className="h-4 w-4" />
           </Button>
           <Button variant="ghost" size="icon" aria-label="Open public embed" disabled={!embedId} asChild={Boolean(embedId)}>
-            {embedId ? <a href={`/embed/${embedId}`} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /></a> : <span><ExternalLink className="h-4 w-4" /></span>}
+            {embedId ? <a href={publicEmbedUrl(embedOrigin, embedId)} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /></a> : <span><ExternalLink className="h-4 w-4" /></span>}
           </Button>
         </div>
       </div>

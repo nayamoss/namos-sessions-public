@@ -89,6 +89,15 @@ export const list = query({
   },
 });
 
+export const get = query({
+  args: { eventId: v.id("events"), id: v.id("onboarding_tasks") },
+  handler: async (ctx, args) => {
+    await assertEventOrganizerAccess(ctx, args.eventId);
+    const task = await ctx.db.get(args.id);
+    return task?.eventId === args.eventId ? task : null;
+  },
+});
+
 export const create = mutation({
   args: {
     eventId: v.id("events"),
@@ -99,10 +108,59 @@ export const create = mutation({
     sponsorId: v.optional(v.id("sponsors")),
     linkedFormId: v.optional(v.id("submission_forms")),
     dueDate: v.optional(v.number()),
+    description: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await assertEventOrganizerAccess(ctx, args.eventId);
     return validateAndCreateTask(ctx, args, "manual");
+  },
+});
+
+export const update = mutation({
+  args: {
+    id: v.id("onboarding_tasks"),
+    eventId: v.id("events"),
+    title: v.string(),
+    targetType: v.union(v.literal("contact"), v.literal("group"), v.literal("submission"), v.literal("sponsor")),
+    speakerId: v.optional(v.id("speakers")),
+    submissionId: v.optional(v.id("submissions")),
+    sponsorId: v.optional(v.id("sponsors")),
+    linkedFormId: v.optional(v.id("submission_forms")),
+    dueDate: v.optional(v.number()),
+    description: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await assertEventOrganizerAccess(ctx, args.eventId);
+    const existing = await ctx.db.get(args.id);
+    if (!existing || existing.eventId !== args.eventId) throw new Error("Task not found for this event.");
+    const { id, ...input } = args;
+    const title = input.title.trim();
+    if (!title) throw new Error("A task needs a title.");
+    if (title.length > 200) throw new Error("A task title cannot exceed 200 characters.");
+    if (input.sponsorId) {
+      const sponsor = await ctx.db.get(input.sponsorId);
+      if (!sponsor || sponsor.eventId !== input.eventId) throw new Error("The selected sponsor does not belong to this event.");
+    } else if (input.targetType === "sponsor") throw new Error("Select a sponsor for sponsor tasks.");
+    if (input.linkedFormId) {
+      const form = await ctx.db.get(input.linkedFormId);
+      if (!form || form.eventId !== input.eventId) throw new Error("The selected portal form does not belong to this event.");
+    }
+    await ctx.db.patch(id, {
+      ...input,
+      title,
+      description: input.description?.trim() || undefined,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+export const remove = mutation({
+  args: { eventId: v.id("events"), id: v.id("onboarding_tasks") },
+  handler: async (ctx, args) => {
+    await assertEventOrganizerAccess(ctx, args.eventId);
+    const task = await ctx.db.get(args.id);
+    if (!task || task.eventId !== args.eventId) throw new Error("Task not found for this event.");
+    await ctx.db.delete(args.id);
   },
 });
 

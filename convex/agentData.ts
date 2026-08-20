@@ -92,3 +92,42 @@ export const failedCommunications = internalQuery({
   args: { eventId: v.id("events"), limit: v.optional(v.number()) },
   handler: async (ctx, args) => (await ctx.db.query("comms_log").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect()).filter((row) => row.status === "failed").sort((a, b) => b.createdAt - a.createdAt).slice(0, boundedLimit(args.limit, 100)).map((row) => ({ id: row._id, channel: row.channel, speakerId: row.speakerId, submissionId: row.submissionId, subject: row.subject.slice(0, 200), error: row.error?.slice(0, 500), createdAt: row.createdAt })),
 });
+
+// The deterministic judge-demo path reads the same event-owned state as the model tools,
+// but returns only the fields required to prepare reviewable acceptance drafts.
+export const demoAcceptanceCandidates = internalQuery({
+  args: { eventId: v.id("events") },
+  handler: async (ctx, args) => {
+    const [event, submissions, speakers, communications, templates, agenda] = await Promise.all([
+      ctx.db.get(args.eventId),
+      ctx.db.query("submissions").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("speakers").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("comms_log").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("comms_templates").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+      ctx.db.query("agenda_items").withIndex("by_event", (q) => q.eq("eventId", args.eventId)).collect(),
+    ]);
+    if (!event) throw new Error("Event not found.");
+    const speakersById = new Map(speakers.map((speaker) => [speaker._id, speaker]));
+    const notifiedSubmissionIds = new Set(communications.filter((row) => row.status === "sent" && row.submissionId).map((row) => row.submissionId));
+    const scheduledSubmissionIds = new Set(agenda.flatMap((item) => item.submissionId ? [item.submissionId] : []));
+    const template = templates.find((candidate) => candidate.kind === "acceptance");
+    return {
+      eventName: event.name,
+      candidates: submissions
+        .filter((submission) => submission.status === "accepted" && submission.speakerId && !notifiedSubmissionIds.has(submission._id))
+        .flatMap((submission) => {
+          const speaker = submission.speakerId ? speakersById.get(submission.speakerId) : undefined;
+          if (!speaker) return [];
+          return [{
+            speakerId: speaker._id,
+            speakerName: `${speaker.firstName} ${speaker.lastName}`.trim() || "Speaker",
+            submissionId: submission._id,
+            submissionTitle: submission.title,
+            ...(template ? { templateId: template._id } : {}),
+            scheduled: scheduledSubmissionIds.has(submission._id),
+          }];
+        })
+        .slice(0, 50),
+    };
+  },
+});

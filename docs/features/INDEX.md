@@ -83,11 +83,12 @@ define an in-app, event-scoped Operations Agent with visible progress, clarifica
 source-linked readiness tools, and hash-bound approval before agent-attributed task creation. The
 closed, unmerged external MCP spike in #66 is prior art only, not an implementation dependency.
 
-**Slack integration planning update (2026-08-19):** a FULL Namos-plan package defines an
-organization-installed, event/channel-bound Slack adapter for the existing Operations Agent,
-explicit account linking, hash-bound task decisions, and selected event notifications. Convex
-signed HTTP actions, durable receipts, and an outbound delivery queue replace Takumi's in-memory
-webhook processing; no implementation or live Slack app configuration has started.
+**Slack integration implementation update (2026-08-19):** issue #238 is implemented locally on
+`feature/238-slack-integration`: organization OAuth, event/channel binding, explicit account
+linking, signed and deduplicated inbound operations, existing-agent routing, hash-bound decisions,
+durable notifications, and the Settings UI. Local checks pass. Live Slack sandbox installation,
+deployed endpoint verification, and the release matrices remain outstanding, so status is still
+`in-progress` rather than `done`.
 
 **Branding maintenance update (2026-08-13):** the legacy Sentio favicon was replaced throughout
 the web app with the Namos Sessions blue microphone icon, including SVG, ICO, PNG, and iOS assets.
@@ -240,7 +241,7 @@ replace provider or final release acceptance gates.
 | 65 | [account-menu-imori-parity](./account-menu-imori-parity/plan.md) | `done` | 4-6h | #228 | — | The account dropdown exposed only namos-specific navigation plus a theme toggle and sign out. Adds Imori's What's New, Take a tour, Feedback, and Shortcuts entries — the affordances that let a new or returning user get unstuck without opening a support channel — while keeping every namos-specific item, which has no Imori equivalent and must not be dropped. Merged as #230. |
 | 66 | [settings-modal-refactor](./settings-modal-refactor/plan.md) | `done` | 6-8h | #229 | — | Settings were 9 separately routed pages, each a full navigation away from whatever the organizer was doing. Now a Claude.ai-style modal overlay reachable from any page, with Imori's grouped sidebar nav and card content inside this app's design system. Deep links still resolve — `/events/:slug/settings/event` lands on the right tab inside the overlay instead of as a standalone page. Merged as #231. |
 | 67 | [onboarding-multi-source-import](./onboarding-multi-source-import/plan.md) | `planned` | 32-44h | #236 | high | Replaces the CSV-only final onboarding step with one preview-first source chooser for CSV, Google Sheets, Trello, the existing Notion integration, and a structured Markdown table. Google/Trello are read-only encrypted connections also manageable in Settings; Airtable remains Settings-only and is explicitly outside this request. |
-| 68 | [slack-integration](./slack-integration/plan.md) | `planned` | 32-44h | #238 | high | Organization-level Slack OAuth with one channel per event, explicit organizer account linking, signed/deduplicated commands and mentions routed into the existing Operations Agent, hash-bound task approval from Block Kit, and selected event notifications through a durable outbox. No Marketplace distribution, multi-channel binding, email auto-linking, or expanded agent write authority in v1. |
+| 68 | [slack-integration](./slack-integration/plan.md) | `in-progress` | 32-44h | #238 | high | Implemented locally on `feature/238-slack-integration`: organization-level Slack OAuth with one channel per event, explicit organizer account linking, signed/deduplicated commands and mentions routed into the existing Operations Agent, hash-bound task approval from Block Kit, and selected event notifications through a durable outbox. Live Slack sandbox and deployment verification remain. No Marketplace distribution, multi-channel binding, email auto-linking, or expanded agent write authority in v1. |
 
 **Total estimate:** ~156-216h including the attendee site, post-demo public API, restored public
 embeds + Accelevents integration, and the agent-native operations foundation, against a deadline
@@ -252,17 +253,34 @@ of Wed Aug 12, 10PM PT.
 
 The 9 numbered requirements from the competition doc, mapped to where each is satisfied.
 
-| # | Requirement | Feature | Status |
+**Audit basis — read this first.** The 2026-08-17 pass was run against a checkout that turned out
+to be **106 commits behind `origin/main`**. Work merged in that window — the event CRM and Contacts
+page (#240), AI-assessment billing gating (#242), the public embed showcase (#237), the form-builder
+simplification (#239), and the embed CSP fixes (#245-247) — was **not** visible to it. Statuses below
+are therefore a floor, not a ceiling: anything marked PARTIAL or MISSING may already be further along.
+Issue #257 re-verifies every row against current `main` in a browser. Do not quote this table as
+current without that pass.
+
+**Re-audited 2026-08-17** against source on a then-current `main`. Full traceability matrix, implementation order,
+approval decisions, and the judge walkthrough live in
+[kill-my-saas-brief](./kill-my-saas-brief/design.md) — read that before acting on this table.
+The headline finding: most requirements are **implemented and invisible**. The seeded demo
+exercises almost none of the machinery that exists, which is a different problem from the
+machinery being absent, and must not be confused with it. Requirement 8 is un-cut and now has a
+feature package. **Live/browser evidence is unfilled for every row** — nothing below is a verified
+pass yet.
+
+| # | Requirement | Feature | Status (source audit, 2026-08-17) |
 |---|---|---|---|
-| 1 | CFP forms w/ conditional logic + category routing | submission-form-builder, public-cfp-submission, form-templates | `in-progress` |
-| 2 | Self-service speaker portal (bios, headshots, slides, docs, proposal editing) | speaker-portal, submission-editing, form-templates | `in-progress` |
-| 3 | Automated templated comms + calendar invites | comms-notifications | `blocked` |
-| 4 | Submission evaluation + scoring, multi-round, optional AI | evaluation-scoring | `in-progress` (AI stubbed) |
-| 5 | Drag-and-drop schedule + conflict detection, multiple views | agenda-scheduling | `in-progress` (implemented; authenticated browser acceptance pending) |
-| 6 | Real-time outstanding speaker-task dashboard | portal-tasks + speaker-operations | `done` |
-| 7 | One-way Accelevents integration | [accelevents-integration](./accelevents-integration/plan.md) | `planned` as owner-requested scope despite the original strikethrough |
-| 8 | ~~Resource/wiki pages in the portal w/ HTML embed~~ | — | `cut` (struck through) |
-| 9 | ~~Embeddable mobile-friendly gallery + itinerary~~ | public-embeds | `done` as owner-restored scope; production framing verified 2026-08-13 |
+| 1 | CFP forms w/ conditional logic + category routing | [cfp-conditional-routing](./cfp-conditional-routing/plan.md); submission-form-builder, public-cfp-submission, form-templates | `PARTIAL` — built and unit-tested; the seeded CFP has no conditional field and its routing rule has never fired |
+| 2 | Self-service speaker portal (bios, headshots, slides, docs, proposal editing) | [speaker-portal-readiness](./speaker-portal-readiness/plan.md); speaker-portal, submission-editing | `PARTIAL` — speaker side complete; **no organizer can see uploaded documents**; uploads require a submission; nothing seeded |
+| 3 | Automated templated comms + calendar invites | [speaker-communications-delivery](./speaker-communications-delivery/plan.md); comms-notifications | `PARTIAL` — templates, ICS with UID/SEQUENCE, encrypted providers, append-only log all present; no scheduler, no retry, no seeded calendar invites |
+| 4 | Submission evaluation + scoring, multi-round, optional AI | [review-rounds-scoring](./review-rounds-scoring/plan.md); evaluation-scoring, evaluation-scorecards, blind-review | `PARTIAL` — rounds/rubrics/blind review built; UI caps rounds at 2 vs the server's 5; seeded plan uses none of it; no round-advance; `aiAssistEnabled` is a dead flag |
+| 5 | Drag-and-drop schedule + conflict detection, multiple views | [agenda-scheduling](./agenda-scheduling/BRIEF-ADDENDUM-2026-08-17.md) | `PASS (source)` — all five named views plus month and conflicts, DnD with a keyboard fallback, four conflict reasons, publish gate, audit trail. Demo schedules 3 sessions against ~63 accepted |
+| 6 | Real-time outstanding speaker-task dashboard | [demo-first-organizer-experience](./demo-first-organizer-experience/plan.md); portal-tasks, speaker-operations, readiness-operations | `PARTIAL` — derivations and deep links exist but sit in an auto-collapsing rail behind the agent composer; "real-time" unproven given #211/#217 |
+| 7 | One-way Accelevents integration | [accelevents-integration](./accelevents-integration/BRIEF-RECONCILIATION-2026-08-17.md) | `MISSING` — zero source. The 2026-08-12 plan gates on a non-existent `EVENT_ADMIN_USER_IDS` allowlist and must be reconciled before it is built |
+| 8 | Resource/wiki pages in the portal w/ HTML embed | [portal-resource-pages](./portal-resource-pages/plan.md) | `MISSING` — **un-cut 2026-08-17**. No table, route, or UI; DOMPurify, TipTap, and `RichText` exist as building blocks |
+| 9 | Embeddable mobile-friendly gallery + itinerary | [public-embeds](./public-embeds/BRIEF-ADDENDUM-2026-08-17.md) | `PARTIAL` — views, responsive renderer, public URL, iframe snippet and CSP all present; seeded gallery is `enabled: false`, no itinerary seeded, no headshots, no device-width evidence |
 
 **Beyond the brief:** [speaker-availability](./speaker-availability/plan.md) — Pretalx parity,
 completes conflict detection; [public-api](./public-api/plan.md) — a versioned, scoped,

@@ -7,7 +7,7 @@ const eventId = "event-a" as EventId;
 
 describe("Operations Agent provider settings", () => {
   it("exposes managed, BYOK, disconnect, and legacy billing-owner assignment through explicit repository operations", async () => {
-    const read = vi.fn().mockResolvedValue({ eventId, mode: "managed", provider: "openai", status: "ready", managedAvailable: true, billingOwnerAssigned: true, updatedAt: 0 });
+    const read = vi.fn().mockResolvedValue({ eventId, mode: "managed", provider: "openai", status: "ready", managedAvailable: true, managedDisabled: false, billingOwnerAssigned: true, updatedAt: 0 });
     const write = vi.fn().mockResolvedValue({ status: "ready" });
     const repo = createRepository({ read, write });
     await repo.agentProviderSettings.status({ eventId });
@@ -49,6 +49,12 @@ describe("Operations Agent provider settings", () => {
     expect(runtime).toContain("agentProviderSettings.recordUsage");
     expect(runtime).toContain("[redacted]");
     expect(runtime).toContain("never use empty strings, zero, or placeholder values");
+  });
+
+  it("does not promise that a configured managed key has already passed a provider run", () => {
+    const form = readFileSync("src/components/shared/AgentProviderSettingsForm.tsx", "utf8");
+    expect(form).toContain('? "Configured"');
+    expect(form).toContain('? "Verified"');
   });
 
   it("keeps Airtable explicitly unsupported", () => {

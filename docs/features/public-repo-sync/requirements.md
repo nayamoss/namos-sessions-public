@@ -1,3 +1,159 @@
+# Sync namos-sessions-public from private main (RUN 9 — 2026-08-20)
+
+## Why
+
+Recurring job. Private main had moved 107 commits past run 8's sync point
+(`b3ffb2a`) to `edb57ea5` (13:27 ET). Public main was at `30a5e3b` (PR #38).
+Branched `sync/private-main-run9-20260820` off public's current `main`.
+
+## What this run did
+
+Since the two repos have unrelated git histories (no merge-base), the sync
+is done by diffing private's tip against the last-synced commit
+(`git diff b3ffb2a..private-webapp/main`) and applying that as a patch onto
+public's current tip, rather than a literal git rebase/merge.
+
+Ported (256 files touched upstream; most applied cleanly as a patch, a
+handful required full-file replacement or hand editing — see below):
+- New Slack integration: `convex/slack*.ts` (client, HTTP handlers, OAuth,
+  inbound/outbound notifications, security/verification), wired into
+  `convex/http.ts`; `src/components/shared/SlackIntegrationForm.tsx`,
+  `slack-manifest.example.yaml`, `docs/runbooks/slack-integration.md`
+- Managed AI: `convex/managedAi.ts`, AI usage gating
+  (`docs/features/ai-usage-gating/*`, `src/test/ai-usage-gating.test.ts`),
+  `MANAGED_AI_DISABLED` kill-switch documented in `.env.example`
+- Agent workspace UI: `src/components/agent/AgentWorkspace.tsx`,
+  `convex/demoAgent.ts`, related tests
+- Form builder / editor page consolidation: `src/components/shared/EditorPage.tsx`,
+  `src/pages/portal/TaskEditorPage.tsx`, `src/test/form-pages.test.ts`,
+  `src/test/portal-form-builder.test.tsx`
+- Settings: `src/pages/settings/ReadinessSettings.tsx`,
+  `src/test/settings-navigation.test.tsx`; WizardShell keyboard shortcuts
+- ~15 new `docs/features/*` planning docs (ai-schedule-proposals,
+  cfp-conditional-routing, review-rounds-scoring, speaker-communications-delivery,
+  speaker-portal-readiness, kill-my-saas-brief, portal-resource-pages,
+  demo-first-organizer-experience, accelevents/agenda-scheduling/public-embeds
+  addenda) — plan-only docs, no code risk
+- Broad `src/data/*`, `convex/*` data-layer updates across agenda/settings/
+  speakers/CRM that rode along with the above features
+- `worker/demo.ts` + `convex/demoWorkspaces.ts`: reworked demo-entry flow
+  (role-aware redirects, a `public-entry` workspace-creation mode replacing
+  the old judge-access-key gate). Required a matching structural addition to
+  public's own `worker/index.ts` (bare `/demo` route now dispatches to
+  `handleDemoRequest`, alongside the existing `/demo/schedule-studio` and
+  `/api/demo/*` matches) and to `src/App.tsx` (`/demo` now redirects to a new
+  `/demo/start` route, matching the Worker's new redirect target)
+- `eslint.config.js`, `index.html` (noscript fallback), `vitest.config.ts`
+  (worker/test concurrency limits), `package.json` (`@testing-library/dom`
+  devDep only — see exclusions below)
+
+**Excluded this run — flagged for explicit review, not silently dropped:**
+1. **`JUDGE_DEMO_CLOSEOUT.md`, `design-qa.md`** — internal release/QA
+   artifacts naming production Convex deployments
+   (`pastel-mosquito-479`/`calculating-loris-761`), the production Clerk
+   issuer, and a local machine filesystem path. Not application code; not
+   safe or useful to publish.
+2. **The "judge walkthrough video" feature**: `public/demo/walkthrough.mp4`
+   (+poster/vtt/transcript), `src/lib/demo-proof.ts`'s new
+   `readWalkthroughMedia`/`resolveProofDestination` exports and its test,
+   `src/test/demo-media.test.ts`, and the `vite.config.ts` /
+   `wrangler.jsonc` `VITE_DEMO_*` / `VITE_PUBLIC_EMBED_ORIGIN`
+   required-at-build-time vars. Porting this would require adding those vars
+   with real or placeholder values to public's own `wrangler.jsonc` (against
+   the "deploy configs stay public's own" rule) and ships large binary media
+   specific to a private production release event. `src/test/demo-proof.test.ts`
+   reverted to public's existing version since it now imports the excluded
+   exports.
+3. **`src/pages/public/EmbedShowcasePage.tsx` + `src/test/embed-showcase.test.tsx`**
+   — the showcase page hardcodes the slug `ai-engineer-sandbox-event`
+   (real, recognizable event branding, same category flagged in RUN 6 for
+   `convex/seed.ts`). Its `src/App.tsx` route (`/embeds`) and lazy import
+   were removed to keep the build green. The underlying helper it used,
+   `publicEmbedOrigin()` in `src/lib/public-embed.ts`, is a small
+   safe-fallback addition with no hardcoded values — that one line **was**
+   ported.
+4. **`worker/security-headers.ts`/`.test.ts`, `worker/request-router.ts`/`.test.ts`,
+   `worker/index.ts`'s CSP wiring, `convex/auth.config.ts`** — public
+   independently rewrote its CSP builder (`createContentSecurityPolicy`,
+   landed via PR #40) to derive every origin from env values with an
+   explicit placeholder/format check and never emit a literal domain from
+   source. Private's parallel version (also new since run 8, coincidentally
+   similar naming) hardcodes `clerk.namos-sessions.xyz` and the Sentry
+   ingest hostname directly in the CSP template string, and
+   `convex/auth.config.ts` gained a fallback literally defaulting to
+   `https://clerk.namos-sessions.xyz`. Kept public's existing, safer
+   versions — same "public is ahead, not behind" situation as the
+   `publicFeeds.ts` divergence from RUN 6.
+5. **`scripts/recapture-audit.mjs` + `scripts/lib/recapture-audit*`,
+   `@playwright/test` devDep, `audit:recapture` npm script** — a QA tool
+   hardcoded to hit `https://app.namos-sessions.xyz` production and drive
+   the deployed judge demo; not generic app code.
+6. **`docs/deployment/production.md`** — public already maintains its own
+   deploy doc under a different name (`docs/deployment/one-click.md`);
+   left as public's own, not overwritten.
+7. **`src/test/security-response-headers.test.ts`** — tests the excluded
+   `worker/security-headers.ts` rewrite directly; public's existing test
+   already covers its own (kept) implementation correctly, left untouched.
+
+**Caught and fixed one regression risk before it landed:** private's
+`src/pages/portal/PortalPages.tsx` and `src/pages/portal/portal-data.ts`
+predate `b3ffb2a` (no diff between b3ffb2a and private's tip for either
+file) and still use `localStorage`-backed `loadPortalProfile`/
+`savePortalProfile`. Public fixed this as a CodeQL finding in `fccf8f6`
+("resolve CodeQL logo and profile alerts" — stop persisting sensitive
+speaker profiles in browser storage), with a regression test
+(`src/test/code-scanning-regressions.test.ts`) guarding it. An initial
+full-file copy of `PortalPages.tsx` from private's tip (to resolve a
+patch-apply conflict caused by public's own prior Prettier reformat)
+silently reintroduced the vulnerable `portal-data.ts` API and failed that
+regression test. Reverted both files to public's existing (patched)
+versions; private's small, unrelated `useMemo` scope-memoization
+improvement in the same file was not reapplied this run (low value, not
+worth the risk of re-touching a security-sensitive file by hand under time
+pressure — flagged here for a future run instead of silently dropped).
+
+## Scrub performed
+
+Grepped the full applied diff (`git diff --cached origin/main`, ~19,900
+lines) for `sk_live_`, `sk_test_`, `pk_live_`, `pastel-mosquito-479`,
+`calculating-loris-761`, `clerk.namos-sessions.xyz` — zero matches in the
+final diff (all matches from the raw private delta were confined to the
+excluded files above, or to `wrangler.jsonc`/`worker-configuration.d.ts`,
+which were never touched). No `.env*` file besides `.env.example` (var
+names/placeholders only, no values) was touched. `convex/seed.ts`'s change
+is limited to adding generic embed-showcase fixture rows (Speaker gallery,
+Schedule grid, etc.) with placeholder colors — no real event/sponsor/
+speaker names. Grepped separately for the specific real names/event
+flagged in RUN 6 (`Maya Chen`, `Theo Brooks`, `Sam Rivera`,
+`AI.Engineer Sandbox`) — zero matches in the final diff.
+
+## Divergences re-verified, not clobbered
+
+- `convex/publicFeeds.ts` / `src/test/public-feeds.test.ts` — zero diff
+  between b3ffb2a and private's tip; still reconciled, both repos identical.
+- `src/test/component-canon.test.ts`'s `IntegrationBrandIcon.tsx` exemption
+  (line 59) — still present after applying private's new, unrelated
+  "unstriped table rows" test addition.
+- `worker/security-headers.ts` CSP derivation and `convex/auth.config.ts`
+  — newly identified this run (see exclusion #4 above), public's version
+  kept.
+
+## Verification
+
+`npm run typecheck` clean (all 6 project references). `npm run lint`: 0
+errors. `npm run test -- --run`: 776/776 passing (138/138 files) — includes
+the CodeQL regression test that the PortalPages.tsx mistake above would
+have broken had it not been caught before commit. `npm run build`:
+succeeds (rolldown-vite, chunk-size warnings only, pre-existing pattern).
+`worker-configuration.d.ts` and `wrangler.jsonc`: confirmed zero-diff
+against `origin/main`, no regeneration needed (public's Worker vars/
+bindings didn't change this run).
+
+PR: (filled in after opening) against `namos-sessions-public` main, branch
+`sync/private-main-run9-20260820`, branched off public's tip `30a5e3b`.
+
+---
+
 # Sync namos-sessions-public from private main (RUN 8 — 2026-08-19)
 
 ## Why

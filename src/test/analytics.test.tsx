@@ -2,6 +2,8 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { AnalyticsConsentBanner, AnalyticsPreferences, AnalyticsRuntime } from "@/components/AnalyticsConsent";
 import {
   __resetAnalyticsForTests,
@@ -79,6 +81,14 @@ describe("analytics privacy lifecycle", () => {
     expect(container).toHaveTextContent("analytics are disabled");
     act(() => root.unmount());
     container.remove();
+  });
+
+  it("keeps the consent banner compact and limited to one privacy sentence", () => {
+    const source = readFileSync(join(process.cwd(), "src/components/AnalyticsConsent.tsx"), "utf8");
+    expect(source).toContain("max-w-lg p-3");
+    expect(source).not.toContain("max-w-2xl p-4");
+    expect(source).toContain("Optional analytics never capture form entries or workspace content.");
+    expect(source).not.toContain("Help improve Namos Sessions");
   });
 
   it("renders no consent UI inside third-party embeds", async () => {

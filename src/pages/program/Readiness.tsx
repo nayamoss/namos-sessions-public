@@ -8,6 +8,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
 import { DataGrid, type DataGridColumn } from "@/components/shared/DataGrid";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -150,9 +151,13 @@ export default function Readiness() {
           })),
     [data],
   );
+  const enabledCategories = useMemo(
+    () => new Set<ReadinessCategory>(event.readinessCategories ?? (Object.keys(categoryLabels) as ReadinessCategory[])),
+    [event.readinessCategories],
+  );
   const filtered = useMemo(
-    () => filterReadinessGroupsByDay(groups, day),
-    [day, groups],
+    () => filterReadinessGroupsByDay(groups.filter((group) => enabledCategories.has(group.category)), day),
+    [day, enabledCategories, groups],
   );
   const days = data.event
     ? agendaEventDays(data.event.startDate, data.event.endDate)
@@ -217,7 +222,7 @@ export default function Readiness() {
             <div className="flex items-center gap-2">
               <Label className="sr-only" htmlFor="readiness-day">Event day</Label>
               <Select value={day} onValueChange={(value) => setDay(value as string | "all")}>
-                <SelectTrigger id="readiness-day" className="h-8 w-44">
+                <SelectTrigger id="readiness-day" className="w-44">
                   <SelectValue placeholder="All event days" />
                 </SelectTrigger>
                 <SelectContent>
@@ -235,12 +240,7 @@ export default function Readiness() {
               </Select>
             </div>
           }
-          primaryAction={
-            <Button type="button" variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
-              <RefreshCw className="h-4 w-4" aria-hidden="true" />
-              {loading ? "Checking…" : "Refresh"}
-            </Button>
-          }
+          primaryAction={<div className="flex gap-2"><Button asChild type="button" variant="outline" size="sm"><Link to={`/events/${event.slug}/settings/readiness`}>Configure</Link></Button><Button type="button" variant="outline" size="sm" onClick={() => void load()} disabled={loading}><RefreshCw className="h-4 w-4" aria-hidden="true" />{loading ? "Checking…" : "Refresh"}</Button></div>}
         />
         {loading ? (
           <div
@@ -253,13 +253,7 @@ export default function Readiness() {
             <div className="h-11 animate-pulse rounded-md bg-muted" />
           </div>
         ) : rows.length === 0 && Object.keys(data.errors).length === 0 ? (
-          <section className="flex min-h-52 flex-col items-center justify-center text-center">
-            <CheckCircle2 className="h-6 w-6 text-muted-foreground" aria-hidden="true" />
-            <h2 className="mt-3 text-base font-semibold">No readiness blockers</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              The agenda, speakers, tasks, abstracts, and communications are clear.
-            </p>
-          </section>
+          <EmptyState icon={CheckCircle2} title="No readiness blockers" />
         ) : (
           <>
             {Object.values(data.errors).map((error) => (
@@ -268,7 +262,7 @@ export default function Readiness() {
             <DataGrid
               rows={rows}
               columns={columns}
-              empty="No blockers match this event day."
+              empty={<EmptyState compact icon={CheckCircle2} title="No blockers match this day" action={day !== "all" ? <Button variant="outline" size="sm" onClick={() => setDay("all")}>Show all days</Button> : undefined} />}
               appearance="embedded"
               rowActivation="none"
             />

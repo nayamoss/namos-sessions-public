@@ -72,9 +72,12 @@ export const convexFunction: Record<
   "forms.remove": "forms:remove",
   "forms.setStatus": "forms:setStatus",
   "submissions.list": "submissions:list",
+  "submissions.get": "submissions:get",
   "submissions.submit": "submissions:submit",
   "submissions.saveDraft": "submissions:saveDraft",
   "submissions.createAdmin": "submissions:createAdmin",
+  "submissions.update": "submissions:update",
+  "submissions.remove": "submissions:remove",
   "submissions.decide": "submissions:decide",
   "submissions.setStatus": "submissions:setStatus",
   "submissions.setTags": "submissions:setTags",
@@ -110,7 +113,10 @@ export const convexFunction: Record<
   "agenda.remove": "agenda:remove",
   "agenda.publishSchedule": "agenda:publishSchedule",
   "tasks.list": "tasks:list",
+  "tasks.get": "tasks:get",
   "tasks.create": "tasks:create",
+  "tasks.update": "tasks:update",
+  "tasks.remove": "tasks:remove",
   "tasks.setStatus": "tasks:setStatus",
   "taskTemplates.list": "taskTemplates:list",
   "taskTemplates.create": "taskTemplates:create",
@@ -129,6 +135,7 @@ export const convexFunction: Record<
   "publicEmbeds.getAdmin": "publicEmbeds:getAdmin",
   "publicEmbeds.preview": "publicEmbeds:preview",
   "publicEmbeds.getPublic": "publicEmbeds:getPublic",
+  "publicEmbeds.listShowcase": "publicEmbeds:listShowcase",
   "publicEmbeds.save": "publicEmbeds:save",
   "publicEmbeds.duplicate": "publicEmbeds:duplicate",
   "publicEmbeds.remove": "publicEmbeds:remove",
@@ -160,6 +167,15 @@ export const convexFunction: Record<
   "emailIntegrations.test": "emailIntegrationsActions:test",
   "emailIntegrations.disconnect": "emailIntegrationsActions:disconnect",
   "contentIntegrations.status": "contentIntegrations:status",
+  "slackIntegrations.status": "slackIntegrations:status",
+  "slackIntegrations.startOAuth": "slackIntegrationsActions:startOAuth",
+  "slackIntegrations.listChannels": "slackIntegrationsActions:listChannels",
+  "slackIntegrations.saveBinding": "slackIntegrationsActions:saveBinding",
+  "slackIntegrations.updateBinding": "slackIntegrations:updateBinding",
+  "slackIntegrations.removeBinding": "slackIntegrations:removeBinding",
+  "slackIntegrations.disconnectWorkspace": "slackIntegrationsActions:disconnectWorkspace",
+  "slackIntegrations.claimLink": "slackIntegrations:claimLink",
+  "slackIntegrations.testNotification": "slackIntegrationsActions:testNotification",
   "contentIntegrations.connectNotion":
     "contentIntegrationsActions:connectNotion",
   "contentIntegrations.importNotion": "contentIntegrationsActions:importNotion",
@@ -257,6 +273,11 @@ const convexActions = new Set<WriteOperation>([
   "contentIntegrations.connectSanity",
   "contentIntegrations.publishSanity",
   "contentIntegrations.disconnect",
+  "slackIntegrations.startOAuth",
+  "slackIntegrations.listChannels",
+  "slackIntegrations.saveBinding",
+  "slackIntegrations.disconnectWorkspace",
+  "slackIntegrations.testNotification",
   "agentProviderSettings.saveManaged",
   "agentProviderSettings.saveByok",
   "agentProviderSettings.disconnectByok",
@@ -354,8 +375,8 @@ export function normalize(
     operation === "profiles.getMine"
   )
     return row(value);
-  if (operation === "agentProviderSettings.status") return value;
-  if (operation === "publicEmbeds.getAdmin") return row(value);
+  if (operation === "agentProviderSettings.status" || operation === "slackIntegrations.status") return value;
+  if (operation === "publicEmbeds.getAdmin" || operation === "tasks.get") return row(value);
   if (operation === "publicEmbeds.list") return documentRows(value).map(row);
   if (
     operation === "events.rooms.list" ||
@@ -490,6 +511,7 @@ const EVENT_SAVE_FIELDS = new Set([
   "theme",
   "logoStorageKey",
   "accentColor",
+  "readinessCategories",
   "backgroundStorageKey",
   "industry",
   "exhibitorsEnabled",

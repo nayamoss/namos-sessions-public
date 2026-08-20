@@ -1,8 +1,13 @@
+# AI-readable product guide: https://app.namos-sessions.xyz/llms.txt
 User-agent: *
 Allow: /$
+Allow: /demo
+Allow: /demo/start
+Allow: /llms.txt
 Allow: /e/
 Allow: /submit/
 Allow: /embed/
+Allow: /embeds
 Allow: /api-docs
 Allow: /sign-in
 Allow: /sign-up

@@ -79,6 +79,7 @@ export async function notifyEvent(ctx: MutationCtx, args: {
 }): Promise<void> {
   try {
     const createdAt = Date.now();
+    let sourceNotificationId: Id<"notifications"> | undefined;
     for (const recipientUserId of [...new Set(args.recipientUserIds)].filter(Boolean)) {
       const notificationId = await ctx.db.insert("notifications", {
         eventId: args.eventId,
@@ -90,9 +91,23 @@ export async function notifyEvent(ctx: MutationCtx, args: {
         ...(args.relatedId ? { relatedId: args.relatedId } : {}),
         createdAt,
       });
+      sourceNotificationId ??= notificationId;
       if (args.highPriority) {
         await ctx.scheduler.runAfter(0, internal.notificationEmailActions.sendHighPriorityEmail, { notificationId });
       }
+    }
+    if (["submission_received", "reviewer_assigned", "evaluation_completed", "decision_sent", "comms_delivery_failed"].includes(args.kind)) {
+      const sourceKey = args.relatedId ?? args.linkPath ?? args.title;
+      await ctx.scheduler.runAfter(0, internal.slackNotifications.enqueueEventNotification, {
+        eventId: args.eventId,
+        kind: args.kind as "submission_received" | "reviewer_assigned" | "evaluation_completed" | "decision_sent" | "comms_delivery_failed",
+        title: args.title,
+        ...(args.body ? { body: args.body } : {}),
+        ...(args.linkPath ? { linkPath: args.linkPath } : {}),
+        ...(args.relatedId ? { relatedId: args.relatedId } : {}),
+        dedupeKey: `notification:${args.eventId}:${args.kind}:${sourceKey}`,
+        ...(sourceNotificationId ? { sourceNotificationId } : {}),
+      });
     }
   } catch (error) {
     console.error("Notification fan-out failed", error);

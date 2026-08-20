@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation } from "./_generated/server";
-import { derivePages } from "./formPages";
+import { assertValidPages, derivePages } from "./formPages";
 
 // One-time migration from the pre-multi-tenancy data model, where a single global `organizers`
 // table acted as a deployment-wide ACL and every organizer implicitly owned every event.
@@ -98,5 +98,61 @@ export const backfillSubmissionFormPages = internalMutation({
       patched += 1;
     }
     return { patched, total: forms.length };
+  },
+});
+
+// Targeted recovery for legacy rows identified by the post-backfill audit. It
+// never scans or rewrites valid organizer-owned pages: callers must pass the
+// exact audited ids, and each row is repaired from its retained legacy
+// sections before validation.
+export const repairInvalidSubmissionFormPages = internalMutation({
+  args: { formIds: v.array(v.id("submission_forms")) },
+  handler: async (ctx, args) => {
+    const repaired: string[] = [];
+    for (const formId of args.formIds) {
+      const form = await ctx.db.get(formId);
+      if (!form) continue;
+      try {
+        assertValidPages(form.pages ?? [], form.kind, form.collectParticipants);
+        continue;
+      } catch {
+        const pages = derivePages({ ...form, pages: undefined });
+        assertValidPages(pages, form.kind, form.collectParticipants);
+        await ctx.db.patch(formId, { pages });
+        repaired.push(String(formId));
+      }
+    }
+    return { repaired };
+  },
+});
+
+// Read-only audit for the additive #234 rollout. Keep this callable after the
+// backfill so production can be checked without changing or deleting legacy sections.
+export const auditSubmissionFormPages = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const forms = await ctx.db.query("submission_forms").collect();
+    const missingPageFormIds: string[] = [];
+    const invalidPageForms: Array<{ id: string; reason: string }> = [];
+    for (const form of forms) {
+      if (!form.pages?.length) {
+        missingPageFormIds.push(String(form._id));
+        continue;
+      }
+      try {
+        assertValidPages(form.pages, form.kind, form.collectParticipants);
+      } catch (cause) {
+        invalidPageForms.push({
+          id: String(form._id),
+          reason: cause instanceof Error ? cause.message : "Invalid page configuration",
+        });
+      }
+    }
+    return {
+      total: forms.length,
+      withPages: forms.length - missingPageFormIds.length,
+      missingPageFormIds,
+      invalidPageForms,
+    };
   },
 });

@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ArrowRight, CalendarCheck, ClipboardCheck, Mic2, RotateCcw, ShieldCheck, UserRoundCheck, Users } from "lucide-react";
 import { PublicLayout } from "@/components/PublicLayout";
 import { TurnstileWidget } from "@/components/security/TurnstileWidget";
 import { cardSurfaceClasses } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { useClerk } from "@clerk/clerk-react";
+import { useAuth, useClerk } from "@clerk/clerk-react";
 import { consumeDemoTicket } from "@/lib/demo-ticket";
 
 type DemoRole = "organizer" | "reviewer" | "speaker";
@@ -36,8 +36,11 @@ async function readJson(response: Response): Promise<DemoResponse> {
 
 export default function DemoLandingPage() {
   const { signOut } = useClerk();
+  const { isSignedIn } = useAuth();
   const [searchParams] = useSearchParams();
   const requestedProof = searchParams.get("proof") ?? "";
+  const autoLaunch = searchParams.get("autolaunch") === "organizer";
+  const autoLaunchStarted = useRef(false);
   const destination = proofDestinations[requestedProof];
   const [workspace, setWorkspace] = useState<DemoWorkspace | null>(null);
   const [csrf, setCsrf] = useState<string | null>(null);
@@ -56,6 +59,23 @@ export default function DemoLandingPage() {
     return () => { active = false; };
   }, []);
 
+  useEffect(() => {
+    if (!autoLaunch || !workspace || !csrf || autoLaunchStarted.current) return;
+    autoLaunchStarted.current = true;
+    setBusyRole("organizer");
+    void (async () => readJson(await fetch("/api/demo/workspaces/current/role", {
+      method: "POST", credentials: "same-origin",
+      headers: { "content-type": "application/json", "x-demo-csrf": csrf },
+      body: JSON.stringify({ role: "organizer", entry: "schedule-studio" }),
+    })))().then(async (payload) => {
+      if (!payload.signInUrl) throw new Error("The demo sign-in ticket could not be created.");
+      await consumeDemoTicket(signOut, payload.signInUrl, isSignedIn === true);
+    }).catch((cause) => {
+      setError(cause instanceof Error ? cause.message : "The live demo is temporarily unavailable.");
+      setBusyRole(null);
+    });
+  }, [autoLaunch, csrf, isSignedIn, signOut, workspace]);
+
   const enter = useCallback(async (role: DemoRole) => {
     setBusyRole(role);
     setError(null);
@@ -64,22 +84,22 @@ export default function DemoLandingPage() {
       if (!workspace) {
         if (!turnstileToken) throw new Error("Complete the verification before starting the demo.");
         payload = await readJson(await fetch("/api/demo/workspaces", {
-          method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ turnstileToken }),
+          method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ turnstileToken, proof: requestedProof || undefined }),
         }));
         setWorkspace(payload.workspace);
         setCsrf(payload.csrf ?? null);
         if (role !== "organizer") {
           payload = await readJson(await fetch("/api/demo/workspaces/current/role", {
-            method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-demo-csrf": payload.csrf ?? "" }, body: JSON.stringify({ role }),
+            method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-demo-csrf": payload.csrf ?? "" }, body: JSON.stringify({ role, proof: requestedProof || undefined }),
           }));
         }
       } else {
         payload = await readJson(await fetch("/api/demo/workspaces/current/role", {
-          method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-demo-csrf": csrf ?? "" }, body: JSON.stringify({ role }),
+          method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-demo-csrf": csrf ?? "" }, body: JSON.stringify({ role, proof: requestedProof || undefined }),
         }));
       }
       if (!payload.signInUrl) throw new Error("The demo sign-in ticket could not be created.");
-      await consumeDemoTicket(signOut, payload.signInUrl);
+      await consumeDemoTicket(signOut, payload.signInUrl, isSignedIn === true);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The live demo is temporarily unavailable.");
       setResetKey((value) => value + 1);
@@ -87,15 +107,14 @@ export default function DemoLandingPage() {
     } finally {
       setBusyRole(null);
     }
-  }, [csrf, signOut, turnstileToken, workspace]);
+  }, [csrf, isSignedIn, requestedProof, signOut, turnstileToken, workspace]);
 
   const expiry = useMemo(() => workspace ? new Date(workspace.expiresAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : null, [workspace]);
 
   return (
     <PublicLayout width="wide">
-      <header className="flex items-center justify-between gap-4 py-2">
+      <header className="py-2">
         <a href="/" className="text-sm font-semibold">Namos Sessions</a>
-        <Link to="/demo/proof" className="text-sm font-medium text-primary hover:underline">View proof table</Link>
       </header>
       <section className="grid gap-8 py-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(22rem,0.8fr)] lg:items-start lg:py-14">
         <div>
@@ -114,7 +133,9 @@ export default function DemoLandingPage() {
         </aside>
       </section>
 
-      <section id="roles" aria-labelledby="roles-title" className="scroll-mt-6 py-8">
+      {autoLaunch && <section className={cardSurfaceClasses("muted", "my-8 p-6")} role="status"><h1 className="text-xl font-semibold">Opening your seeded Schedule Studio…</h1><p className="mt-2 text-sm text-muted-foreground">This takes a moment. No login or signup is required.</p></section>}
+
+      {!autoLaunch && <section id="roles" aria-labelledby="roles-title" className="scroll-mt-6 py-8">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div><h2 id="roles-title" className="text-2xl font-semibold">Choose a role</h2><p className="mt-2 text-sm text-muted-foreground">Role switching remains available inside the demo.</p></div>
           {workspace && <p className="text-xs text-muted-foreground">Workspace ready · active until {expiry}</p>}
@@ -130,7 +151,7 @@ export default function DemoLandingPage() {
         </div>
         {!workspace && <div className={cardSurfaceClasses("muted", "mt-5 p-4")}><TurnstileWidget action="demo-create" label="Demo access verification" onToken={setTurnstileToken} resetKey={resetKey} /></div>}
         {error && <p role="alert" className="mt-4 text-sm text-destructive">{error}</p>}
-      </section>
+      </section>}
 
       <section className={cardSurfaceClasses("muted", "my-8 flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between")}>
         <div className="flex items-start gap-3"><RotateCcw className="mt-0.5 h-5 w-5 text-primary" aria-hidden="true" /><div><h2 className="font-semibold">Safe to explore</h2><p className="mt-1 text-sm text-muted-foreground">Your event is isolated, expires automatically, and can be reset from the demo bar.</p></div></div>

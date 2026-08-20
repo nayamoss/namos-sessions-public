@@ -5,12 +5,14 @@ import { generateObject } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { z } from "zod";
 import { v } from "convex/values";
-import { action, type ActionCtx } from "./_generated/server";
+import { internalAction, type ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { decryptAgentApiKey } from "./agentProviderSecrets";
 import type { Id } from "./_generated/dataModel";
+import { isManagedAiDisabled, MANAGED_AI_DISABLED_ERROR, MANAGED_AI_DISABLED_MESSAGE } from "./managedAi";
 
 function safeError(error: unknown) {
+  if (error instanceof Error && error.message === MANAGED_AI_DISABLED_ERROR) return MANAGED_AI_DISABLED_MESSAGE;
   const message = error instanceof Error ? error.message : "The model provider failed.";
   if (/rate.?limit/i.test(message)) return "The model provider is temporarily rate limited. Retry shortly.";
   if (/api.?key|auth|unauthor/i.test(message)) return "OpenAI is not configured for this event.";
@@ -23,23 +25,26 @@ function compactAnswers(value: unknown) {
   return serialized.length > 12_000 ? `${serialized.slice(0, 12_000)}…` : serialized;
 }
 
-async function apiKeyForAssessment(ctx: ActionCtx, eventId: Id<"events">) {
-  const setting = await ctx.runQuery(internal.agentProviderSettings.getInternal, { eventId });
-  if ((setting?.mode ?? "managed") === "bring_your_own") {
+async function apiKeyForAssessment(ctx: ActionCtx, eventId: Id<"events">, providerMode: "managed" | "bring_your_own") {
+  if (providerMode === "bring_your_own") {
+    const setting = await ctx.runQuery(internal.agentProviderSettings.getInternal, { eventId });
     if (!setting?.credentialEnvelope) throw new Error("BYOK_KEY_MISSING");
     return decryptAgentApiKey(setting.credentialEnvelope);
   }
+  if (isManagedAiDisabled()) throw new Error(MANAGED_AI_DISABLED_ERROR);
   if (!process.env.OPENAI_API_KEY) throw new Error("MANAGED_KEY_MISSING");
   return process.env.OPENAI_API_KEY;
 }
 
-export const run = action({
+export const run = internalAction({
   args: { assessmentId: v.id("ai_assessments") },
   handler: async (ctx, args) => {
     const assessment = await ctx.runQuery(internal.aiAssessments.getForRun, args);
     if (!assessment || assessment.status !== "queued") return;
     try {
-      const apiKey = await apiKeyForAssessment(ctx, assessment.eventId);
+      const providerMode = assessment.providerMode ?? "managed";
+      if (providerMode === "managed" && !assessment.managedAllowanceId) throw new Error("Managed AI assessment has no allowance reservation.");
+      const apiKey = await apiKeyForAssessment(ctx, assessment.eventId, providerMode);
       const criteria = assessment.plan.criteria ?? [];
       const schema = z.object({
         score: z.number().int().min(1).max(assessment.plan.scoringScaleMax),
@@ -60,6 +65,8 @@ export const run = action({
           ...(criterion.score === undefined ? {} : { score: criterion.score }),
           rationale: criterion.rationale!,
         })),
+        inputTokens: result.usage.inputTokens ?? 0,
+        outputTokens: result.usage.outputTokens ?? 0,
       });
     } catch (error) {
       await ctx.runMutation(internal.aiAssessments.fail, { assessmentId: args.assessmentId, error: safeError(error) });

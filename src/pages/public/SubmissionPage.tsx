@@ -113,7 +113,7 @@ export default function SubmissionPage() {
       <div className="flex min-h-screen flex-col bg-background text-foreground">
         <header className="px-6 py-6 sm:px-10"><span className="text-sm font-semibold">Namos Sessions</span></header>
         <main className="flex flex-1 items-center justify-center px-6 pb-16 sm:px-10">
-          <div className="w-full max-w-lg space-y-4">
+          <div className="w-full max-w-2xl space-y-4">
             <Skeleton className="h-8 w-2/3" />
             <Skeleton className="h-4 w-full" />
             <Skeleton className="h-11 w-full rounded-[12px]" />
@@ -127,7 +127,7 @@ export default function SubmissionPage() {
       <div className="flex min-h-screen flex-col bg-background text-foreground">
         <header className="px-6 py-6 sm:px-10"><span className="text-sm font-semibold">Namos Sessions</span></header>
         <main className="flex flex-1 items-center justify-center px-6 pb-16 sm:px-10">
-          <div className="w-full max-w-lg space-y-4">
+          <div className="w-full max-w-2xl space-y-4">
             <h1 className="text-2xl font-semibold sm:text-3xl">Submissions are closed</h1>
             <p className="text-sm text-muted-foreground">This call for proposals is not currently accepting submissions.</p>
           </div>
@@ -151,6 +151,7 @@ export default function SubmissionPage() {
         emailVerification={emailVerification}
         errors={errors}
         turnstileSlot={onReviewStep ? <TurnstileWidget onToken={setTurnstileToken} resetKey={turnstileResetKey} /> : undefined}
+        submissionVerificationComplete={Boolean(turnstileToken)}
       />
     </div>
   );

@@ -213,8 +213,8 @@ Tool results follow progressive disclosure (counts → summaries → one-record 
 - State: `objective: string`, `selectedRunId: AgentRunId | null` from `?run=`, `isSubmitting: boolean`, `submitError?: string`, `historyOpen: boolean`, `decisionProposalId?: AgentProposalId`.
 - Data: reactive `agentRuns.canUse`, `agentRuns.list`, and selected `agentRuns.get`; writes through `repo.agentRuns`.
 - Layout: `<AppLayout title="Operations Agent" detail={selectedRun ? <AgentRunInspector ... /> : undefined}>`; inner root `flex min-h-[calc(100vh-10rem)] flex-col gap-4`.
-- Elements: `ContentToolbar` with styled History popover and secondary New run; `AgentTimeline`; empty state; three suggestion buttons; bottom composer; loading/error/live regions.
-- Behavior: suggestion fills input; Run creates and selects; Enter submits, Shift+Enter newline; New run clears `?run`; history selection changes URL; selected run survives refresh.
+- Elements: shared `AgentWorkspace` with purpose copy, History, Start a review, event-derived suggestions, outcome-first run view, collapsed review activity, inline approvals, and composer.
+- Behavior: a suggestion fills the composer; Start review creates and selects a run; Enter submits, Shift+Enter adds a newline; Start a review clears `?run`; history selection changes the URL; selected runs survive refresh. Technical activity is disclosed only on demand.
 
 **`AgentComposer`**
 

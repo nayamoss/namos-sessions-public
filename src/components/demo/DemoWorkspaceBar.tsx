@@ -4,7 +4,7 @@ import { Inbox, RotateCcw } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cardSurfaceClasses } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { useClerk } from "@clerk/clerk-react";
+import { useAuth, useClerk } from "@clerk/clerk-react";
 import { consumeDemoTicket } from "@/lib/demo-ticket";
 import {
   AlertDialog,
@@ -39,6 +39,7 @@ async function request(path: string, init?: RequestInit) {
 
 export function DemoWorkspaceBar() {
   const { signOut } = useClerk();
+  const { isSignedIn } = useAuth();
   const location = useLocation();
   const [state, setState] = useState<WorkspaceState | null>(null);
   const [busy, setBusy] = useState(false);
@@ -84,7 +85,7 @@ export function DemoWorkspaceBar() {
         },
         body: JSON.stringify(body ?? {}),
       });
-      if (result.signInUrl) await consumeDemoTicket(signOut, result.signInUrl);
+      if (result.signInUrl) await consumeDemoTicket(signOut, result.signInUrl, isSignedIn === true);
       else refresh();
     } catch (cause) {
       setMessage(

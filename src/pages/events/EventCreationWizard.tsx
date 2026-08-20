@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
 import { TemplateGallery } from "@/components/forms/TemplateGallery";
 import { CharCounterInput } from "@/components/shared/CharCounterInput";
-import { DetailPane } from "@/components/shared/DetailPane";
 import { WizardShell, type WizardStep } from "@/components/shared/WizardShell";
 import { Button } from "@/components/ui/button";
+import { cardSurfaceClasses } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -474,7 +474,7 @@ export function EventCreationWizard({
       </div>
     );
   return (
-    <DetailPane title="New event" onClose={onClose}>
+    <section className={cardSurfaceClasses("default", "mx-auto max-w-4xl p-6")} aria-label="New event">
       <WizardShell
         layout="stack"
         steps={steps}
@@ -510,6 +510,6 @@ export function EventCreationWizard({
           <p className="text-sm text-muted-foreground">Creating…</p>
         )}
       </WizardShell>
-    </DetailPane>
+    </section>
   );
 }

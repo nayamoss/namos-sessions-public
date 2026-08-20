@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Bell, Bot, Calendar, KeyRound, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { cardSurfaceClasses } from "@/components/ui/card";
 import type { ActivityCategory, ActivityEntry } from "@/data/types";
 
@@ -72,7 +73,7 @@ export function ActivityFeed({ entries, loading = false }: { entries: ActivityEn
             type="button"
             variant={activeFilter === filter.id ? "default" : "outline"}
             size="sm"
-            className="h-7 gap-1.5 px-2 text-xs"
+            className="gap-1.5"
             onClick={() => setActiveFilter(filter.id)}
           >
             {filter.label}
@@ -83,11 +84,7 @@ export function ActivityFeed({ entries, loading = false }: { entries: ActivityEn
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading activity…</p>
       ) : grouped.length === 0 ? (
-        <div className={cardSurfaceClasses("muted", "px-3 py-10 text-center")}>
-          <Bell className="mx-auto mb-2 h-5 w-5 text-muted-foreground" />
-          <p className="text-sm font-medium">No activity yet</p>
-          <p className="mt-1 text-xs text-muted-foreground">Agenda changes, comms sends, agent runs, and notifications will show up here.</p>
-        </div>
+        <EmptyState compact icon={Bell} title={entries.length ? "No activity matches this filter" : "No activity yet"} />
       ) : (
         <div className="space-y-4">
           {grouped.map((group) => (

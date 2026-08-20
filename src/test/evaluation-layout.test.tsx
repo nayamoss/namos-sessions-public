@@ -20,6 +20,16 @@ describe("evaluation page layout", () => {
     expect(source).toContain('setPlanWorkspaceTab("assignments")');
     expect(source).not.toContain("<TabsList");
     expect(source).toContain("showCreatePlan");
+    expect(source.match(/Manage evaluations/g)).toHaveLength(1);
+
+    const progress = readFileSync(
+      join(process.cwd(), "src/components/evaluation/ReviewerProgressPanel.tsx"),
+      "utf8",
+    );
+    expect(progress).toContain("Assigned CFP review progress");
+    expect(progress).toContain('header: "CFPs assigned"');
+    expect(progress).toContain('header: "CFPs reviewed"');
+    expect(progress).toContain('header: "Assigned CFPs reviewed"');
   });
 
 });

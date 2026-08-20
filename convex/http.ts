@@ -6,8 +6,13 @@ import { api } from "./_generated/api";
 import { withApiAuth, apiError, jsonHeaders } from "./httpAuth";
 import { projectPublicEvent } from "./publicEventsApi";
 import { renderPublicFeed } from "./publicFeeds";
+import { slackCommands, slackEvents, slackInteractions, slackOAuthCallback } from "./slackHttp";
 
 const http = httpRouter();
+http.route({ path: "/oauth/slack/callback", method: "GET", handler: slackOAuthCallback });
+http.route({ path: "/slack/events", method: "POST", handler: slackEvents });
+http.route({ path: "/slack/commands", method: "POST", handler: slackCommands });
+http.route({ path: "/slack/interactions", method: "POST", handler: slackInteractions });
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: jsonHeaders });
 const internalHeaders = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 const maxCfpPayloadBytes = 256 * 1024;

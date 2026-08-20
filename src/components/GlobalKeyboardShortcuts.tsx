@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTheme } from "next-themes";
 import { useNavigate } from "react-router-dom";
 import {
   Dialog,
@@ -26,6 +27,7 @@ export function GlobalKeyboardShortcuts({
   onOpenCommandPalette: () => void;
 }) {
   const navigate = useNavigate();
+  const { resolvedTheme, setTheme } = useTheme();
   const eventSlug = useOptionalCurrentEvent()?.event.slug;
   const [helpOpen, setHelpOpen] = useState(false);
   const pendingGoTo = useRef(false);
@@ -91,6 +93,13 @@ export function GlobalKeyboardShortcuts({
         return;
       }
 
+      if (matchesShortcut(event, SHORTCUTS.theme)) {
+        event.preventDefault();
+        clearPendingGoTo();
+        setTheme(resolvedTheme === "dark" ? "light" : "dark");
+        return;
+      }
+
       if (pendingGoTo.current) {
         const hasModifier = event.metaKey || event.ctrlKey || event.altKey || event.shiftKey;
         const destination = hasModifier
@@ -121,7 +130,7 @@ export function GlobalKeyboardShortcuts({
       document.removeEventListener("keydown", handleKeyDown);
       clearPendingGoTo();
     };
-  }, [eventSlug, navigate, onOpenCommandPalette]);
+  }, [eventSlug, navigate, onOpenCommandPalette, resolvedTheme, setTheme]);
 
   return (
     <Dialog open={helpOpen} onOpenChange={setHelpOpen}>

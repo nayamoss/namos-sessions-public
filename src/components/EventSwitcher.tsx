@@ -83,10 +83,11 @@ export function EventSwitcher({
                 <span
                   className={cn(
                     "h-2 w-2 shrink-0 rounded-full",
-                    current
+                    current && !current.accentColor
                       ? statusColor[current.status]
                       : "bg-muted-foreground",
                   )}
+                  style={current?.accentColor ? { backgroundColor: current.accentColor } : undefined}
                 />
                 <span className="min-w-0 flex-1 truncate font-medium">
                   {current?.name || "Choose event"}
@@ -105,7 +106,7 @@ export function EventSwitcher({
           align="start"
           side={collapsed ? "right" : "bottom"}
           sideOffset={8}
-          className={cardSurfaceClasses("default", "w-64 bg-muted p-1.5 shadow-none")}
+          className={cardSurfaceClasses("default", "w-64 bg-popover p-1.5 shadow-none")}
         >
           {events.length ? (
             events.map((event) => (
@@ -117,8 +118,9 @@ export function EventSwitcher({
                 <span
                   className={cn(
                     "h-2 w-2 shrink-0 rounded-full",
-                    statusColor[event.status],
+                    !event.accentColor && statusColor[event.status],
                   )}
+                  style={event.accentColor ? { backgroundColor: event.accentColor } : undefined}
                 />
                 <span className="min-w-0 flex-1 truncate">{event.name}</span>
                 {event.id === current?.id && <Check className="h-4 w-4" />}
@@ -132,7 +134,7 @@ export function EventSwitcher({
           <div className="pt-1.5">
             {canCreate && (
               <DropdownMenuItem
-                onSelect={() => { track("cta_converted", { destination: "event_create" }); navigate("/events?new=1"); }}
+                onSelect={() => { track("cta_converted", { destination: "event_create" }); navigate("/events/new"); }}
                 className="gap-2.5 rounded-md px-2.5 py-2"
               >
                 New event

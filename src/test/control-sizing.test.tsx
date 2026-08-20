@@ -25,10 +25,33 @@ describe("shared control sizing", () => {
     expect(getByRole("textbox")).toHaveClass("min-h-24", "px-3.5", "py-2.5", "text-sm");
   });
 
-  it("keeps the application on the compact rem scale", () => {
+  it("keeps the application at the browser's normal scale", () => {
     const source = readFileSync(join(process.cwd(), "src/index.css"), "utf8");
-    expect(source).toContain("font-size: 80%");
+    expect(source).toContain("font-size: 100%");
     expect(source).toContain("min-height: 2.5rem");
-    expect(source).not.toContain("font-size: 100%");
+    expect(source).not.toContain("font-size: 80%");
+    expect(source).toContain("--text-base: 1rem");
+    expect(source).toContain('[role="combobox"]');
+  });
+
+  it("keeps onboarding at a normal form width", () => {
+    const source = readFileSync(join(process.cwd(), "src/pages/onboarding/OnboardingWizard.tsx"), "utf8");
+    expect(source.match(/max-w-2xl/g)).toHaveLength(2);
+    expect(source).not.toContain("max-w-lg");
+    expect(source).not.toContain("Takes 30 seconds");
+    expect(source).not.toContain("Helps us set things up right for you");
+    expect(source).not.toContain("Press <kbd");
+  });
+
+  it("keeps public submission forms wide and surfaces their keyboard navigation", () => {
+    const publicForm = readFileSync(join(process.cwd(), "src/pages/public/PublicFormRenderer.tsx"), "utf8");
+    const submissionPage = readFileSync(join(process.cwd(), "src/pages/public/SubmissionPage.tsx"), "utf8");
+    const wizard = readFileSync(join(process.cwd(), "src/components/shared/WizardShell.tsx"), "utf8");
+    expect(publicForm).not.toContain("max-w-lg");
+    expect(submissionPage).not.toContain("max-w-lg");
+    expect(publicForm).toContain("max-w-2xl");
+    expect(publicForm).toContain("⌘");
+    expect(wizard).toContain("Keyboard shortcuts:");
+    expect(wizard).toContain("(!event.metaKey && !event.ctrlKey)");
   });
 });

@@ -52,10 +52,10 @@ describe("Operations Agent runtime durability", () => {
   });
 
   it("exposes the durable retry mutation for failed runs", () => {
-    const page = readFileSync("src/pages/program/AgentOperations.tsx", "utf8");
+    const workspace = readFileSync("src/components/agent/AgentWorkspace.tsx", "utf8");
     const inspector = readFileSync("src/components/agent/AgentRunInspector.tsx", "utf8");
-    expect(page).toContain("repo.agentRuns.retry");
-    expect(inspector).toContain("Retry run");
+    expect(workspace).toContain("repo.agentRuns.retry");
+    expect(inspector).toContain("Retry review");
   });
 
   it("keeps message preparation approval-gated and send-free", () => {

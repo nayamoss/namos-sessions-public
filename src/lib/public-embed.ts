@@ -97,6 +97,9 @@ export function embedWriteFromEmbed(embed: Embed): EmbedWrite {
 export function isHexColor(value: string) {
   return /^#[0-9A-Fa-f]{6}$/.test(value);
 }
+export function publicEmbedOrigin(fallbackOrigin: string) {
+  return import.meta.env.VITE_PUBLIC_EMBED_ORIGIN?.trim() || fallbackOrigin;
+}
 export function publicEmbedUrl(origin: string, embedId: EmbedId): string;
 export function publicEmbedUrl(
   origin: string,

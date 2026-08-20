@@ -1,42 +1,48 @@
 # Organizer-Owned Form Page Model — Implementation Plan
 
+> **Status 2026-08-19:** T002–T011 and T013–T024 are implemented. T001's production deploy audit
+> and T012's public-flow browser verification remain release gates. The owner-approved prototype changed the
+> final UX to a custom-pages-only rail and dedicated Preview mode; requirements.md and design.md
+> record that amendment. T025–T026 remain an intentionally separate post-production follow-up:
+> this PR continues dual-writing legacy `sections`.
+
 ## Phase 1: Schema + Migration Foundation
 
 - [ ] T001: Add `pages` as an optional array field on `submission_forms` in `convex/schema.ts`
       (validator shape per design.md), alongside the existing `sections` field. Deploy — no
       behavior change yet.
-- [ ] T002: Write a backfill mutation (same pattern as `migrations:backfillOrganizations`,
+- [x] T002: Write a backfill mutation (same pattern as `migrations:backfillOrganizations`,
       `convex/schema.ts:49-53`) that derives `pages` from `sections` for every existing
       `submission_forms` row — CFP shape (`account, custom(from abstract), participant?, review`)
       and Portal shape (`custom(from portal)`), with stable deterministic ids for invented
       system pages.
-- [ ] T003: Update `forms.save` (`convex/forms.ts:39-80`) to accept and persist `pages`, and to
+- [x] T003: Update `forms.save` (`convex/forms.ts:39-80`) to accept and persist `pages`, and to
       dual-write a synthesized legacy `sections` derived from `pages` so old readers keep working
       during rollout.
-- [ ] T004: Update `forms.createFromTemplate` (`convex/forms.ts:101-176`) and
+- [x] T004: Update `forms.createFromTemplate` (`convex/forms.ts:101-176`) and
       `convex/formTemplates.ts` to build `pages` instead of `sections`.
-- [ ] T005: Update `convex/seed.ts:76-106` dev seed data to seed `pages`.
+- [x] T005: Update `convex/seed.ts:76-106` dev seed data to seed `pages`.
 
 ## Phase 2: Migrate Readers Off `sections`
 
-- [ ] T006: Update `publicForms.get` (`convex/publicForms.ts:49-107`) to read/flatten `pages`
+- [x] T006: Update `publicForms.get` (`convex/publicForms.ts:49-107`) to read/flatten `pages`
       instead of `sections`; grow `PublicSubmissionFormConfig` (`src/data/types.ts:73,325`) to
       carry an ordered `pages` array.
-- [ ] T007: Update `publicForms.submit` (`convex/publicForms.ts:130-309`) to resolve participant
+- [x] T007: Update `publicForms.submit` (`convex/publicForms.ts:130-309`) to resolve participant
       fields via `systemRole === "participant"` (or an explicit per-field `scope` tag — decide
       during implementation per design.md's note) instead of `section.key === "participant"`.
-- [ ] T008: Update `categoryRouting.validateRoutingRules` to resolve routing-eligible fields via
+- [x] T008: Update `categoryRouting.validateRoutingRules` to resolve routing-eligible fields via
       flattened `pages[].fieldIds`.
-- [ ] T009: Add server-side validation in `forms.save`: system pages cannot be dropped, renamed
+- [x] T009: Add server-side validation in `forms.save`: system pages cannot be dropped, renamed
       as a type, or moved out of their fixed anchor position, even if the client payload tries
       (NFR-003) — do not rely on client-side "locked" UI alone.
-- [ ] T010: Verify `convex/portalFormResponses.ts` / `convex/portalFormConfirmationActions.ts`
+- [x] T010: Verify `convex/portalFormResponses.ts` / `convex/portalFormConfirmationActions.ts`
       still resolve correctly (they read `field_definitions` directly, low impact expected, but
       confirm against the new shape).
 
 ## Phase 3: Extract Shared Public-Form Renderer (do before builder UI work — see design.md risk)
 
-- [ ] T011: Extract the pure rendering logic from `src/pages/public/SubmissionPage.tsx` (step
+- [x] T011: Extract the pure rendering logic from `src/pages/public/SubmissionPage.tsx` (step
       content, progress bar, field rendering, review) into a shared component parameterized by
       `mode: "public" | "preview"`. `SubmissionPage.tsx` keeps routing, data fetching, real
       `publicForms.submit`, Turnstile, Clerk email verification, and analytics; supplies
@@ -99,23 +105,23 @@
 - Behavior: purely visual, reflects `activeStep`
 
 ### Tasks
-- [ ] T013: Build `PagesRail` with every element listed above.
-- [ ] T014: Build `FieldInspector` with every element listed above; wire field selection from the
+- [x] T013: Build `PagesRail` with every element listed above.
+- [x] T014: Build `FieldInspector` with every element listed above; wire field selection from the
       page's field list to open it.
-- [ ] T015: Build `FormPreviewHost` wired to the Phase 3 shared renderer; remove the
-      "Show/Hide preview" header toggle, make the pane persistent.
-- [ ] T016: Add `ProgressTrack` to `WizardShell`.
-- [ ] T017: Rewire `SubmissionFormBuilder.tsx`'s `save()` (`:864-1034`) to serialize `pages`
+- [x] T015: Build `FormPreviewHost` wired to the Phase 3 shared renderer and expose it as the
+      owner-approved dedicated Preview mode from the content toolbar.
+- [x] T016: Add `ProgressTrack` to `WizardShell`.
+- [x] T017: Rewire `SubmissionFormBuilder.tsx`'s `save()` (`:864-1034`) to serialize `pages`
       instead of the hard-coded two-section array.
-- [ ] T018: Remove or relocate the dedicated Appearance step per FR-009 (decide: cut entirely
+- [x] T018: Remove or relocate the dedicated Appearance step per FR-009 (decide: cut entirely
       into event settings, or keep as a thin `events.accentColor` pass-through — either is
       acceptable, but the redundant per-form picker must go).
-- [ ] T019: Apply the cut/merge candidates from design.md: fold Abstracts-vs-Sessions into page
+- [x] T019: Apply the cut/merge candidates from design.md: fold Abstracts-vs-Sessions into page
       1 as an inline toggle; collapse locked default fields into a compact "always included"
       summary instead of full expanded rows; remove the non-functional
       notify-admins-on-submission toggles (`SubmissionFormBuilder.tsx:1607-1620`, currently
       hard-coded `checked={false}` / no-op handler).
-- [ ] T020: Retire `src/components/forms/CfpPreviewPanel.tsx` once `FormPreviewHost` is verified
+- [x] T020: Retire `src/components/forms/CfpPreviewPanel.tsx` once `FormPreviewHost` is verified
       working.
 
 ## Phase 5: Frontend UI — Portal Forms Parity
@@ -126,24 +132,24 @@ reimplemented) in `src/pages/portal/PortalForms.tsx`'s `FormEditor` (`:192-396`)
 existing `FieldLibrary` (`:107-190`) plugs into the field-palette/add-field flow as-is.
 
 ### Tasks
-- [ ] T021: Wire `PortalForms.tsx`'s `FormEditor` to `PagesRail` + `FieldInspector` +
+- [x] T021: Wire `PortalForms.tsx`'s `FormEditor` to `PagesRail` + `FieldInspector` +
       `FormPreviewHost`, replacing its local 3-step `WizardShell` usage for page content.
-- [ ] T022: Rewire `save()` (`PortalForms.tsx:474-539`) to serialize `pages` instead of the fixed
+- [x] T022: Rewire `save()` (`PortalForms.tsx:474-539`) to serialize `pages` instead of the fixed
       one-section array.
-- [ ] T023: Decide and implement whether Portal Forms gets `account`/`review` system-page
+- [x] T023: Decide and implement whether Portal Forms gets `account`/`review` system-page
       scaffolding or stays single-custom-page-plus-settings (flagged as an open decision in
       design.md) — confirm with owner if genuinely ambiguous once the CFP builder is done and
       the pattern is concrete to look at.
-- [ ] T024: Confirm Portal Forms' preview reads `event.accentColor` (it can already receive the
+- [x] T024: Confirm Portal Forms' preview reads `event.accentColor` (it can already receive the
       `Event` object) — Portal Forms currently has no Appearance step and none is being added;
       it should simply inherit the event's branding.
 
 ## Phase 6: Cutover
 
-- [ ] T025: Once every reader (builder, `publicForms.get`, `publicForms.submit`,
+- [ ] T025 (deferred follow-up): Once every reader (builder, `publicForms.get`, `publicForms.submit`,
       `categoryRouting`) is confirmed on `pages`, stop dual-writing legacy `sections` in
       `forms.save`.
-- [ ] T026: Drop the `sections` column from `convex/schema.ts` in a follow-up deploy after
+- [ ] T026 (deferred follow-up): Drop the `sections` column from `convex/schema.ts` in a follow-up deploy after
       confirming no code path reads it.
 
 ## Task Dependencies
