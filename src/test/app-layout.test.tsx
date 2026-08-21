@@ -79,7 +79,7 @@ describe("AppLayout", () => {
     const programSection = [...container.querySelectorAll("nav section")].find((section) => section.querySelector("h2")?.textContent === "Program");
     expect(dashboardSection?.querySelector("h2")).not.toBeInTheDocument();
     expect(dashboardSection?.textContent).not.toContain("Speaker Tracking");
-    expect(programSection?.querySelector('a[href="/program/speakers"]')).toHaveTextContent("Speakers");
+    expect(programSection?.querySelector('a[href="/program/speakers"]')).toHaveTextContent("Speaker CRM");
     act(() => root.unmount());
     container.remove();
   });
@@ -220,7 +220,7 @@ describe("AppLayout", () => {
 
     act(() => configureButton.click());
     expect(document.querySelector('[role="dialog"]')).toHaveTextContent("Event details");
-    expect(document.querySelector('[role="dialog"]')).toHaveTextContent("Embeds");
+    expect(document.querySelector('[role="dialog"]')).toHaveTextContent("AI Usage");
 
     act(() => programToggle.click());
     expect(programHeader.querySelector("button")).toHaveAttribute("aria-expanded", "true");

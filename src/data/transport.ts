@@ -8,12 +8,20 @@ import type {
   AgendaConflict,
   AgendaPlacementConflict,
   AgendaItem,
+  RecordingDetail,
+  RecordingBulkResult,
+  EventVideoAsset,
+  RecordingId,
+  RecordingManagerRow,
   AgentRun,
   AgentRunDetail,
+  AgentUsageStats,
   AgentSuggestion,
   AgentProviderSetting,
   Availability,
   Comm,
+  InboundEmailDomain,
+  InboundMessage,
   CommPreview,
   CrmCampaignSendResult,
   CommSendResult,
@@ -33,6 +41,7 @@ import type {
   Evaluation,
   EvaluationAssignment,
   EvaluationPlan,
+  AiAssessment,
   EventAnalyticsSummary,
   Event,
   EventInviteResult,
@@ -48,6 +57,7 @@ import type {
   EmbedWrite,
   PublicEmbedShowcase,
   PublicEmbedView,
+  PublicFeed,
   PublicSubmissionFormConfig,
   PublicSubmissionFormSummary,
   PortalResourcePage,
@@ -87,6 +97,7 @@ import {
 
 export const readOperations = [
   "analytics.summary",
+  "agentUsage.stats",
   "crm.list",
   "crm.segments.list",
   "controlRoom.get",
@@ -117,16 +128,22 @@ export const readOperations = [
   "evaluations.plans.list",
   "evaluations.assignments.list",
   "evaluations.myQueue",
+  "evaluations.assessment.get",
   "agenda.list",
   "agenda.listForSpeaker",
   "agenda.detectConflicts",
   "agenda.checkPlacement",
+  "recordings.list",
+  "recordings.get",
+  "recordings.listAssets",
   "tasks.list",
   "tasks.get",
   "taskTemplates.list",
   "comms.list",
   "comms.listDrafts",
   "comms.templates.list",
+  "comms.inbox.list",
+  "comms.inboundDomains.list",
   "notifications.unreadCount",
   "availability.list",
   "publicEmbeds.get",
@@ -135,6 +152,7 @@ export const readOperations = [
   "publicEmbeds.preview",
   "publicEmbeds.getPublic",
   "publicEmbeds.listShowcase",
+  "publicFeeds.list",
   "publicForms.listOpen",
   "publicForms.get",
   "portalForms.get",
@@ -230,6 +248,14 @@ export type WriteOperation =
   | "agenda.save"
   | "agenda.remove"
   | "agenda.publishSchedule"
+  | "recordings.attachHosted"
+  | "recordings.attachUpload"
+  | "recordings.attachAsset"
+  | "recordings.publish"
+  | "recordings.unpublish"
+  | "recordings.detach"
+  | "recordings.bulkPublish"
+  | "recordings.bulkUnpublish"
   | "tasks.create"
   | "tasks.update"
   | "tasks.remove"
@@ -275,6 +301,7 @@ export type WriteOperation =
   | "contentIntegrations.publishSanity"
   | "contentIntegrations.disconnect"
   | "evaluations.sendReviewerReminders"
+  | "evaluations.assessment.request"
   | "taskTemplates.create"
   | "taskTemplates.update"
   | "taskTemplates.remove"
@@ -288,6 +315,12 @@ export type WriteOperation =
   | "comms.sendReminder"
   | "comms.sendConsolidatedDecision"
   | "comms.sendCrmCampaign"
+  | "comms.inbox.link"
+  | "comms.inboundDomains.save"
+  | "comms.inboundDomains.verify"
+  | "publicFeeds.save"
+  | "publicFeeds.duplicate"
+  | "publicFeeds.remove"
   | "apiKeys.generate"
   | "apiKeys.revoke"
   | "sponsors.create"
@@ -689,6 +722,10 @@ export function createRepository(transport: DataTransport): Repository {
       summary: ({ eventId }) =>
         transport.read<EventAnalyticsSummary>("analytics.summary", { eventId }),
     },
+    agentUsage: {
+      stats: ({ eventId, days }) =>
+        transport.read<AgentUsageStats>("agentUsage.stats", { eventId, days }),
+    },
     crm: {
       list: ({ eventId }) =>
         transport.read<CrmContact[]>("crm.list", { eventId }),
@@ -885,6 +922,19 @@ export function createRepository(transport: DataTransport): Repository {
       getUrl: (storageId) =>
         transport.read<string | null>("files.getUrl", { storageId }),
     },
+    recordings: {
+      list: ({ eventId }) => transport.read<RecordingManagerRow[]>("recordings.list", { eventId }),
+      get: ({ eventId, agendaItemId }) => transport.read<RecordingDetail>("recordings.get", { eventId, agendaItemId }),
+      listAssets: ({ eventId }) => transport.read<EventVideoAsset[]>("recordings.listAssets", { eventId }),
+      attachHosted: (input) => transport.write<RecordingId>("recordings.attachHosted", input),
+      attachUpload: (input) => transport.write<RecordingId>("recordings.attachUpload", input),
+      attachAsset: (input) => transport.write<RecordingId>("recordings.attachAsset", input),
+      publish: (input) => transport.write<RecordingId>("recordings.publish", input),
+      unpublish: (input) => transport.write<void>("recordings.unpublish", input),
+      detach: (input) => transport.write<void>("recordings.detach", input),
+      bulkPublish: (input) => transport.write<RecordingBulkResult[]>("recordings.bulkPublish", input),
+      bulkUnpublish: (input) => transport.write<RecordingBulkResult[]>("recordings.bulkUnpublish", input),
+    },
     eventMembers: {
       list: ({ eventId }) =>
         transport.read<EventMember[]>("eventMembers.list", { eventId }),
@@ -1071,6 +1121,8 @@ export function createRepository(transport: DataTransport): Repository {
           "evaluations.sendReviewerReminders",
           input,
         ),
+      getAssessment: (input) => transport.read<AiAssessment | null>("evaluations.assessment.get", input),
+      requestAssessment: (input) => transport.write<string>("evaluations.assessment.request", input),
     },
     agenda: {
       list: ({ eventId }) =>
@@ -1158,6 +1210,11 @@ export function createRepository(transport: DataTransport): Repository {
         ),
       sendCrmCampaign: (input) =>
         transport.write<CrmCampaignSendResult>("comms.sendCrmCampaign", input),
+      listInbox: (input) => transport.read<InboundMessage[]>("comms.inbox.list", input),
+      linkInbox: (input) => transport.write<void>("comms.inbox.link", input),
+      listInboundDomains: (input) => transport.read<InboundEmailDomain[]>("comms.inboundDomains.list", input),
+      saveInboundDomain: (input) => transport.write<string>("comms.inboundDomains.save", input),
+      verifyInboundDomain: (input) => transport.write<{ ok: boolean; observedMx: string[]; expectedMx: string }>("comms.inboundDomains.verify", input),
     },
     availability: {
       list: ({ eventId, speakerId }) =>
@@ -1191,6 +1248,12 @@ export function createRepository(transport: DataTransport): Repository {
         ),
       getLegacy: (eventSlug) =>
         transport.read<PublicEmbed | null>("publicEmbeds.get", { eventSlug }),
+    },
+    publicFeeds: {
+      list: ({ eventId }) => transport.read<PublicFeed[]>("publicFeeds.list", { eventId }),
+      save: (input) => transport.write("publicFeeds.save", input),
+      duplicate: (input) => transport.write("publicFeeds.duplicate", input),
+      remove: (input) => transport.write<void>("publicFeeds.remove", input),
     },
     publicForms: {
       listOpen: (eventSlug) =>

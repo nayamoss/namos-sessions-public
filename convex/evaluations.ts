@@ -167,6 +167,7 @@ export type ReviewerQueueRow = {
   assignmentId: Id<"evaluation_assignments">;
   eventId: Id<"events">;
   submissionId: Id<"submissions">;
+  evaluationPlanId: Id<"evaluation_plans">;
   submissionTitle: string;
   submissionAnswers: { abstract?: string; track?: string };
   // Absent — the key itself, not an undefined value — on a blinded plan. See projectForReviewer.
@@ -244,6 +245,7 @@ export async function reviewerQueueFor(ctx: QueryCtx, identity: UserIdentity): P
       assignmentId: assignment._id,
       eventId: assignment.eventId,
       submissionId: assignment.submissionId,
+      evaluationPlanId: assignment.evaluationPlanId,
       submissionTitle: submission.title || "Untitled submission",
       submissionAnswers: { abstract: answerText(submission.answers, "abstract"), track: answerText(submission.answers, "track") },
       speakerNames: speaker ? [`${speaker.firstName ?? ""} ${speaker.lastName ?? ""}`.trim()].filter(Boolean) : [],
@@ -251,8 +253,8 @@ export async function reviewerQueueFor(ctx: QueryCtx, identity: UserIdentity): P
       planName: plan?.name ?? "Evaluation plan",
       scoringScaleMax: plan?.scoringScaleMax ?? 5,
       anonymized,
-      criteria: plan?.criteria,
-      review: review ? { id: review._id, score: review.score, comments: review.comments, criteriaScores: review.criteriaScores } : undefined,
+      ...(plan?.criteria ? { criteria: plan.criteria } : {}),
+      review: review ? { id: review._id, score: review.score, comments: review.comments, ...(review.criteriaScores ? { criteriaScores: review.criteriaScores } : {}) } : undefined,
     }, anonymized));
   }
   return rows.sort((left, right) => left.round - right.round || left.submissionTitle.localeCompare(right.submissionTitle));

@@ -1,6 +1,6 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import { assertEventAccess, assertEventOrganizerAccess, getEventMembership, isEventOrganizer, isOrganizerOf, requireIdentity } from "./functions";
+import { internalMutation, internalQuery, query } from "./_generated/server";
+import { assertEventAccess, assertEventOrganizerAccess, getEventMembership, isEventOrganizer, isOrganizerOf, mutation, requireIdentity } from "./functions";
 import { eventOrganizers, notifyEvent } from "./notifications";
 import {
   EVENT_TEAM_MEMBER_LIMIT,

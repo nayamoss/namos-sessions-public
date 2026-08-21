@@ -10,12 +10,20 @@ import type {
   AgendaConflict,
   AgendaPlacementConflict,
   AgendaItem,
+  RecordingDetail,
+  RecordingBulkResult,
+  EventVideoAsset,
+  RecordingId,
+  RecordingManagerRow,
   AgentProposalId,
   AgentRun,
   AgentRunDetail,
   AgentRunId,
   Availability,
   Comm,
+  InboundEmailDomain,
+  InboundMessage,
+  InboundTriageStatus,
   CommPreview,
   CrmCampaignSendResult,
   CommSendResult,
@@ -40,11 +48,13 @@ import type {
   EmailIntegration,
   EmailIntegrationSaveInput,
   AgentProviderSetting,
+  AgentUsageStats,
   Evaluation,
   EvaluationAssignment,
   EvaluationCriterion,
   EvaluationCriterionScore,
   EvaluationPlan,
+  AiAssessment,
   EventAnalyticsSummary,
   Event,
   EventId,
@@ -62,6 +72,9 @@ import type {
   EmbedWrite,
   PublicEmbedShowcase,
   PublicEmbedView,
+  PublicFeed,
+  PublicFeedId,
+  PublicFeedWrite,
   PublicSubmissionFormConfig,
   PublicSubmissionFormSummary,
   PortalResourcePage,
@@ -110,8 +123,24 @@ export interface FilesRepo {
   generateUploadUrl(): Promise<{ uploadUrl: string }>;
   getUrl(storageId: string): Promise<string | null>;
 }
+export interface RecordingsRepo {
+  list(scope: EventScope): Promise<RecordingManagerRow[]>;
+  get(input: EventScope & { agendaItemId: string }): Promise<RecordingDetail>;
+  listAssets(scope: EventScope): Promise<EventVideoAsset[]>;
+  attachHosted(input: EventScope & { agendaItemId: string; hostedUrl: string }): Promise<RecordingId>;
+  attachUpload(input: EventScope & { agendaItemId: string; storageId: string; fileName: string }): Promise<RecordingId>;
+  attachAsset(input: EventScope & { agendaItemId: string; assetId: string }): Promise<RecordingId>;
+  publish(input: EventScope & { recordingId: string; overrideReason?: string }): Promise<RecordingId>;
+  unpublish(input: EventScope & { recordingId: string }): Promise<void>;
+  detach(input: EventScope & { recordingId: string }): Promise<void>;
+  bulkPublish(input: EventScope & { recordingIds: string[] }): Promise<RecordingBulkResult[]>;
+  bulkUnpublish(input: EventScope & { recordingIds: string[] }): Promise<RecordingBulkResult[]>;
+}
 export interface AnalyticsRepo {
   summary(scope: EventScope): Promise<EventAnalyticsSummary>;
+}
+export interface AgentUsageRepo {
+  stats(scope: EventScope & { days?: number }): Promise<AgentUsageStats>;
 }
 export interface CrmRepo {
   list(scope: EventScope): Promise<CrmContact[]>;
@@ -563,6 +592,8 @@ export interface EvaluationRepo {
   assignByFilter(
     input: EvaluationAssignmentFilterWrite,
   ): Promise<AssignByFilterResult>;
+  getAssessment(input: EventScope & { submissionId: SubmissionId; evaluationPlanId: string }): Promise<AiAssessment | null>;
+  requestAssessment(input: EventScope & { submissionId: SubmissionId; evaluationPlanId: string }): Promise<string>;
 }
 export interface ReviewerReminderSend {
   eventId: EventId;
@@ -688,6 +719,11 @@ export interface CommsRepo {
     subject: string;
     body: string;
   }): Promise<CrmCampaignSendResult>;
+  listInbox(input: EventScope & { status?: InboundTriageStatus }): Promise<InboundMessage[]>;
+  linkInbox(input: EventScope & { messageId: string; speakerId?: SpeakerId; submissionId?: SubmissionId }): Promise<void>;
+  listInboundDomains(scope: EventScope): Promise<InboundEmailDomain[]>;
+  saveInboundDomain(input: EventScope & { provider: "resend" | "ses"; domain: string; aliasLocalPart: string; mode: "managed" | "custom" }): Promise<string>;
+  verifyInboundDomain(input: EventScope & { domainId: string }): Promise<{ ok: boolean; observedMx: string[]; expectedMx: string }>;
 }
 // speakerId narrows to one speaker's own availability (portal) — organizer access is
 // required to omit it and see the whole event (see convex/availability.ts).
@@ -706,6 +742,12 @@ export interface PublicEmbedsRepo {
   listShowcase(eventSlug: string): Promise<PublicEmbedShowcase | null>;
   /** Legacy slug feed; retained to keep `/e/:eventSlug/:feed` links working. */
   getLegacy(eventSlug: string): Promise<PublicEmbed | null>;
+}
+export interface PublicFeedsRepo {
+  list(scope: EventScope): Promise<PublicFeed[]>;
+  save(input: PublicFeedWrite): Promise<PublicFeedId>;
+  duplicate(input: EventScope & { feedId: PublicFeedId }): Promise<PublicFeedId>;
+  remove(input: EventScope & { feedId: PublicFeedId }): Promise<void>;
 }
 export interface PublicFormsRepo {
   listOpen(eventSlug: string): Promise<PublicSubmissionFormSummary[]>;
@@ -928,6 +970,7 @@ export interface AgentProviderSettingsRepo {
 export interface Repository {
   activity: ActivityRepo;
   analytics: AnalyticsRepo;
+  agentUsage: AgentUsageRepo;
   agentProviderSettings: AgentProviderSettingsRepo;
   agentRuns: AgentRunsRepo;
   apiKeys: ApiKeysRepo;
@@ -937,6 +980,7 @@ export interface Repository {
   slackIntegrations: SlackIntegrationsRepo;
   events: EventsRepo;
   files: FilesRepo;
+  recordings: RecordingsRepo;
   eventMembers: EventMembersRepo;
   tags: TagsRepo;
   sponsors: SponsorsRepo;
@@ -953,6 +997,7 @@ export interface Repository {
   comms: CommsRepo;
   availability: AvailabilityRepo;
   publicEmbeds: PublicEmbedsRepo;
+  publicFeeds: PublicFeedsRepo;
   publicForms: PublicFormsRepo;
   portalForms: PortalFormsRepo;
   portalResources: PortalResourcesRepo;

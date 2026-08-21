@@ -2,13 +2,13 @@ import type { AgendaConflict, AgendaItem, Comm, Event, OnboardingTask, Submissio
 import { eventDateTime, utcCalendarDate } from "@/lib/event-time";
 import type { SpeakerOperationsRow } from "@/lib/speaker-operations";
 
-export type ReadinessCategory = "agenda_conflicts" | "speaker_confirmations" | "onboarding_tasks" | "proposal_decisions" | "comms_delivery";
+export type ReadinessCategory = "agenda_conflicts" | "speaker_confirmations" | "onboarding_tasks" | "proposal_decisions" | "comms_delivery" | "recording_coverage";
 export type ReadinessItem = { id: string; title: string; detail?: string; to: string; eventDate?: string };
 export type ReadinessGroup = { category: ReadinessCategory; label: string; items: ReadinessItem[] };
 
 const undecided = new Set<Submission["status"]>(["pending", "accept_queue", "maybe", "decline_queue"]);
 const labels: Record<ReadinessCategory, string> = {
-  agenda_conflicts: "Agenda conflicts", speaker_confirmations: "Speaker confirmations", onboarding_tasks: "Onboarding tasks", proposal_decisions: "Proposal decisions", comms_delivery: "Comms delivery",
+  agenda_conflicts: "Agenda conflicts", speaker_confirmations: "Speaker confirmations", onboarding_tasks: "Onboarding tasks", proposal_decisions: "Proposal decisions", comms_delivery: "Comms delivery", recording_coverage: "Recording coverage",
 };
 
 function nameForSubmission(submission: Submission) { return submission.title?.trim() || "Untitled session"; }

@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internalMutation } from "./_generated/server";
+import { internalMutation, internalQuery } from "./_generated/server";
 import { assertValidPages, derivePages } from "./formPages";
 
 // One-time migration from the pre-multi-tenancy data model, where a single global `organizers`
@@ -154,5 +154,93 @@ export const auditSubmissionFormPages = internalMutation({
       missingPageFormIds,
       invalidPageForms,
     };
+  },
+});
+
+// Repeatable, cursor-based CRM rollout. Existing speaker rows remain authoritative for
+// event-specific history and portal access; this only adds organization contacts and memberships.
+export const backfillCrmContacts = internalMutation({
+  args: { cursor: v.optional(v.string()), batchSize: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const page = await ctx.db.query("speakers").paginate({
+      cursor: args.cursor ?? null,
+      numItems: Math.min(Math.max(args.batchSize ?? 100, 1), 100),
+    });
+    let contactsCreated = 0;
+    let speakersLinked = 0;
+    let membershipsCreated = 0;
+    for (const speaker of page.page) {
+      const event = await ctx.db.get(speaker.eventId);
+      if (!event?.organizationId) continue;
+      const email = speaker.email.trim().toLowerCase();
+      if (!email) continue;
+      let contact = await ctx.db.query("crm_contacts")
+        .withIndex("by_org_email", (q) => q.eq("organizationId", event.organizationId!).eq("email", email))
+        .unique();
+      if (!contact) {
+        const now = Date.now();
+        const contactId = await ctx.db.insert("crm_contacts", {
+          organizationId: event.organizationId,
+          email,
+          firstName: speaker.firstName,
+          lastName: speaker.lastName,
+          stage: "confirmed",
+          score: 50,
+          createdAt: now,
+          updatedAt: now,
+        });
+        await ctx.db.insert("crm_stage_history", {
+          organizationId: event.organizationId,
+          contactId,
+          stage: "confirmed",
+          score: 50,
+          changedByUserId: "system:crm-backfill",
+          createdAt: now,
+        });
+        contact = await ctx.db.get(contactId);
+        contactsCreated += 1;
+      }
+      if (!contact) continue;
+      if (speaker.contactId !== contact._id) {
+        await ctx.db.patch(speaker._id, { contactId: contact._id });
+        speakersLinked += 1;
+      }
+      const membership = await ctx.db.query("crm_event_contacts")
+        .withIndex("by_event_contact", (q) => q.eq("eventId", speaker.eventId).eq("contactId", contact!._id))
+        .unique();
+      if (!membership) {
+        const now = Date.now();
+        await ctx.db.insert("crm_event_contacts", { eventId: speaker.eventId, contactId: contact._id, speakerId: speaker._id, createdAt: now, updatedAt: now });
+        membershipsCreated += 1;
+      } else if (membership.speakerId !== speaker._id) {
+        await ctx.db.patch(membership._id, { speakerId: speaker._id, updatedAt: Date.now() });
+      }
+    }
+    return { contactsCreated, speakersLinked, membershipsCreated, cursor: page.continueCursor, done: page.isDone };
+  },
+});
+
+// Read-only, paginated verification for before/after rollout evidence.
+export const auditCrmContacts = internalQuery({
+  args: { cursor: v.optional(v.string()), batchSize: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const page = await ctx.db.query("speakers").paginate({
+      cursor: args.cursor ?? null,
+      numItems: Math.min(Math.max(args.batchSize ?? 100, 1), 100),
+    });
+    const issues = { missingOrganization: 0, missingContact: 0, wrongOrganization: 0, emailMismatch: 0, missingMembership: 0 };
+    for (const speaker of page.page) {
+      const event = await ctx.db.get(speaker.eventId);
+      if (!event?.organizationId) { issues.missingOrganization += 1; continue; }
+      const contact = speaker.contactId ? await ctx.db.get(speaker.contactId) : null;
+      if (!contact) { issues.missingContact += 1; continue; }
+      if (contact.organizationId !== event.organizationId) issues.wrongOrganization += 1;
+      if (contact.email !== speaker.email.trim().toLowerCase()) issues.emailMismatch += 1;
+      const membership = await ctx.db.query("crm_event_contacts")
+        .withIndex("by_event_contact", (q) => q.eq("eventId", speaker.eventId).eq("contactId", contact._id))
+        .unique();
+      if (!membership || membership.speakerId !== speaker._id) issues.missingMembership += 1;
+    }
+    return { checked: page.page.length, issues, cursor: page.continueCursor, done: page.isDone };
   },
 });

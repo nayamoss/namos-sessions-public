@@ -22,6 +22,10 @@ export function createAirtableTransport(
       throw new Error(
         "AI provider settings require the Convex backend — Airtable has no encrypted credential store.",
       );
+    if (operation.startsWith("agentUsage."))
+      throw new Error(
+        "AI usage reporting currently requires the Convex backend.",
+      );
     if (operation.startsWith("publicEmbeds."))
       throw new Error(
         "Public embed management is available on the Convex backend.",

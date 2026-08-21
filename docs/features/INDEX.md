@@ -14,7 +14,10 @@ to `../ROADMAP.md` remain in the body below, kept as historical citations of a d
 gone — build order and cut rationale now live in this file's tables.
 
 **Status values:** `planned` · `in-progress` · `blocked` · `done` · `cut`
-**Last updated:** 2026-08-17 — indexed 28 previously undocumented feature packages (rows 39-66
+**Last updated:** 2026-08-20 — the core Recordings Manager is now in progress (row 69), grounded
+in the live Cicero reference and the current Namos schema/public projection. It uses an original
+dense manager + detail-pane workflow rather than repeating attach forms per session, with upload
+or hosted sources, review/publication, replacement, and public playback now connected. Prior index reconciliation: indexed 28 previously undocumented feature packages (rows 39-66
 below; rows 65-66 landed on main from a parallel session during this same pass) and reconciled every one against its GitHub issue rather than against its plan doc's
 `Status: In Review` header, which is a planning-workflow marker and never meant implementation
 state. Shipped since the last index pass: multi-tenant organizations (#191/#192) and additive
@@ -242,8 +245,9 @@ replace provider or final release acceptance gates.
 | 66 | [settings-modal-refactor](./settings-modal-refactor/plan.md) | `done` | 6-8h | #229 | — | Settings were 9 separately routed pages, each a full navigation away from whatever the organizer was doing. Now a Claude.ai-style modal overlay reachable from any page, with Imori's grouped sidebar nav and card content inside this app's design system. Deep links still resolve — `/events/:slug/settings/event` lands on the right tab inside the overlay instead of as a standalone page. Merged as #231. |
 | 67 | [onboarding-multi-source-import](./onboarding-multi-source-import/plan.md) | `planned` | 32-44h | #236 | high | Replaces the CSV-only final onboarding step with one preview-first source chooser for CSV, Google Sheets, Trello, the existing Notion integration, and a structured Markdown table. Google/Trello are read-only encrypted connections also manageable in Settings; Airtable remains Settings-only and is explicitly outside this request. |
 | 68 | [slack-integration](./slack-integration/plan.md) | `in-progress` | 32-44h | #238 | high | Implemented locally on `feature/238-slack-integration`: organization-level Slack OAuth with one channel per event, explicit organizer account linking, signed/deduplicated commands and mentions routed into the existing Operations Agent, hash-bound task approval from Block Kit, and selected event notifications through a durable outbox. Live Slack sandbox and deployment verification remain. No Marketplace distribution, multi-channel binding, email auto-linking, or expanded agent write authority in v1. |
+| 69 | [recordings-manager](./recordings-manager/plan.md) | `in-progress` | 42-60h | owner request | high | Core event-scoped manager shipped: coverage/search/filter, upload or hosted sources, preview, draft/public lifecycle, staged safe replacement, and attendee/embed playback. The UI is an original dense DataGrid + detail-pane workflow, not a copy of Cicero's repeated per-session attach panels. Asset reuse, bulk operations, activity/readiness integration, and the additive legacy migration remain planned. |
 
-**Total estimate:** ~156-216h including the attendee site, post-demo public API, restored public
+**Total estimate:** ~198-276h including the recordings manager, attendee site, post-demo public API, restored public
 embeds + Accelevents integration, and the agent-native operations foundation, against a deadline
 of Wed Aug 12, 10PM PT.
 

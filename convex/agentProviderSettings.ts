@@ -1,6 +1,6 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import { assertEventOrganizerAccess } from "./functions";
+import { internalMutation, internalQuery, query } from "./_generated/server";
+import { assertEventOrganizerAccess, mutation } from "./functions";
 import { isManagedAiDisabled } from "./managedAi";
 
 const mode = v.union(v.literal("managed"), v.literal("bring_your_own"));

@@ -573,11 +573,7 @@ function AppearanceStep({ event, onUpdate }: { event: Event; onUpdate: (patch: P
       const { storageId } = await response.json() as { storageId?: string };
       if (!storageId) throw new Error("Missing storage id");
       await onUpdate({ logoStorageKey: storageId });
-      // Render the canonical backend URL instead of deriving img.src directly
-      // from a DOM-sourced File. This keeps untrusted DOM input out of URL sinks.
-      const storedLogoUrl = await repo.files.getUrl(storageId);
-      if (!storedLogoUrl) throw new Error("Missing logo URL");
-      setLogoUrl(storedLogoUrl);
+      setLogoUrl((await repo.files.getUrl(storageId)) ?? undefined);
     } catch { setUploadError("Couldn't upload image — try again"); }
     finally { setUploading(false); }
   };
@@ -1596,24 +1592,15 @@ export default function SubmissionFormBuilder() {
         </div>
       );
     return (
-      <div className="space-y-6">
-        <h2 className="text-base font-semibold">Notifications</h2>
+      <div className="max-w-xl space-y-4">
+        <div>
+          <h2 className="text-base font-semibold">Notifications</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Control what a submitter hears back from this form. Organizer-side alerts for new and updated submissions aren't built yet — this section will grow as those ship.</p>
+        </div>
         <ToggleField
-          label="Send submission confirmation"
+          label={<span><span className="block">Send submission confirmation</span><span className="mt-0.5 block text-xs font-normal text-muted-foreground">Emails the submitter right after they submit, using the confirmation copy set on the Form settings step.</span></span>}
           checked={confirmationEnabled}
           onCheckedChange={setConfirmationEnabled}
-          surface
-        />
-        <ToggleField
-          label="Notify admins on new submissions"
-          checked={false}
-          onCheckedChange={() => undefined}
-          surface
-        />
-        <ToggleField
-          label="Notify admins on updated submissions"
-          checked={false}
-          onCheckedChange={() => undefined}
           surface
         />
       </div>
@@ -1685,9 +1672,10 @@ export default function SubmissionFormBuilder() {
           >
             <WizardShell
               steps={steps}
-              // Side by side, the wizard's own step rail would eat the width the preview
-              // needs, so it stacks above the editor once the preview is showing.
-              layout={previewOpen ? "stack" : "row"}
+              // One step fills the page — a persistent 8-item list sitting in a sidebar the
+              // whole time read as clutter, not orientation. The "N of 8 · Label" progress
+              // line above is the only always-visible step indicator now.
+              layout="full"
               activeStep={activeStep}
               onStepChange={setActiveStep}
               onBack={() => setActiveStep(Math.max(0, activeStep - 1))}

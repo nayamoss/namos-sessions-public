@@ -102,9 +102,9 @@ http.route({ path: "/api/v1/events", method: "GET", handler: httpAction(withApiA
 // Public feeds are opaque capability URLs. They never use a bearer token and their projection
 // is assembled server-side from the same approved fields and publication checks as embeds.
 http.route({ pathPrefix: "/public/feeds/", method: "GET", handler: httpAction(async (ctx, request) => {
-  const feedId = new URL(request.url).pathname.slice("/public/feeds/".length);
-  if (!feedId || feedId.includes("/")) return new Response("Not found", { status: 404 });
-  const payload = await ctx.runQuery(internal.publicFeeds.getPublic, { feedId });
+  const token = new URL(request.url).pathname.slice("/public/feeds/".length);
+  if (!token || token.includes("/") || !/^[a-zA-Z0-9_-]+$/.test(token)) return new Response("Not found", { status: 404 });
+  const payload = await ctx.runQuery(internal.publicFeeds.getPublic, { token });
   if (!payload) return new Response("Not found", { status: 404, headers: { "cache-control": "no-store" } });
   const rendered = renderPublicFeed(payload);
   return new Response(rendered.body, { headers: { "content-type": rendered.contentType, "cache-control": "public, max-age=300" } });
@@ -234,8 +234,8 @@ http.route({
     if (!parsed || typeof parsed !== "object") return internalError(400, "invalid_request");
     const input = parsed as Record<string, unknown>;
     if (
-      typeof input.eventId !== "string" ||
       (input.provider !== "resend" && input.provider !== "ses") ||
+      typeof input.recipient !== "string" ||
       typeof input.messageId !== "string" ||
       typeof input.fromEmail !== "string" ||
       typeof input.subject !== "string" ||
@@ -245,8 +245,14 @@ http.route({
       typeof input.receivedAt !== "number"
     ) return internalError(400, "invalid_request");
     try {
+      const mailbox = await ctx.runQuery(internal.commsInbox.resolveRecipient, {
+        provider: input.provider,
+        recipient: input.recipient,
+      });
+      if (!mailbox) return internalError(422, "message_rejected");
       const id = await ctx.runMutation(internal.commsInbox.ingest, {
-        eventId: input.eventId as never,
+        eventId: mailbox.eventId,
+        domainId: mailbox.domainId,
         provider: input.provider,
         messageId: input.messageId,
         ...(typeof input.inReplyTo === "string" ? { inReplyTo: input.inReplyTo } : {}),

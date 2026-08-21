@@ -1,8 +1,8 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
-import { assertEventOrganizerAccess, assertEventOrganizerByUserId, isEventOrganizer } from "./functions";
+import { assertEventOrganizerAccess, assertEventOrganizerByUserId, identityEmail, isEventOrganizer, mutation } from "./functions";
 import { validateAndCreateTask } from "./tasks";
 import { internal } from "./_generated/api";
 import { workflow } from "./agentWorkflow";
@@ -116,8 +116,8 @@ function validateIdempotencyKey(value: string) {
   return key;
 }
 
-export async function createRunForUser(ctx: MutationCtx, args: { eventId: Id<"events">; requestedByUserId: string; objective: string; idempotencyKey: string }) {
-  await assertEventOrganizerByUserId(ctx, args.eventId, args.requestedByUserId);
+export async function createRunForUser(ctx: MutationCtx, args: { eventId: Id<"events">; requestedByUserId: string; requestedByEmail?: string; objective: string; idempotencyKey: string }) {
+  await assertEventOrganizerByUserId(ctx, args.eventId, args.requestedByUserId, args.requestedByEmail);
   const objective = args.objective.trim();
   if (!objective) throw new Error("Enter an objective for this run.");
   if (objective.length > 4000) throw new Error("An objective cannot exceed 4,000 characters.");
@@ -143,8 +143,8 @@ export async function createRunForUser(ctx: MutationCtx, args: { eventId: Id<"ev
   return { runId };
 }
 
-export async function respondToRunForUser(ctx: MutationCtx, args: { eventId: Id<"events">; runId: Id<"agent_runs">; requestedByUserId: string; message: string; idempotencyKey: string }) {
-  await assertEventOrganizerByUserId(ctx, args.eventId, args.requestedByUserId);
+export async function respondToRunForUser(ctx: MutationCtx, args: { eventId: Id<"events">; runId: Id<"agent_runs">; requestedByUserId: string; requestedByEmail?: string; message: string; idempotencyKey: string }) {
+  await assertEventOrganizerByUserId(ctx, args.eventId, args.requestedByUserId, args.requestedByEmail);
   const run = await ctx.db.get(args.runId);
   if (!run || run.eventId !== args.eventId) throw new Error("Agent run not found for this event.");
   const message = args.message.trim();
@@ -161,8 +161,8 @@ export async function respondToRunForUser(ctx: MutationCtx, args: { eventId: Id<
   return { runId: run._id };
 }
 
-export async function approveTaskProposalForUser(ctx: MutationCtx, args: { eventId: Id<"events">; proposalId: Id<"agent_action_proposals">; expectedPayloadHash: string; requestedByUserId: string }) {
-  await assertEventOrganizerByUserId(ctx, args.eventId, args.requestedByUserId);
+export async function approveTaskProposalForUser(ctx: MutationCtx, args: { eventId: Id<"events">; proposalId: Id<"agent_action_proposals">; expectedPayloadHash: string; requestedByUserId: string; requestedByEmail?: string }) {
+  await assertEventOrganizerByUserId(ctx, args.eventId, args.requestedByUserId, args.requestedByEmail);
   const proposal = await ctx.db.get(args.proposalId);
   if (!proposal || proposal.eventId !== args.eventId) throw new Error("Agent proposal not found for this event.");
   const run = await ctx.db.get(proposal.runId);
@@ -180,8 +180,8 @@ export async function approveTaskProposalForUser(ctx: MutationCtx, args: { event
   return { createdTaskIds };
 }
 
-export async function rejectProposalForUser(ctx: MutationCtx, args: { eventId: Id<"events">; proposalId: Id<"agent_action_proposals">; requestedByUserId: string; reason?: string }) {
-  await assertEventOrganizerByUserId(ctx, args.eventId, args.requestedByUserId);
+export async function rejectProposalForUser(ctx: MutationCtx, args: { eventId: Id<"events">; proposalId: Id<"agent_action_proposals">; requestedByUserId: string; requestedByEmail?: string; reason?: string }) {
+  await assertEventOrganizerByUserId(ctx, args.eventId, args.requestedByUserId, args.requestedByEmail);
   const proposal = await ctx.db.get(args.proposalId);
   if (!proposal || proposal.eventId !== args.eventId) throw new Error("Task proposal not found for this event.");
   const run = await ctx.db.get(proposal.runId);
@@ -200,7 +200,7 @@ export const create = mutation({
   args: { eventId: v.id("events"), objective: v.string(), idempotencyKey: v.string() },
   handler: async (ctx, args) => {
     const identity = await assertEventOrganizerAccess(ctx, args.eventId);
-    return createRunForUser(ctx, { ...args, requestedByUserId: identity.subject });
+    return createRunForUser(ctx, { ...args, requestedByUserId: identity.subject, requestedByEmail: identityEmail(identity) });
   },
 });
 
@@ -208,7 +208,7 @@ export const respond = mutation({
   args: { eventId: v.id("events"), runId: v.id("agent_runs"), message: v.string(), idempotencyKey: v.string() },
   handler: async (ctx, args) => {
     const identity = await assertEventOrganizerAccess(ctx, args.eventId);
-    await respondToRunForUser(ctx, { ...args, requestedByUserId: identity.subject });
+    await respondToRunForUser(ctx, { ...args, requestedByUserId: identity.subject, requestedByEmail: identityEmail(identity) });
   },
 });
 
@@ -244,7 +244,7 @@ export const approveTaskProposal = mutation({
   args: { eventId: v.id("events"), proposalId: v.id("agent_action_proposals"), expectedPayloadHash: v.string() },
   handler: async (ctx, args) => {
     const identity = await assertEventOrganizerAccess(ctx, args.eventId);
-    return approveTaskProposalForUser(ctx, { ...args, requestedByUserId: identity.subject });
+    return approveTaskProposalForUser(ctx, { ...args, requestedByUserId: identity.subject, requestedByEmail: identityEmail(identity) });
   },
 });
 
@@ -296,6 +296,6 @@ export const rejectProposal = mutation({
   args: { eventId: v.id("events"), proposalId: v.id("agent_action_proposals"), reason: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const identity = await assertEventOrganizerAccess(ctx, args.eventId);
-    await rejectProposalForUser(ctx, { ...args, requestedByUserId: identity.subject });
+    await rejectProposalForUser(ctx, { ...args, requestedByUserId: identity.subject, requestedByEmail: identityEmail(identity) });
   },
 });

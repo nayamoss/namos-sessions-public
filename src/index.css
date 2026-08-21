@@ -4,10 +4,14 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Keep rem-based dimensions aligned with the browser default so zoom and user
-   font preferences scale the product predictably. */
+/* Compact density: 14px root (87.5% of the 16px browser default) matches the
+   UI-chrome baseline of dense SaaS dashboards (Linear, Notion, Airtable,
+   GitHub). Because almost every Tailwind size/spacing utility is rem-based,
+   this one change scales buttons, inputs, gaps, and radii down together
+   instead of only shrinking text. Zoom and user font preferences still scale
+   proportionally from here. */
 html {
-  font-size: 100%;
+  font-size: 87.5%;
 }
 
 html,
@@ -211,11 +215,11 @@ body.demo-workspace-active {
     input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="color"]):not(.sr-only),
     textarea
   ) {
-    min-height: 2.5rem;
+    min-height: 2rem;
   }
 
   .touch-target {
-    min-height: 2.5rem;
+    min-height: 2rem;
   }
 
   .mobile-safe-shell {

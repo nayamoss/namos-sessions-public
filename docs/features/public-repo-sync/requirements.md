@@ -1,3 +1,68 @@
+# Sync namos-sessions-public from private main (RUN 10 — 2026-08-21)
+
+## Why
+
+Recurring job. Ported private `main` through `91b9413a` onto public run 9
+(`e0f3647`), on branch `sync/private-main-delta-2026-08-20-run10` based on
+the current public `main` tip.
+
+## What this run did
+
+Ported the reviewed, OSS-safe application delta: managed-AI usage reporting,
+demo read-only mutation protection, privacy redaction for AI assessment input,
+recordings management and public recording projection, opaque/revocable public
+feed URLs and the Feeds CMS page, richer CFP builder/evaluation workflows,
+agenda drag-and-drop correction, settings-modal restoration, voice/dictation
+controls, compact UI density, and the related Convex/data-layer/schema/tests.
+Also added the plan-only `docs/features/*` material for agenda optimization,
+AI review UI, demo read-only, recordings, cross-event CRM, and developer
+interop. `worker-configuration.d.ts` was regenerated with public's own
+`wrangler.jsonc` and `wrangler.types.env`, never copied from private.
+
+**Excluded and flagged for explicit review:**
+1. OSS-identity and deploy/config files: README, CONTRIBUTING, SECURITY,
+   GOVERNANCE, SUPPORT, `.github/*`, `wrangler.jsonc`, `netlify.toml`,
+   `vercel.json`, `.env.example`, and private package metadata/scripts. Public
+   retains its own versions; no runtime config values were imported.
+2. `JUDGE_DEMO_CLOSEOUT.md`, `design-qa.md`, the Clerk-issuer outage incident,
+   private deployment documentation/preview closeout, and recapture tooling:
+   internal release artifacts or production-targeted QA that are not useful
+   public application code.
+3. Walkthrough video/media, its media helpers/tests, and the embed showcase:
+   this is the same production-specific media and real-event-like fixture
+   excluded in RUN 9.
+4. `convex/auth.config.ts`, private CSP/request-router rewrites and associated
+   worker tests: they reintroduce literal private Clerk/Convex/Sentry origins.
+   Public's existing placeholder-derived CSP implementation remains intact.
+5. `convex/seed.ts` and the private demo-domain change in `worker/demo.ts`:
+   private's rewrite uses recognizable event, sponsor, speaker, and submission
+   fixture data. Public keeps its generic example fixtures and demo domain.
+6. `src/pages/portal/PortalPages.tsx` and `portal-data.ts`: retained the
+   public CodeQL fix that prevents sensitive speaker profiles from being kept
+   in browser storage.
+
+The upstream AppLayout change that placed page-level controls in the title row
+was adjusted: public preserves the title-only page header invariant and keeps
+those controls in the dedicated body toolbar.
+
+## Scrub performed
+
+Grepped the full final diff against public `main` for Clerk secret/public-key
+prefixes, the two known private Convex deployment names, the private Clerk
+issuer, and the known RUN 6 real-fixture names — zero unsafe matches. No
+`.env*`, deploy config, or OSS-identity file is included.
+
+## Verification
+
+`npm run typecheck` and `npm run lint` pass. `npm run test -- --run` passes
+(warnings only), `npm run test:convex` passes (26 tests / 3 files), and
+`npm run build` succeeds (chunk-size warnings only).
+
+PR: https://github.com/nayamoss/namos-sessions-public/pull/43 against
+`namos-sessions-public` main, branch `sync/private-main-delta-2026-08-20-run10`.
+
+---
+
 # Sync namos-sessions-public from private main (RUN 9 — 2026-08-20)
 
 ## Why

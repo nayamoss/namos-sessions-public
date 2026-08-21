@@ -6,7 +6,7 @@ import { query, assertEventOrganizerAccess } from "./functions";
 // There's no single activity_log table — each subsystem already writes its own log, so this
 // query reads all of them and merges rather than introducing a new write path/schema change.
 
-export type ActivityCategory = "agenda" | "api" | "agent" | "comms" | "notification";
+export type ActivityCategory = "agenda" | "api" | "agent" | "comms" | "notification" | "recording";
 
 export type ActivityEntry = {
   id: string;
@@ -34,7 +34,7 @@ export const list = query({
     const actorEmailByUserId = new Map(members.map((member) => [member.userId, member.email]));
     const actorLabel = (userId: string) => actorEmailByUserId.get(userId) ?? userId;
 
-    const [agendaAudit, agentEvents, commsLog, notifications, apiTokens] = await Promise.all([
+    const [agendaAudit, agentEvents, commsLog, notifications, apiTokens, recordingActivity] = await Promise.all([
       ctx.db
         .query("agenda_items_audit")
         .withIndex("by_event_createdAt", (q) => q.eq("eventId", args.eventId))
@@ -59,6 +59,7 @@ export const list = query({
         .query("api_tokens")
         .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
         .collect(),
+      ctx.db.query("recording_activity").withIndex("by_event_createdAt", (q) => q.eq("eventId", args.eventId)).order("desc").take(PER_SOURCE_LIMIT),
     ]);
 
     const apiTokenIds = new Set(apiTokens.map((token) => token._id));
@@ -115,6 +116,12 @@ export const list = query({
         detail: row.body,
         status: row.kind === "comms_delivery_failed" ? ("error" as const) : ("info" as const),
         createdAt: row.createdAt,
+      })),
+      ...recordingActivity.map((row) => ({
+        id: `recording:${row._id}`, category: "recording" as const, action: row.action,
+        title: `Recording ${row.action.replace(/_/g, " ")}`,
+        detail: row.detail, actorLabel: actorLabel(row.actorUserId),
+        status: row.action === "published_early" ? ("warning" as const) : row.action === "detached" ? ("warning" as const) : ("success" as const), createdAt: row.createdAt,
       })),
       ...apiAudit.map((row) => ({
         id: `api:${row._id}`,

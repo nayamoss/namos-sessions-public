@@ -6,7 +6,6 @@ import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
 import { DataGrid, type DataGridColumn } from "@/components/shared/DataGrid";
 import { DecisionButtons } from "@/components/shared/DecisionButtons";
-import { ExpandableText } from "@/components/shared/ExpandableText";
 import { StarRating } from "@/components/shared/StarRating";
 import { FilterMenu } from "@/components/shared/StatusTabs";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -57,6 +56,7 @@ import {
 
 type AbstractRow = {
   id: string;
+  formId: string;
   status: SubmissionStatus;
   source: string;
   title: string;
@@ -244,6 +244,7 @@ export function createRows({
     const speakerId = submission.speakerId ?? submission.speakerIds[0];
     return {
       id: submission.id,
+      formId: submission.formId,
       status: submission.status,
       source: formNames.get(submission.formId) ?? "Submission form",
       title:
@@ -563,6 +564,13 @@ export default function Abstracts() {
   const [taggingId, setTaggingId] = useState<string>();
   const [decisionFeedback, setDecisionFeedback] = useState<string>();
   const [updatingDecisionId, setUpdatingDecisionId] = useState<string>();
+  const [editingId, setEditingId] = useState<string>();
+  const [editDraft, setEditDraft] = useState<{
+    title: string;
+    description: string;
+  }>({ title: "", description: "" });
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState<string>();
   const [addOpen, setAddOpen] = useState(creating);
   useEffect(() => {
     if (creating) setAddOpen(true);
@@ -662,6 +670,50 @@ export default function Abstracts() {
     if (abstractId || !searchParams.get("selected")) return;
     navigate(`${listPath}/${encodeURIComponent(searchParams.get("selected")!)}/edit`, { replace: true });
   }, [abstractId, listPath, navigate, searchParams]);
+  useEffect(() => {
+    if (!selectedRow || editingId === selectedRow.id) return;
+    setEditingId(selectedRow.id);
+    setEditDraft({
+      title:
+        selectedRow.title === "Untitled submission" ? "" : selectedRow.title,
+      description: selectedRow.description === "—" ? "" : selectedRow.description,
+    });
+    setEditError(undefined);
+  }, [editingId, selectedRow]);
+  const editDirty = Boolean(
+    selectedRow &&
+      (editDraft.title !== (selectedRow.title === "Untitled submission" ? "" : selectedRow.title) ||
+        editDraft.description !==
+          (selectedRow.description === "—" ? "" : selectedRow.description)),
+  );
+  const saveAbstractEdits = async () => {
+    if (!event || !selectedRow) return;
+    if (!editDraft.title.trim()) {
+      setEditError("A title is required.");
+      return;
+    }
+    setSavingEdit(true);
+    setEditError(undefined);
+    try {
+      await repo.submissions.update({
+        eventId: event.id,
+        id: selectedRow.id as Submission["id"],
+        formId: selectedRow.formId,
+        title: editDraft.title,
+        description: editDraft.description || undefined,
+        status: selectedRow.status,
+      });
+      await loadRows();
+    } catch (error) {
+      setEditError(
+        error instanceof Error
+          ? error.message
+          : "Could not save the changes.",
+      );
+    } finally {
+      setSavingEdit(false);
+    }
+  };
   const updateStatus = async (id: string, nextStatus: SubmissionStatus) => {
     const current = rows.find((row) => row.id === id);
     if (!current || current.status === nextStatus) return;
@@ -1137,34 +1189,116 @@ export default function Abstracts() {
           onDecide={(next) => void updateStatus(selectedRow.id, next)}
         />
       </div>
-      <dl className="space-y-5">
-        <div>
-          <dt className="text-sm text-muted-foreground">Status</dt>
-          <dd className="mt-1 text-base font-medium">
-            {statusLabels[selectedRow.status]}
-          </dd>
+      <div className="space-y-5">
+        <div className="space-y-2">
+          <Label htmlFor="abstract-edit-title">Title</Label>
+          <Input
+            id="abstract-edit-title"
+            value={editDraft.title}
+            onChange={(change) =>
+              setEditDraft((current) => ({
+                ...current,
+                title: change.target.value,
+              }))
+            }
+            placeholder="Session title"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Status</Label>
+          <div className="flex items-center gap-2">
+            {editableStatuses.includes(selectedRow.status) ? (
+              <Select
+                value={selectedRow.status}
+                onValueChange={(value) =>
+                  void updateStatus(selectedRow.id, value as SubmissionStatus)
+                }
+              >
+                <SelectTrigger className="h-9 w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {editableStatuses.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {statusLabels[option]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <span className="text-base font-medium">
+                {statusLabels[selectedRow.status]}
+              </span>
+            )}
+          </div>
         </div>
         <div>
-          <dt className="text-sm text-muted-foreground">Speaker</dt>
-          <dd className="mt-1 text-base">{selectedRow.speaker}</dd>
+          <Label className="text-sm text-muted-foreground">Speaker</Label>
+          <p className="mt-1 text-base">{selectedRow.speaker}</p>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="abstract-edit-description">Abstract</Label>
+          <Textarea
+            id="abstract-edit-description"
+            value={editDraft.description}
+            onChange={(change) =>
+              setEditDraft((current) => ({
+                ...current,
+                description: change.target.value,
+              }))
+            }
+            placeholder="What is this session about?"
+            rows={5}
+          />
         </div>
         <div>
-          <dt className="text-sm text-muted-foreground">Abstract</dt>
-          <dd className="mt-1">
-            <ExpandableText>{selectedRow.description}</ExpandableText>
-          </dd>
+          <Label className="text-sm text-muted-foreground">Track</Label>
+          <p className="mt-1 text-base">{selectedRow.track}</p>
         </div>
-        <div>
-          <dt className="text-sm text-muted-foreground">Track</dt>
-          <dd className="mt-1 text-base">{selectedRow.track}</dd>
+        <div className="space-y-2">
+          <Label>Tags</Label>
+          <div>
+            <TagsCell
+              row={selectedRow}
+              library={tagLibrary}
+              saving={Boolean(taggingId)}
+              onChange={(tagIds) => void updateTags(selectedRow.id, tagIds)}
+            />
+          </div>
         </div>
-        <div>
-          <dt className="text-sm text-muted-foreground">Tags</dt>
-          <dd className="mt-1 text-base">
-            {selectedRow.tags.map((tag) => tag.name).join(", ") || "—"}
-          </dd>
+        {editError && (
+          <p role="alert" className="text-sm text-destructive">
+            {editError}
+          </p>
+        )}
+        <div className="flex justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!editDirty || savingEdit}
+            onClick={() => {
+              setEditDraft({
+                title:
+                  selectedRow.title === "Untitled submission"
+                    ? ""
+                    : selectedRow.title,
+                description:
+                  selectedRow.description === "—" ? "" : selectedRow.description,
+              });
+              setEditError(undefined);
+            }}
+          >
+            Discard changes
+          </Button>
+          <Button
+            type="button"
+            onClick={() => void saveAbstractEdits()}
+            disabled={!editDirty || savingEdit}
+          >
+            {savingEdit ? "Saving…" : "Save changes"}
+          </Button>
         </div>
-      </dl>
+      </div>
       {decisionPreview && (
         <section
           className="mt-6 space-y-4 rounded-lg bg-background p-4"

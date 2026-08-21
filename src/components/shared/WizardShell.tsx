@@ -5,10 +5,14 @@ import { cardSurfaceClasses } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 export type WizardStep = { id: string; label: string };
-// `layout="row"` (default) puts the step list beside the content at the `lg` viewport breakpoint —
-// correct for full-width pages like the CFP builder. `layout="stack"` keeps the step list above the
-// content at every width, for narrower hosts (e.g. AppLayout's ~400px detail panel) where the
-// viewport itself may be wide even though the available space for this component is not.
+// `layout="row"` puts the step list beside the content at the `lg` viewport breakpoint —
+// for hosts where a persistent list of every step is actually useful context. `layout="stack"`
+// keeps the step list above the content at every width, for narrower hosts (e.g. AppLayout's
+// ~400px detail panel) where the viewport itself may be wide even though the available space for
+// this component is not. `layout="full"` (default) drops the persistent step list entirely: the
+// current step fills the full width, and the "N of M · Label" progress line above is the only
+// always-visible indicator — right for builders where a full inventory of every step sitting in
+// a sidebar the whole time reads as clutter rather than orientation.
 export function WizardShell({
   steps,
   activeStep,
@@ -18,7 +22,7 @@ export function WizardShell({
   children,
   finalLabel = "Save",
   footerStart,
-  layout = "row",
+  layout = "full",
 }: {
   steps: WizardStep[];
   activeStep: number;
@@ -28,7 +32,7 @@ export function WizardShell({
   children: ReactNode;
   finalLabel?: string;
   footerStart?: ReactNode;
-  layout?: "row" | "stack";
+  layout?: "row" | "stack" | "full";
 }) {
   const progress =
     steps.length < 2 ? 100 : (activeStep / (steps.length - 1)) * 100;
@@ -65,45 +69,47 @@ export function WizardShell({
       <div
         className={cn("flex flex-col gap-6", layout === "row" && "lg:flex-row")}
       >
-        <ol
-          className={cn(
-            "w-full shrink-0 space-y-1",
-            layout === "row" && "lg:w-64",
-          )}
-        >
-          {steps.map((step, index) => (
-            <li key={step.id}>
-              <button
-                type="button"
-                onClick={() => onStepChange(index)}
-                className={cn(
-                  "touch-target flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm",
-                  index === activeStep
-                    ? "bg-card text-foreground"
-                    : "text-muted-foreground hover:bg-card/70",
-                )}
-              >
-                <span
+        {layout !== "full" && (
+          <ol
+            className={cn(
+              "w-full shrink-0 space-y-1",
+              layout === "row" && "lg:w-64",
+            )}
+          >
+            {steps.map((step, index) => (
+              <li key={step.id}>
+                <button
+                  type="button"
+                  onClick={() => onStepChange(index)}
                   className={cn(
-                    "flex h-5 w-5 items-center justify-center rounded-full text-xs",
-                    index < activeStep
-                      ? "bg-foreground text-background"
-                      : index === activeStep
-                        ? "bg-muted text-foreground"
-                        : "bg-muted text-muted-foreground",
+                    "touch-target flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm",
+                    index === activeStep
+                      ? "bg-card text-foreground"
+                      : "text-muted-foreground hover:bg-card/70",
                   )}
                 >
-                  {index < activeStep ? (
-                    <Check className="h-3 w-3" />
-                  ) : (
-                    index + 1
-                  )}
-                </span>
-                {step.label}
-              </button>
-            </li>
-          ))}
-        </ol>
+                  <span
+                    className={cn(
+                      "flex h-5 w-5 items-center justify-center rounded-full text-xs",
+                      index < activeStep
+                        ? "bg-foreground text-background"
+                        : index === activeStep
+                          ? "bg-muted text-foreground"
+                          : "bg-muted text-muted-foreground",
+                    )}
+                  >
+                    {index < activeStep ? (
+                      <Check className="h-3 w-3" />
+                    ) : (
+                      index + 1
+                    )}
+                  </span>
+                  {step.label}
+                </button>
+              </li>
+            ))}
+          </ol>
+        )}
         <div
           className={cardSurfaceClasses("default", "min-w-0 flex-1 p-4 sm:p-6")}
         >

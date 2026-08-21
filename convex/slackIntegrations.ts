@@ -1,8 +1,8 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { assertEventOrganizerAccess } from "./functions";
+import { assertEventOrganizerAccess, mutation } from "./functions";
 
 export const slackNotificationKindValidator = v.union(
   v.literal("submission_received"),

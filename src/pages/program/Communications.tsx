@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   FileText,
   Mail,
+  Inbox,
   Send,
   TriangleAlert,
 } from "lucide-react";
@@ -18,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { cardSurfaceClasses } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -27,6 +29,11 @@ import type {
   CommTemplate,
   CommunicationDraft,
   Event,
+  InboundMessage,
+  InboundEmailDomain,
+  InboundTriageStatus,
+  Speaker,
+  Submission,
 } from "@/data/types";
 import { calendarInvite } from "@/lib/calendar-invite";
 import { submissionConfirmationEmail } from "@/lib/confirmation-email";
@@ -34,7 +41,7 @@ import { templateKinds } from "./CommTemplateEditor";
 
 type DeliveryStatus = "queued" | "sent" | "failed";
 type DeliveryChannel = "email" | "calendar_invite";
-type CommTab = "drafts" | "templates" | "campaign" | "test" | "activity";
+type CommTab = "inbox" | "drafts" | "templates" | "campaign" | "test" | "activity";
 
 type Delivery = {
   id: string;
@@ -128,6 +135,16 @@ export default function Communications() {
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [templates, setTemplates] = useState<CommTemplate[]>([]);
   const [drafts, setDrafts] = useState<CommunicationDraft[]>([]);
+  const [inbox, setInbox] = useState<InboundMessage[]>([]);
+  const [inboundDomains, setInboundDomains] = useState<InboundEmailDomain[]>([]);
+  const [speakers, setSpeakers] = useState<Speaker[]>([]);
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [inboxLinks, setInboxLinks] = useState<Record<string, { speakerId?: string; submissionId?: string }>>({});
+  const [inboxStatus, setInboxStatus] = useState<InboundTriageStatus | "all">("all");
+  const [inboundProvider, setInboundProvider] = useState<"resend" | "ses">("resend");
+  const [inboundMode, setInboundMode] = useState<"managed" | "custom">("managed");
+  const [inboundDomain, setInboundDomain] = useState("");
+  const [inboundAlias, setInboundAlias] = useState("");
   const [eventName, setEventName] = useState("Your event");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string>();
@@ -170,6 +187,23 @@ export default function Communications() {
       ]);
       setDeliveries(createDeliveries(log as CommDocument[]));
       setDrafts(preparedDrafts);
+      try {
+        const [messages, domains, eventSpeakers, eventSubmissions] = await Promise.all([
+          repo.comms.listInbox({ eventId: event.id }),
+          repo.comms.listInboundDomains({ eventId: event.id }),
+          repo.speakers.list({ eventId: event.id }),
+          repo.submissions.list({ eventId: event.id }),
+        ]);
+        setInbox(messages);
+        setInboundDomains(domains);
+        setSpeakers(eventSpeakers);
+        setSubmissions(eventSubmissions);
+      } catch {
+        setInbox([]);
+        setInboundDomains([]);
+        setSpeakers([]);
+        setSubmissions([]);
+      }
       try {
         const savedTemplates = await repo.comms.listTemplates({
           eventId: event.id,
@@ -360,6 +394,7 @@ export default function Communications() {
 
         <Tabs value={tab} onValueChange={(value) => setTab(value as CommTab)}>
           <TabsList>
+            <TabsTrigger value="inbox">Inbox{inbox.filter((message) => message.triageStatus === "unmatched").length ? ` (${inbox.filter((message) => message.triageStatus === "unmatched").length})` : ""}</TabsTrigger>
             <TabsTrigger value="drafts">
               Drafts{drafts.length ? ` (${drafts.length})` : ""}
             </TabsTrigger>
@@ -368,6 +403,46 @@ export default function Communications() {
             <TabsTrigger value="test">Test &amp; preview</TabsTrigger>
             <TabsTrigger value="activity">Activity log</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="inbox" className="space-y-4">
+            <section className={cardSurfaceClasses("default", "space-y-4 p-5")}>
+              <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold">Replies</h2><p className="mt-1 text-sm text-muted-foreground">Matched replies stay attached to send history. Unmatched messages wait here for organizer triage.</p></div><FilterMenu tabs={(["all", "unmatched", "matched", "resolved"] as const).map((value) => ({ value, label: value === "all" ? "All replies" : value[0].toUpperCase() + value.slice(1), count: value === "all" ? inbox.length : inbox.filter((message) => message.triageStatus === value).length }))} value={inboxStatus} onValueChange={(value) => setInboxStatus(value as InboundTriageStatus | "all")} /></div>
+              {inbox.filter((message) => inboxStatus === "all" || message.triageStatus === inboxStatus).length ? (
+                <div className="divide-y">
+                  {inbox.filter((message) => inboxStatus === "all" || message.triageStatus === inboxStatus).map((message) => {
+                    const link = inboxLinks[message.id] ?? {};
+                    return (
+                      <article key={message.id} className="py-4 first:pt-0 last:pb-0">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <h3 className="truncate font-medium">{message.subject || "No subject"}</h3>
+                            <p className="mt-1 text-xs text-muted-foreground">{message.fromEmail} · {message.provider.toUpperCase()} · {relativeTime(message.receivedAt)}</p>
+                          </div>
+                          <span className="text-xs capitalize text-muted-foreground">{message.triageStatus}</span>
+                        </div>
+                        <p className="mt-3 whitespace-pre-wrap text-sm">{message.text}</p>
+                        {message.triageStatus !== "resolved" && (
+                          <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto]">
+                            <Select value={link.speakerId} onValueChange={(speakerId) => setInboxLinks((current) => ({ ...current, [message.id]: { ...current[message.id], speakerId } }))}>
+                              <SelectTrigger aria-label={`Speaker for ${message.subject || "reply"}`}><SelectValue placeholder="Link speaker" /></SelectTrigger>
+                              <SelectContent>{speakers.map((speaker) => <SelectItem key={speaker.id} value={speaker.id}>{speaker.name}</SelectItem>)}</SelectContent>
+                            </Select>
+                            <Select value={link.submissionId} onValueChange={(submissionId) => setInboxLinks((current) => ({ ...current, [message.id]: { ...current[message.id], submissionId } }))}>
+                              <SelectTrigger aria-label={`Submission for ${message.subject || "reply"}`}><SelectValue placeholder="Link submission" /></SelectTrigger>
+                              <SelectContent>{submissions.map((submission) => <SelectItem key={submission.id} value={submission.id}>{submission.title || "Untitled submission"}</SelectItem>)}</SelectContent>
+                            </Select>
+                            <Button size="sm" disabled={!link.speakerId && !link.submissionId} onClick={() => void repo.comms.linkInbox({ eventId: activeEvent!.id, messageId: message.id, speakerId: link.speakerId as Speaker["id"] | undefined, submissionId: link.submissionId as Submission["id"] | undefined }).then(loadDeliveries)}>Link and resolve</Button>
+                            <Button size="sm" variant="outline" onClick={() => void repo.comms.linkInbox({ eventId: activeEvent!.id, messageId: message.id }).then(loadDeliveries)}>Resolve only</Button>
+                          </div>
+                        )}
+                      </article>
+                    );
+                  })}
+                </div>
+              ) : <EmptyState compact icon={Inbox} title="No replies in this view" message="Replies received through a verified Resend or SES domain will appear here." />}
+            </section>
+            <section className={cardSurfaceClasses("default", "space-y-4 p-5")}><div><h2 className="font-semibold">Reply domains</h2><p className="mt-1 text-sm text-muted-foreground">A domain activates only after its MX record and a signed provider receipt are both verified.</p></div>{inboundDomains.length > 0 && <ul className="space-y-2">{inboundDomains.map((domain) => <li key={domain.id} className="space-y-2 rounded-md bg-background px-3 py-2 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><span>{domain.aliasLocalPart}@{domain.domain}</span><span className="text-muted-foreground">{domain.provider.toUpperCase()} · {domain.status === "verified" || domain.verifiedAt ? "Verified" : domain.status === "dns_verified" ? "DNS verified; awaiting receipt" : domain.status === "failed" ? "Verification failed" : "Awaiting verification"}</span></div>{domain.expectedMx && <p className="text-xs text-muted-foreground">Expected MX: {domain.expectedMx}</p>}{domain.failureReason && <p className="text-xs text-destructive">{domain.failureReason}</p>}<Button size="sm" variant="outline" onClick={() => void repo.comms.verifyInboundDomain({ eventId: activeEvent!.id, domainId: domain.id }).then(loadDeliveries)}>Check DNS</Button></li>)}</ul>}<div className="grid gap-3 md:grid-cols-4"><Select value={inboundProvider} onValueChange={(value) => setInboundProvider(value as "resend" | "ses")}><SelectTrigger aria-label="Inbound provider"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="resend">Resend</SelectItem><SelectItem value="ses">Amazon SES</SelectItem></SelectContent></Select><Select value={inboundMode} onValueChange={(value) => setInboundMode(value as "managed" | "custom")}><SelectTrigger aria-label="Reply domain mode"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="managed">Namos managed</SelectItem><SelectItem value="custom">Custom domain</SelectItem></SelectContent></Select><Input aria-label="Reply alias" placeholder="event-code" value={inboundAlias} onChange={(event) => setInboundAlias(event.target.value)} /><Input aria-label="Reply domain" placeholder="reply.example.com" value={inboundDomain} onChange={(event) => setInboundDomain(event.target.value)} /></div><Button size="sm" variant="outline" disabled={!inboundAlias.trim() || !inboundDomain.trim()} onClick={() => void repo.comms.saveInboundDomain({ eventId: activeEvent!.id, provider: inboundProvider, mode: inboundMode, domain: inboundDomain, aliasLocalPart: inboundAlias }).then(loadDeliveries)}>Save reply domain</Button></section>
+          </TabsContent>
 
           <TabsContent value="drafts" className="space-y-4">
             <section className={cardSurfaceClasses("default", "space-y-4 p-5")}>
@@ -505,7 +580,7 @@ export default function Communications() {
                   <Button type="button" disabled={!campaignSubject.trim() || !campaignBody.trim() || campaignSending} onClick={() => setCampaignConfirmOpen(true)}><Send className="h-4 w-4" aria-hidden="true" />Review and send</Button>
                 </>
               ) : (
-                <EmptyState compact icon={Mail} title="Select contacts to start a campaign" message="Choose contacts from the Contacts directory, then use Email selected." action={activeEvent ? <Button type="button" variant="outline" size="sm" asChild><Link to={`/events/${activeEvent.slug}/program/contacts`}>Open Contacts</Link></Button> : undefined} />
+                <EmptyState compact icon={Mail} title="Select contacts to start a campaign" message="Choose contacts from the Speaker CRM, then use Email selected." action={activeEvent ? <Button type="button" variant="outline" size="sm" asChild><Link to={`/events/${activeEvent.slug}/program/speakers`}>Open Speaker CRM</Link></Button> : undefined} />
               )}
               {campaignResult && <p role="status" className="text-sm text-muted-foreground">{campaignResult}</p>}
             </section>

@@ -88,6 +88,17 @@ export type AgendaItem = {
   isPublished: boolean;
   submissionId?: string;
 };
+type AgendaDragItem = { kind: "session" | "submission"; id: string };
+
+export function parseAgendaDragItem(payload: string): AgendaDragItem | undefined {
+  const separator = payload.indexOf(":");
+  if (separator < 1) return undefined;
+  const kind = payload.slice(0, separator);
+  const id = payload.slice(separator + 1);
+  return (kind === "session" || kind === "submission") && id
+    ? { kind, id }
+    : undefined;
+}
 type AgendaView =
   "list" | "day" | "week" | "month" | "track" | "rooms" | "conflicts";
 const agendaViews: { value: AgendaView; label: string }[] = [
@@ -1697,7 +1708,7 @@ function RoomsView({
 }) {
   const days = agendaEventDays(event.startDate, event.endDate);
   const [roomDay, setRoomDay] = useState(days[0] ?? "");
-  const [dragged, setDragged] = useState<{ kind: "session" | "submission"; id: string }>();
+  const [dragged, setDragged] = useState<AgendaDragItem>();
   const [dragTarget, setDragTarget] = useState<string>();
   const dayItems = items.filter(
     (item) => eventDateTime(item.startTime, timeZone).date === roomDay,
@@ -1706,26 +1717,25 @@ function RoomsView({
   const unscheduled = submissions.filter((submission) =>
     submission.status === "accepted" && !items.some((item) => item.submissionId === submission.id),
   );
-  const source = dragged?.kind === "session"
-    ? items.find((item) => item.id === dragged.id)
-    : undefined;
-  const sourceSubmission = dragged?.kind === "submission"
-    ? unscheduled.find((submission) => submission.id === dragged.id)
-    : undefined;
-  const targetBlocked = (roomId: string, startTime: number) => {
+  const targetBlocked = (roomId: string, startTime: number, current = dragged) => {
+    const source = current?.kind === "session"
+      ? items.find((item) => item.id === current.id)
+      : undefined;
+    const sourceSubmission = current?.kind === "submission"
+      ? unscheduled.find((submission) => submission.id === current.id)
+      : undefined;
     const speakerIds = source?.speakerIds ?? sourceSubmission?.speakerIds ?? [];
     const duration = source ? source.endTime - source.startTime : 45 * 60_000;
     const endTime = startTime + duration;
     return items.some((item) => item.id !== source?.id && item.startTime < endTime && startTime < item.endTime
       && (item.roomId === roomId || item.speakerIds.some((id) => speakerIds.includes(id))));
   };
-  const place = async (roomId: string, startTime: number) => {
-    if (!dragged) return;
-    if (targetBlocked(roomId, startTime)) {
+  const place = async (roomId: string, startTime: number, current = dragged) => {
+    if (!current) return;
+    if (targetBlocked(roomId, startTime, current)) {
       toast.error("That slot is unavailable", { description: "A room or speaker is already booked at that time." });
       return;
     }
-    const current = dragged;
     setDragged(undefined);
     setDragTarget(undefined);
     try {
@@ -1774,7 +1784,7 @@ function RoomsView({
           <div className="mt-3 space-y-2">
             {unscheduled.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">Everything accepted is scheduled.</p> : unscheduled.map((submission) => {
               const active = dragged?.kind === "submission" && dragged.id === submission.id;
-              return <button key={submission.id} draggable onDragStart={(event) => { event.dataTransfer.setData("text/plain", `submission:${submission.id}`); setDragged({ kind: "submission", id: submission.id }); }} onClick={() => setDragged({ kind: "submission", id: submission.id })} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setDragged({ kind: "submission", id: submission.id }); } }} className={`w-full rounded-md p-3 text-left transition-colors ${active ? "bg-primary text-primary-foreground" : "bg-card hover:bg-accent"}`}><span className="block text-sm font-semibold">{submission.title ?? "Untitled accepted session"}</span><span className="mt-1 block text-xs opacity-75">{submission.speakerIds.length ? "Speaker attached" : "No speaker assigned"}</span></button>;
+              return <button key={submission.id} draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", `submission:${submission.id}`); setDragged({ kind: "submission", id: submission.id }); }} onDragEnd={() => { setDragged(undefined); setDragTarget(undefined); }} onClick={() => setDragged({ kind: "submission", id: submission.id })} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setDragged({ kind: "submission", id: submission.id }); } }} className={`w-full rounded-md p-3 text-left transition-colors ${active ? "bg-primary text-primary-foreground" : "bg-card hover:bg-accent"}`}><span className="block text-sm font-semibold">{submission.title ?? "Untitled accepted session"}</span><span className="mt-1 block text-xs opacity-75">{submission.speakerIds.length ? "Speaker attached" : "No speaker assigned"}</span></button>;
             })}
           </div>
         </aside>
@@ -1851,12 +1861,11 @@ function RoomsView({
                         }}
                         onDrop={(dropEvent) => {
                           dropEvent.preventDefault();
-                          const payload = dropEvent.dataTransfer.getData("text/plain");
-                          if (payload) {
-                            const [kind, id] = payload.split(":");
-                            if ((kind === "session" || kind === "submission") && id) setDragged({ kind, id });
-                          }
-                          void place(room.id, slot).catch(() => undefined);
+                          const current = parseAgendaDragItem(
+                            dropEvent.dataTransfer.getData("text/plain"),
+                          );
+                          if (current)
+                            void place(room.id, slot, current).catch(() => undefined);
                         }}
                         onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); void place(room.id, slot).catch(() => undefined); } if (event.key === "Escape") { setDragged(undefined); setDragTarget(undefined); } }}
                       />
@@ -1897,7 +1906,7 @@ function RoomsView({
                   }}
                   onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setDragged({ kind: "session", id: session.id }); } if (event.key === "Escape") setDragged(undefined); }}
                   tabIndex={0}
-                  className={`group relative z-10 m-1 cursor-grab overflow-hidden rounded-md bg-primary/10 py-1.5 pl-2 pr-7 text-xs text-foreground transition-colors hover:bg-primary/15 active:cursor-grabbing ${isDragging ? "opacity-50" : ""}`}
+                  className={`group relative z-10 m-1 cursor-grab overflow-hidden rounded-md bg-primary/10 py-1.5 pl-2 pr-7 text-xs text-foreground transition-colors hover:bg-primary/15 active:cursor-grabbing ${dragged ? "pointer-events-none" : ""} ${isDragging ? "opacity-50" : ""}`}
                   style={{
                     gridColumn: roomIndex + 2,
                     gridRow: `${slotIndex + 2} / span ${durationRows}`,

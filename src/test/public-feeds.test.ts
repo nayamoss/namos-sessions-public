@@ -11,11 +11,14 @@ describe("public feeds", () => {
     const json = renderPublicFeed({ format: "json", projection });
     const xml = renderPublicFeed({ format: "xml", projection });
     const html = renderPublicFeed({ format: "html", projection });
+    const basicHtml = renderPublicFeed({ format: "basic_html", projection });
     const ical = renderPublicFeed({ format: "ical", projection });
     expect(json.contentType).toContain("application/json");
     expect(JSON.parse(json.body).sessions[0].title).toBe("Reliable & safe");
     expect(xml.body).toContain("Reliable &amp; safe");
     expect(html.body).toContain("Namos &lt;Conf&gt;");
+    expect(html.body).toContain("prefers-color-scheme:dark");
+    expect(basicHtml.body).not.toContain("<style>");
     expect(ical.body).toContain("BEGIN:VCALENDAR");
     expect(ical.body).toContain("SUMMARY:Reliable & safe");
   });

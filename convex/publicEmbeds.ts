@@ -504,12 +504,13 @@ export const get = query({
   handler: async (ctx, args) => {
     const event = await ctx.db.query("events").withIndex("by_slug", (q) => q.eq("slug", args.eventSlug)).first();
     if (!event || event.status !== "published") return null;
-    const [agenda, rooms, tracks, submissions, speakers] = await Promise.all([
+    const [agenda, rooms, tracks, submissions, speakers, recordings] = await Promise.all([
       ctx.db.query("agenda_items").withIndex("by_event", (q) => q.eq("eventId", event._id)).collect(),
       ctx.db.query("rooms").withIndex("by_event", (q) => q.eq("eventId", event._id)).collect(),
       ctx.db.query("tracks").withIndex("by_event", (q) => q.eq("eventId", event._id)).collect(),
       ctx.db.query("submissions").withIndex("by_event", (q) => q.eq("eventId", event._id)).collect(),
       ctx.db.query("speakers").withIndex("by_event", (q) => q.eq("eventId", event._id)).collect(),
+      ctx.db.query("session_recordings").withIndex("by_event", (q) => q.eq("eventId", event._id)).collect(),
     ]);
 
     const publishedAgenda = agenda
@@ -550,6 +551,11 @@ export const get = query({
     }));
 
     const logoUrl = await safeHeadshotUrl(ctx, event.logoStorageKey);
+    const publishedRecordingsBySession = new Map(
+      recordings
+        .filter((recording) => recording.role === "active" && recording.publicationStatus === "published" && recording.availability === "ready")
+        .map((recording) => [recording.agendaItemId, recording]),
+    );
     const lastUpdatedAt = Math.max(
       event.programPublishedAt ?? 0,
       event.updatedAt,
@@ -568,11 +574,18 @@ export const get = query({
       ...(logoUrl ? { eventLogoUrl: logoUrl } : {}),
       roomNames: [...new Set(publishedAgenda.map((item) => roomNames.get(item.roomId) ?? "TBA"))].sort((left, right) => left.localeCompare(right)),
       trackNames: [...new Set(publishedAgenda.map((item) => item.trackId ? trackNames.get(item.trackId) ?? "Uncategorized" : "Uncategorized"))].sort((left, right) => left.localeCompare(right)),
-      agenda: publishedAgenda.map((item) => {
+      agenda: await Promise.all(publishedAgenda.map(async (item) => {
         const linkedSubmission = item.submissionId ? submissionsById.get(item.submissionId) : undefined;
         const description = linkedSubmission?.status === "accepted"
           ? publicDescription(linkedSubmission.answers)
           : undefined;
+        const recording = publishedRecordingsBySession.get(item._id);
+        const asset = recording?.assetId ? await ctx.db.get(recording.assetId) : undefined;
+        const recordingUrl = !recording
+          ? undefined
+          : recording.sourceType !== "hosted"
+            ? (recording.storageId ? await ctx.storage.getUrl(recording.storageId) : asset ? await ctx.storage.getUrl(asset.storageId) : undefined)
+            : safePublicUrl(recording.hostedUrl);
         return {
           sessionKey: publicSessionKey(String(item._id)),
           title: item.title,
@@ -582,9 +595,10 @@ export const get = query({
           ...(item.trackId ? { trackName: trackNames.get(item.trackId) ?? "Uncategorized" } : {}),
           ...(description ? { description } : {}),
           ...(item.locationDetails ? { locationDetails: item.locationDetails } : {}),
+          ...(recording && recordingUrl ? { recording: { url: recordingUrl, sourceType: recording.sourceType, provider: recording.provider } } : {}),
           speakers: publicAgendaSpeakers(item.speakerIds, linkedSubmission, publicSpeakersById),
         };
-      }),
+      })),
       // publicSpeakers is already in surname/first-name, numeric-aware order — sorted
       // upstream on the source records before building this list (see acceptedSpeakers
       // below). Re-sorting the projected "First Last" strings here instead reads like

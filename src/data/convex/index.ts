@@ -16,6 +16,7 @@ export const convexFunction: Record<
   string
 > = {
   "analytics.summary": "analytics:summary",
+  "agentUsage.stats": "agentUsage:stats",
   "crm.sources.list": "crmSources:list",
   "crm.sources.connect": "crmSourceActions:connect",
   "crm.sources.sync": "crmSourceActions:syncNow",
@@ -103,6 +104,8 @@ export const convexFunction: Record<
   "evaluations.assignments.assign": "evaluations:assign",
   "evaluations.assignments.assignByFilter": "evaluations:assignByFilter",
   "evaluations.myQueue": "evaluations:myQueue",
+  "evaluations.assessment.get": "aiAssessments:get",
+  "evaluations.assessment.request": "aiAssessments:request",
   "evaluations.reviewerProgress": "evaluations:reviewerProgress",
   "evaluations.sendReviewerReminders": "reviewerRemindersActions:send",
   "agenda.list": "agenda:list",
@@ -112,6 +115,17 @@ export const convexFunction: Record<
   "agenda.save": "agenda:save",
   "agenda.remove": "agenda:remove",
   "agenda.publishSchedule": "agenda:publishSchedule",
+  "recordings.list": "recordings:list",
+  "recordings.get": "recordings:get",
+  "recordings.listAssets": "recordings:listAssets",
+  "recordings.attachHosted": "recordings:attachHosted",
+  "recordings.attachUpload": "recordings:attachUpload",
+  "recordings.attachAsset": "recordings:attachAsset",
+  "recordings.publish": "recordings:publish",
+  "recordings.unpublish": "recordings:unpublish",
+  "recordings.detach": "recordings:detach",
+  "recordings.bulkPublish": "recordings:bulkPublish",
+  "recordings.bulkUnpublish": "recordings:bulkUnpublish",
   "tasks.list": "tasks:list",
   "tasks.get": "tasks:get",
   "tasks.create": "tasks:create",
@@ -127,6 +141,11 @@ export const convexFunction: Record<
   "taskTemplates.applyToSubmission": "taskTemplates:applyToSubmission",
   "taskTemplates.applyToSpeaker": "taskTemplates:applyToSpeaker",
   "comms.list": "comms:list",
+  "comms.inbox.list": "commsInbox:list",
+  "comms.inbox.link": "commsInbox:link",
+  "comms.inboundDomains.list": "commsInbox:listDomains",
+  "comms.inboundDomains.save": "commsInbox:saveDomain",
+  "comms.inboundDomains.verify": "commsInboxActions:verifyDomain",
   "comms.listDrafts": "comms:listDrafts",
   "availability.list": "availability:list",
   "availability.upsert": "availability:upsert",
@@ -139,6 +158,10 @@ export const convexFunction: Record<
   "publicEmbeds.save": "publicEmbeds:save",
   "publicEmbeds.duplicate": "publicEmbeds:duplicate",
   "publicEmbeds.remove": "publicEmbeds:remove",
+  "publicFeeds.list": "publicFeeds:list",
+  "publicFeeds.save": "publicFeeds:save",
+  "publicFeeds.duplicate": "publicFeeds:duplicate",
+  "publicFeeds.remove": "publicFeeds:remove",
   "publicForms.listOpen": "publicForms:listOpen",
   "publicForms.get": "publicForms:get",
   "portalForms.get": "portalFormResponses:get",
@@ -282,6 +305,7 @@ const convexActions = new Set<WriteOperation>([
   "agentProviderSettings.saveByok",
   "agentProviderSettings.disconnectByok",
   "evaluations.sendReviewerReminders",
+  "evaluations.assessment.request",
   "apiKeys.generate",
   "comms.sendDecision",
   "comms.sendReminder",
@@ -376,8 +400,19 @@ export function normalize(
   )
     return row(value);
   if (operation === "agentProviderSettings.status" || operation === "slackIntegrations.status") return value;
+  if (operation === "recordings.list") return documentRows(value).map((document) => ({
+    ...row(document),
+    ...(document.recording && typeof document.recording === "object" ? { recording: document.recording } : {}),
+    ...(document.replacement && typeof document.replacement === "object" ? { replacement: document.replacement } : {}),
+  }));
+  if (operation === "recordings.get") {
+    const result = value as { session: unknown; recordings: unknown; history?: unknown };
+    return { session: row(result.session), recordings: documentRows(result.recordings).map(row), ...(result.history ? { history: documentRows(result.history).map(row) } : {}) };
+  }
+  if (operation === "recordings.listAssets") return documentRows(value).map(row);
   if (operation === "publicEmbeds.getAdmin" || operation === "tasks.get") return row(value);
   if (operation === "publicEmbeds.list") return documentRows(value).map(row);
+  if (operation === "evaluations.assessment.get") return row(value);
   if (
     operation === "events.rooms.list" ||
     operation === "events.tracks.list" ||
@@ -399,6 +434,9 @@ export function normalize(
     operation === "apiKeys.auditLog" ||
     operation === "portalResources.listAdmin" ||
     operation === "portalResources.listPublished"
+    || operation === "comms.inbox.list"
+    || operation === "comms.inboundDomains.list"
+    || operation === "publicFeeds.list"
   )
     return documentRows(value).map(row);
   if (

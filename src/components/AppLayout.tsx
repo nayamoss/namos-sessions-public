@@ -13,6 +13,7 @@ import {
   Megaphone,
   Mail,
   PanelLeft,
+  PanelRight,
   Search,
   Settings2,
   Users,
@@ -21,8 +22,14 @@ import {
   Handshake,
   Bot,
   BarChart3,
+  Video,
+  Code2,
+  Rss,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { VoiceOrb } from "@/components/voice/VoiceOrb";
+import { VoiceSessionPanel } from "@/components/voice/VoiceSessionPanel";
 import { NotificationBell } from "@/components/NotificationBell";
 import { AccountMenu } from "@/components/AccountMenu";
 import { SidebarProvider, useSidebarState } from "@/components/SidebarContext";
@@ -70,9 +77,10 @@ const navSections: DashboardNavSection[] = [
   {
     label: "Program",
     items: [
-      { to: "/program/speakers", label: "Speakers", icon: Users },
-      { to: "/program/contacts", label: "Contacts", icon: ContactRound },
+      { to: "/program/speakers", label: "Speaker CRM", icon: ContactRound },
+      { to: "/program/event-speakers", label: "Event speakers", icon: Users },
       { to: "/program/agenda", label: "Schedule", icon: CalendarDays },
+      { to: "/program/recordings", label: "Recordings", icon: Video },
       { to: "/program/sponsors", label: "Sponsors", icon: Handshake },
       { to: "/program/communications", label: "Communications", icon: Mail },
       { to: "/program/availability", label: "Availability", icon: CalendarClock },
@@ -93,6 +101,15 @@ const navSections: DashboardNavSection[] = [
     items: [
       { to: "/analytics", label: "Analytics", icon: BarChart3 },
       { to: "/program/agent", label: "Operations Agent", icon: Bot },
+    ],
+  },
+  // Embeds/Feeds are content the public site pulls from, not event settings —
+  // they get their own real nav spot rather than living inside the Settings modal.
+  {
+    label: "Content",
+    items: [
+      { to: "/cms/embeds", label: "Embeds", icon: Code2 },
+      { to: "/cms/feeds", label: "Feeds", icon: Rss },
     ],
   },
   // Configuration is a focused settings hub, not another long sidebar section.
@@ -212,7 +229,7 @@ function Navigation({
                   active ? "bg-muted text-foreground" : "text-foreground/75 hover:bg-muted hover:text-foreground",
                 );
                 if (isConfigure && settingsModal) return (
-                  <button key={item.to} type="button" title={collapsed ? item.label : undefined} aria-label={item.label} onClick={() => { settingsModal.openSettings(); onNavigate?.(); }} className={className}>
+                  <button key={item.to} type="button" title={collapsed ? item.label : undefined} aria-label={item.label} onClick={() => { settingsModal.openSettings("event"); onNavigate?.(); }} className={className}>
                     <item.icon className="h-4 w-4 shrink-0" />
                     {!collapsed && <span className="truncate">{item.label}</span>}
                   </button>
@@ -324,7 +341,7 @@ function DesktopSidebar({
     <aside
       className={cn(
         cardSurfaceClasses("default", "fixed left-2.5 top-2.5 z-30 hidden h-[calc(100dvh-20px)] flex-col lg:flex"),
-        collapsed ? "w-14" : "w-56",
+        collapsed ? "w-14" : "w-48",
       )}
     >
       <div className="flex h-14 shrink-0 items-center px-3">
@@ -390,6 +407,27 @@ function DashboardLayoutInner({
   contentVariant?: "default" | "conversation";
 }) {
   const { collapsed } = useSidebarState();
+  // Same-as-left-sidebar pattern (auto-collapsed by default, remembered across visits), but this
+  // panel gets its own key — it's a per-page utility rail, not the primary nav.
+  const [utilityCollapsed, setUtilityCollapsed] = useState(() => {
+    try {
+      const stored = localStorage.getItem("sessionboard.utilityCollapsed");
+      return stored === null ? false : stored === "true";
+    } catch {
+      return false;
+    }
+  });
+  const toggleUtilityCollapsed = useCallback(() => {
+    setUtilityCollapsed((current) => {
+      const next = !current;
+      try {
+        localStorage.setItem("sessionboard.utilityCollapsed", String(next));
+      } catch {
+        // The layout remains usable when storage is unavailable.
+      }
+      return next;
+    });
+  }, []);
 
   return (
     <div className="mobile-safe-shell h-dvh overflow-hidden bg-background text-foreground lg:p-0">
@@ -399,7 +437,7 @@ function DashboardLayoutInner({
         className={cn(
           "flex h-full min-w-0 flex-col overflow-hidden",
           collapsed ? "lg:pl-[4.75rem]" : "lg:pl-[15.25rem]",
-          utility && "lg:pr-[23.75rem] xl:pr-[25.75rem]",
+          utility && !utilityCollapsed && "lg:pr-[23.75rem] xl:pr-[25.75rem]",
         )}
       >
         <header className="flex h-14 shrink-0 items-center pl-14 pr-4 md:pl-16 md:pr-4 lg:px-3">
@@ -408,7 +446,7 @@ function DashboardLayoutInner({
         <div className="flex min-h-0 min-w-0 flex-1 px-3 pb-3 md:px-4 md:pb-4">
           <PageContentSurface variant={contentVariant} className="min-w-0">
             <div className={cn("min-w-0 flex-1", contentVariant === "conversation" ? "flex min-h-0 overflow-hidden" : "p-4 md:p-5 lg:overflow-y-auto")}>
-              {bodyToolbar && (
+              {bodyToolbar && contentVariant !== "conversation" && (
                 <nav aria-label="Workspace utilities" className="mb-4 flex items-center justify-end gap-2">
                   {bodyToolbar}
                 </nav>
@@ -424,11 +462,23 @@ function DashboardLayoutInner({
         </div>
       </main>
       {utility && (
+        <button
+          type="button"
+          onClick={toggleUtilityCollapsed}
+          aria-label={utilityCollapsed ? "Show page utilities" : "Hide page utilities"}
+          aria-pressed={!utilityCollapsed}
+          title={utilityCollapsed ? "Show panel" : "Hide panel"}
+          className="fixed right-2.5 top-2.5 z-30 hidden h-9 w-9 items-center justify-center rounded-md bg-muted text-muted-foreground hover:text-foreground lg:flex"
+        >
+          <PanelRight className="h-4 w-4" />
+        </button>
+      )}
+      {utility && !utilityCollapsed && (
         <aside
           aria-label="Page utilities"
           className={cardSurfaceClasses(
             "default",
-            "fixed right-2.5 top-2.5 z-30 hidden h-[calc(100dvh-20px)] w-[22rem] flex-col overflow-y-auto p-4 sm:p-6 lg:flex xl:w-[24rem]",
+            "fixed right-2.5 top-14 z-30 hidden h-[calc(100dvh-64px)] w-[22rem] flex-col overflow-y-auto p-4 sm:p-6 lg:flex xl:w-[24rem]",
           )}
         >
           {utility}
@@ -485,6 +535,7 @@ export function AppLayout({
   const repo = useContext(RepoContext);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [agentAccess, setAgentAccess] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(false);
   useEffect(() => {
     let active = true;
     setAgentAccess(false);
@@ -494,7 +545,7 @@ export function AppLayout({
   }, [current, repo]);
   const openCommandPalette = useCallback(() => setCommandPaletteOpen(true), []);
   const managedCrm = selectedBackend() === "convex";
-  const visibleNavSections = current ? navSections.map(section => ({ ...section, items: section.items.filter(item => (item.to !== "/program/sponsors" || current.sponsorsEnabled) && (item.to !== "/program/agent" || agentAccess) && (item.to !== "/program/contacts" || managedCrm)).map(item => ({ ...item, to: `/events/${current.slug}${item.to}` })) })) : repo ? [] : navSections;
+  const visibleNavSections = current ? navSections.map(section => ({ ...section, items: section.items.filter(item => (item.to !== "/program/sponsors" || current.sponsorsEnabled) && (item.to !== "/program/agent" || agentAccess) && (item.to !== "/program/speakers" || managedCrm)).map(item => ({ ...item, to: `/events/${current.slug}${item.to}` })) })) : repo ? [] : navSections;
 
   return (
     <SettingsModalProvider>
@@ -527,6 +578,23 @@ export function AppLayout({
       <GlobalKeyboardShortcuts onOpenCommandPalette={openCommandPalette} />
       <TourOverlay />
     </DashboardLayout>
+    {current && agentAccess && (
+      <button
+        type="button"
+        onClick={() => setVoiceOpen((open) => !open)}
+        aria-label={voiceOpen ? "Close voice agent" : "Open voice agent"}
+        aria-pressed={voiceOpen}
+        title={voiceOpen ? "Close voice agent" : "Voice agent"}
+        className="fixed bottom-4 right-2.5 z-50 hidden h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-card shadow-sm ring-1 ring-inset ring-black/5 lg:flex"
+      >
+        {voiceOpen ? <X className="h-5 w-5 text-foreground" /> : <VoiceOrb state="idle" className="h-full w-full" />}
+      </button>
+    )}
+    {current && voiceOpen && (
+      <div className="fixed bottom-20 right-2.5 z-40 hidden w-[20rem] lg:block">
+        <VoiceSessionPanel eventId={current.id} onClose={() => setVoiceOpen(false)} />
+      </div>
+    )}
     </SettingsModalProvider>
   );
 }

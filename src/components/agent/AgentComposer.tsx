@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
-export function AgentComposer({ value, onChange, onSubmit, mode, disabled, error, className, controls }: { value: string; onChange(value: string): void; onSubmit(): void; mode: "new" | "reply"; disabled: boolean; error?: string; className?: string; controls?: ReactNode }) {
+export function AgentComposer({ value, onChange, onSubmit, mode, disabled, readOnly = false, error, className, controls }: { value: string; onChange(value: string): void; onSubmit(): void; mode: "new" | "reply"; disabled: boolean; readOnly?: boolean; error?: string; className?: string; controls?: ReactNode }) {
   const invalid = !value.trim() || value.length > 4000;
   return <section className={cn("shrink-0 bg-card p-3", className)}>
     <Card variant="muted" className="overflow-hidden rounded-xl">
@@ -45,7 +45,7 @@ export function AgentComposer({ value, onChange, onSubmit, mode, disabled, error
               onClick={onSubmit}
               disabled={disabled || invalid}
               aria-label={mode === "reply" ? "Send answer" : "Send request"}
-              title={mode === "reply" ? "Send answer" : "Send request"}
+              title={readOnly ? "This is a read-only demo." : mode === "reply" ? "Send answer" : "Send request"}
               className="compact-hit-target h-8 w-8 rounded-full bg-foreground text-background hover:bg-foreground/85 disabled:opacity-25"
             >
               <ArrowUp className="h-4 w-4" />

@@ -36,6 +36,7 @@ wrangler.security-preview.jsonc
 .playwright-cli/
 output/
 test-artifacts/
+.preview-runtime.json
 
 # Isolated Codex agent worktrees (kept separate from .claude/worktrees, which the Claude Code harness manages)
 .worktrees/

@@ -27,6 +27,7 @@ import type {
   OnboardingTask,
   Speaker,
   Submission,
+  RecordingManagerRow,
 } from "@/data/types";
 import {
   filterReadinessGroupsByDay,
@@ -42,6 +43,7 @@ const categoryLabels: Record<ReadinessCategory, string> = {
   onboarding_tasks: "Tasks",
   proposal_decisions: "Abstracts",
   comms_delivery: "Communications",
+  recording_coverage: "Recordings",
 };
 type ReadinessData = {
   event?: Event;
@@ -51,6 +53,7 @@ type ReadinessData = {
   submissions: Submission[];
   tasks: OnboardingTask[];
   comms: Comm[];
+  recordings: RecordingManagerRow[];
   errors: Partial<Record<ReadinessCategory, string>>;
 };
 const emptyData: ReadinessData = {
@@ -60,6 +63,7 @@ const emptyData: ReadinessData = {
   submissions: [],
   tasks: [],
   comms: [],
+  recordings: [],
   errors: {},
 };
 type ReadinessRow = {
@@ -92,6 +96,7 @@ export default function Readiness() {
       repo.submissions.list(scope),
       repo.tasks.list(scope),
       repo.comms.list(scope),
+      repo.recordings.list(scope),
     ]);
     const value = <T,>(index: number): T[] =>
       results[index].status === "fulfilled"
@@ -110,6 +115,7 @@ export default function Readiness() {
       errors.onboarding_tasks = message(results[4].reason);
     if (results[5].status === "rejected")
       errors.comms_delivery = message(results[5].reason);
+    if (results[6].status === "rejected") errors.recording_coverage = message(results[6].reason);
     setData({
       event,
       agenda: value<AgendaItem>(0),
@@ -118,6 +124,7 @@ export default function Readiness() {
       submissions: value<Submission>(3),
       tasks: value<OnboardingTask>(4),
       comms: value<Comm>(5),
+      recordings: value<RecordingManagerRow>(6),
       errors,
     });
     setLoading(false);
@@ -128,7 +135,7 @@ export default function Readiness() {
   const groups = useMemo(
     () =>
       data.event
-        ? projectReadinessGroups({
+        ? [...projectReadinessGroups({
             event: data.event,
             agenda: data.agenda,
             agendaConflicts: data.conflicts,
@@ -143,7 +150,7 @@ export default function Readiness() {
             tasks: data.tasks,
             comms: data.comms,
             now: Date.now(),
-          })
+          }), { category: "recording_coverage" as const, label: "Recording coverage", items: data.recordings.filter((recording) => recording.endTime < Date.now() && (!recording.recording || recording.recording.availability === "failed" || recording.recording.availability === "unavailable")).map((recording) => ({ id: recording.id, title: recording.recording?.availability === "failed" ? `Failed recording: ${recording.title}` : recording.recording?.availability === "unavailable" ? `Unavailable recording: ${recording.title}` : `Recording missing: ${recording.title}`, detail: "Open the recordings manager to attach or replace it.", to: `/events/${data.event.slug}/program/recordings?session=${encodeURIComponent(recording.id)}&filter=${recording.recording ? "attention" : "missing"}` })) }]
         : (Object.keys(categoryLabels) as ReadinessCategory[]).map((category) => ({
             category,
             label: categoryLabels[category],

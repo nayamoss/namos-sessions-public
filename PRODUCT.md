@@ -24,7 +24,7 @@ Calm, precise, operational.
 
 ## Anti-references
 
-- Do not copy Sessionboard's border-heavy, shadow-heavy visual treatment or its dull enterprise-blue surfaces; Takumi's electric blue is a focused interaction color, not a page wash.
+- Do not copy Sessionboard's border-heavy, shadow-heavy visual treatment or its dull enterprise-blue surfaces; Namos blue is a focused interaction color, not a page wash.
 - Do not turn operational pages into oversized metric dashboards or decorative card grids.
 - Do not expose actions that are not connected to a real, authorized, persistent workflow.
 - Do not trade information density for ornamental whitespace or novelty controls.

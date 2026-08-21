@@ -1,7 +1,5 @@
-// Matches the real Takumi product's own Clerk styling (app.takumihq.site/sign-in): a real white
-// card with a soft shadow — not fully transparent, unlike the treatment used on Takumi's
-// internal chat tool — electric-blue accent button, and generous rounding. This is the one screen in
-// the app that intentionally carries a shadow; it's the front door.
+// A real white card with a soft shadow — not fully transparent — and generous rounding. This is
+// the one screen in the app that intentionally carries a shadow; it's the front door.
 export const clerkAppearance = {
   variables: {
     colorPrimary: "#0066FF",
@@ -21,6 +19,15 @@ export const clerkAppearance = {
     footerActionLink: "text-[#0066FF] hover:text-[#005CE6]",
   },
 };
+
+export function clerkAppearanceForTheme(resolvedTheme?: string) {
+  if (resolvedTheme !== "dark") return clerkAppearance;
+  return {
+    ...clerkAppearance,
+    variables: { ...clerkAppearance.variables, colorBackground: "#151922", colorText: "#F4F7FB", colorTextSecondary: "#AAB4C5", colorInputBackground: "#202633", colorInputText: "#F4F7FB" },
+    elements: { ...clerkAppearance.elements, card: "shadow-none rounded-xl border-0 bg-[#151922]", socialButtonsBlockButton: "shadow-none border-0 bg-[#202633] hover:bg-[#293142]", formFieldInput: "shadow-none border-0 bg-[#202633]" },
+  };
+}
 
 // Clerk's default English strings interpolate the Clerk *application's* dashboard display name
 // ("Sign in to {{applicationName}}") — that name can only be renamed from the Clerk dashboard,

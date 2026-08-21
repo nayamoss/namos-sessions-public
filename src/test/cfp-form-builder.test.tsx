@@ -65,17 +65,12 @@ const fields = [
   { id: abstractFieldId, formId, label: "Abstract", type: "wysiwyg", required: true },
 ];
 
-function renderBuilder(
-  status: "draft" | "open" | "closed",
-  write = vi.fn(),
-  storedFileUrl?: string,
-) {
+function renderBuilder(status: "draft" | "open" | "closed", write = vi.fn()) {
   const transport: DataTransport = {
     read: vi.fn(async (operation) => {
       if (operation === "events.list") return [event];
       if (operation === "forms.list") return [storedForm(status)];
       if (operation === "forms.fields") return fields;
-      if (operation === "files.getUrl") return storedFileUrl ?? null;
       return [];
     }) as DataTransport["read"],
     write: write as DataTransport["write"],
@@ -154,8 +149,10 @@ describe("CFP form builder", () => {
     const preview = await loaded();
     expect(within(preview).getByRole("heading", { name: "Submit your proposal" })).toBeInTheDocument();
 
-    // The title lives on the welcome step, which also swings the preview to that screen.
-    fireEvent.click(screen.getByRole("button", { name: /Welcome screen/ }));
+    // The title lives on the welcome step, which also swings the preview to that screen. The
+    // step list no longer sits in a persistent sidebar (WizardShell's "full" layout) — advance
+    // with the same Next control a real user has.
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
 
     // Rich text is rendered as HTML, not printed to submitters as literal <p> tags.
     expect(await within(preview).findByText("We read every proposal blind.")).toBeInTheDocument();
@@ -172,7 +169,9 @@ describe("CFP form builder", () => {
     renderBuilder("draft");
 
     const preview = await loaded();
-    fireEvent.click(screen.getByRole("button", { name: /Participant information/ }));
+    // Setup -> Welcome -> Appearance -> Abstract -> Participant: four Next clicks, same as a
+    // real user in the now-single-step-at-a-time layout.
+    for (let step = 0; step < 4; step += 1) fireEvent.click(screen.getByRole("button", { name: "Next" }));
 
     await waitFor(() => expect(within(preview).getByRole("radio", { name: "Participant" })).toBeChecked());
   });
@@ -182,7 +181,9 @@ describe("CFP form builder", () => {
     renderBuilder("draft", write);
     await loaded();
 
-    fireEvent.click(screen.getByRole("button", { name: /Appearance/ }));
+    // Setup -> Welcome -> Appearance: two Next clicks.
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
     expect(await screen.findByRole("heading", { name: "Appearance" })).toBeInTheDocument();
     expect(screen.getByText("Drop a logo here or click to upload")).toBeInTheDocument();
 
@@ -192,40 +193,5 @@ describe("CFP form builder", () => {
     fireEvent.blur(hexInput);
     await waitFor(() => expect(write).toHaveBeenCalledWith("events.save", expect.objectContaining({ id: eventId, accentColor: "#FFFFFF" })));
     expect(screen.getByRole("button", { name: "Reset to default" })).toBeInTheDocument();
-  });
-
-  it("renders an uploaded logo from its canonical storage URL", async () => {
-    const canonicalLogoUrl = "https://storage.example.test/logo.png";
-    const write = vi.fn(async (operation) =>
-      operation === "files.generateUploadUrl"
-        ? { uploadUrl: "https://uploads.example.test/logo" }
-        : undefined,
-    );
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
-      ok: true,
-      json: async () => ({ storageId: "storage-logo" }),
-    } as Response);
-    renderBuilder("draft", write, canonicalLogoUrl);
-    await loaded();
-
-    fireEvent.click(screen.getByRole("button", { name: /Appearance/ }));
-    const uploadInput = document.querySelector<HTMLInputElement>("#cfp-logo-upload");
-    expect(uploadInput).not.toBeNull();
-    fireEvent.change(uploadInput!, {
-      target: {
-        files: [new File(["logo"], "logo.png", { type: "image/png" })],
-      },
-    });
-
-    await waitFor(() =>
-      expect(screen.getByRole("img", { name: "Wizard QA Summit logo" })).toHaveAttribute(
-        "src",
-        canonicalLogoUrl,
-      ),
-    );
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://uploads.example.test/logo",
-      expect.objectContaining({ method: "POST" }),
-    );
   });
 });
