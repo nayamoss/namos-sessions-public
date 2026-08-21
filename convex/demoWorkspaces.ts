@@ -33,6 +33,15 @@ function publicWorkspace(workspace: {
 
 async function deleteDemoFixture(ctx: MutationCtx, eventId: Id<"events">, organizationId: Id<"organizations">, organizerUserId: string) {
   const speakers = await ctx.db.query("speakers").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect();
+  const memberships = await ctx.db.query("crm_event_contacts").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect();
+  const contactIds = [...new Set(memberships.map((row) => row.contactId))];
+  for (const membership of memberships) await ctx.db.delete(membership._id);
+  for (const contactId of contactIds) {
+    const histories = await ctx.db.query("crm_stage_history").withIndex("by_contact_createdAt", (q) => q.eq("contactId", contactId)).collect();
+    for (const history of histories) await ctx.db.delete(history._id);
+    const remaining = await ctx.db.query("crm_event_contacts").withIndex("by_contact", (q) => q.eq("contactId", contactId)).first();
+    if (!remaining) await ctx.db.delete(contactId);
+  }
   const forms = await ctx.db.query("submission_forms").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect();
   const documents = (await Promise.all(speakers.map((speaker) => ctx.db.query("speaker_documents").withIndex("by_speaker", (q) => q.eq("speakerId", speaker._id)).collect()))).flat();
   for (const document of documents) {
@@ -152,7 +161,7 @@ async function seedDemoFixture(ctx: MutationCtx, input: {
   });
   const secondSpeakerId = await ctx.db.insert("speakers", {
     eventId,
-    email: `casey+${eventId}@demo.your-project.example`,
+    email: `casey+${eventId}@demo.namos-sessions.xyz`,
     firstName: "Casey",
     lastName: "Demo",
     bio: "A second seeded speaker for the Schedule Studio room grid.",

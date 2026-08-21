@@ -81,6 +81,7 @@ describe("reviewer queue (convex)", () => {
 
     expect(rows).toEqual([{
       assignmentId: "assignment-1",
+      evaluationPlanId: "plan-1",
       eventId: "event-1",
       submissionId: "submission-1",
       submissionTitle: "Reliable systems",
@@ -217,6 +218,7 @@ describe("stripIdentifyingAnswers", () => {
 // ---------------------------------------------------------------------------
 const queueRow: ReviewerQueueRow = {
   assignmentId: "assignment-1", eventId: "event-1" as EventId, submissionId: "submission-1" as SubmissionId,
+  evaluationPlanId: "plan-1",
   submissionTitle: "Reliable systems", submissionAnswers: { abstract: "Why retries are hard.", track: "Engineering" },
   speakerNames: ["Ada Lovelace"], round: 2, planName: "Program committee", scoringScaleMax: 10, anonymized: false,
 };
@@ -224,6 +226,7 @@ const queueRow: ReviewerQueueRow = {
 // What the server actually sends for a blinded plan: no speakerNames key at all.
 const blindedQueueRow: ReviewerQueueRow = {
   assignmentId: "assignment-1", eventId: "event-1" as EventId, submissionId: "submission-1" as SubmissionId,
+  evaluationPlanId: "plan-1",
   submissionTitle: "Reliable systems", submissionAnswers: { abstract: "Why retries are hard.", track: "Engineering" },
   round: 2, planName: "Program committee", scoringScaleMax: 10, anonymized: true,
 };

@@ -181,7 +181,7 @@ export default defineSchema({
     scheduleStartTime: v.optional(v.string()),
     scheduleEndTime: v.optional(v.string()),
     theme: v.optional(v.string()), logoStorageKey: v.optional(v.string()), accentColor: v.optional(v.string()), backgroundStorageKey: v.optional(v.string()), industry: v.optional(v.string()),
-    readinessCategories: v.optional(v.array(v.union(v.literal("agenda_conflicts"), v.literal("speaker_confirmations"), v.literal("onboarding_tasks"), v.literal("proposal_decisions"), v.literal("comms_delivery")))),
+    readinessCategories: v.optional(v.array(v.union(v.literal("agenda_conflicts"), v.literal("speaker_confirmations"), v.literal("onboarding_tasks"), v.literal("proposal_decisions"), v.literal("comms_delivery"), v.literal("recording_coverage")))),
     exhibitorsEnabled: v.boolean(), sponsorsEnabled: v.boolean(), defaultOnboardingTemplateId: v.optional(v.id("task_templates")),
     // The Clerk user whose subscription pays for Namos-managed AI. Optional for existing
     // events; an organization owner assigns it once before managed AI can be enabled.
@@ -208,6 +208,9 @@ export default defineSchema({
     absoluteExpiresAt: v.number(),
   })
     .index("by_workspaceId", ["workspaceId"])
+    .index("by_organizerUserId", ["organizerUserId"])
+    .index("by_reviewerUserId", ["reviewerUserId"])
+    .index("by_speakerUserId", ["speakerUserId"])
     .index("by_event", ["eventId"])
     .index("by_expiresAt", ["expiresAt"]),
   // Captured outbound messages for demo tenants. These rows are the proof artifact; demo
@@ -493,7 +496,7 @@ export default defineSchema({
     name: v.string(),
     rounds: v.number(),
     scoringScaleMax: v.union(v.literal(5), v.literal(10)),
-    // The evaluator UI deliberately leaves this as a visible stub. No AI score is generated.
+    // AI assistance remains opt-in per plan. Its output is non-binding reviewer context.
     aiAssistEnabled: v.boolean(),
     // Blind review. Absent or false === today's behaviour. When true, evaluations:myQueue strips
     // speaker identity from every row of every round under this plan before it leaves the server.
@@ -747,11 +750,13 @@ export default defineSchema({
     eventId: v.id("events"),
     embedId: v.id("embeds"),
     name: v.string(),
-    format: v.union(v.literal("html"), v.literal("json"), v.literal("xml"), v.literal("ical")),
+    format: v.union(v.literal("html"), v.literal("basic_html"), v.literal("json"), v.literal("xml"), v.literal("ical")),
     enabled: v.boolean(),
+    token: v.optional(v.string()),
+    revokedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_event", ["eventId"]).index("by_event_enabled", ["eventId", "enabled"]),
+  }).index("by_event", ["eventId"]).index("by_event_enabled", ["eventId", "enabled"]).index("by_token", ["token"]),
   // Conflicts are derived by agenda.detectConflicts rather than stored here. A session can
   // deliberately be unpublished while organizers resolve its room or speaker assignment.
   agenda_items: defineTable({
@@ -775,6 +780,42 @@ export default defineSchema({
     .index("by_event", ["eventId"])
     .index("by_room", ["roomId"])
     .index("by_submission", ["submissionId"]),
+  event_assets: defineTable({
+    eventId: v.id("events"), kind: v.literal("video"), storageId: v.id("_storage"),
+    fileName: v.string(), mimeType: v.string(), sizeBytes: v.number(),
+    createdByUserId: v.string(), createdAt: v.number(), updatedAt: v.number(),
+  }).index("by_event", ["eventId"]).index("by_storage", ["storageId"]),
+  // Attachment and publication are separate lifecycles. A staged replacement stays private
+  // until it is explicitly promoted, so a working public recording cannot disappear mid-event.
+  session_recordings: defineTable({
+    eventId: v.id("events"),
+    agendaItemId: v.id("agenda_items"),
+    sourceType: v.union(v.literal("upload"), v.literal("asset"), v.literal("hosted")),
+    assetId: v.optional(v.id("event_assets")),
+    storageId: v.optional(v.id("_storage")),
+    hostedUrl: v.optional(v.string()),
+    fileName: v.optional(v.string()),
+    provider: v.optional(v.union(v.literal("convex"), v.literal("youtube"), v.literal("vimeo"), v.literal("external"))),
+    availability: v.optional(v.union(v.literal("uploading"), v.literal("processing"), v.literal("ready"), v.literal("failed"), v.literal("unavailable"))),
+    failureReason: v.optional(v.string()),
+    legacySource: v.optional(v.literal("agenda_video_url")),
+    replacedAt: v.optional(v.number()), replacedByRecordingId: v.optional(v.id("session_recordings")),
+    role: v.union(v.literal("active"), v.literal("replacement"), v.literal("replaced")),
+    publicationStatus: v.union(v.literal("draft"), v.literal("published")),
+    publishedAt: v.optional(v.number()),
+    publishedByUserId: v.optional(v.string()),
+    createdByUserId: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_event", ["eventId"])
+    .index("by_agenda_item", ["agendaItemId"])
+    .index("by_agenda_item_role", ["agendaItemId", "role"]),
+  recording_activity: defineTable({
+    eventId: v.id("events"), agendaItemId: v.id("agenda_items"), recordingId: v.optional(v.id("session_recordings")),
+    action: v.union(v.literal("attached"), v.literal("published"), v.literal("published_early"), v.literal("unpublished"), v.literal("replaced"), v.literal("detached"), v.literal("migrated")),
+    detail: v.optional(v.string()), actorUserId: v.string(), createdAt: v.number(),
+  }).index("by_event_createdAt", ["eventId", "createdAt"]).index("by_recording", ["recordingId"]),
   // Append-only evidence for every application-level agenda write. A missing delete entry when
   // a row disappears distinguishes an out-of-band dashboard/import operation from app code.
   agenda_items_audit: defineTable({
@@ -831,6 +872,13 @@ export default defineSchema({
     domain: v.string(),
     aliasLocalPart: v.string(),
     mode: v.union(v.literal("managed"), v.literal("custom")),
+    status: v.optional(v.union(v.literal("pending"), v.literal("dns_verified"), v.literal("verified"), v.literal("failed"))),
+    expectedMx: v.optional(v.string()),
+    observedMx: v.optional(v.array(v.string())),
+    dnsVerifiedAt: v.optional(v.number()),
+    receiptVerifiedAt: v.optional(v.number()),
+    lastCheckedAt: v.optional(v.number()),
+    failureReason: v.optional(v.string()),
     verifiedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),

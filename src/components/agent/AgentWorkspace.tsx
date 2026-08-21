@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Bot } from "lucide-react";
+import { useUser } from "@clerk/clerk-react";
+import { ShieldCheck } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { AgentComposer } from "@/components/agent/AgentComposer";
 import { AgentHistoryPopover } from "@/components/agent/AgentHistoryPopover";
@@ -8,8 +9,10 @@ import { AgentTimeline } from "@/components/agent/AgentTimeline";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useCurrentEvent } from "@/components/EventContext";
+import { DictationButton } from "@/components/voice/DictationButton";
 import { VoiceChatButton } from "@/components/voice/VoiceChatButton";
 import { VoiceSessionPanel } from "@/components/voice/VoiceSessionPanel";
+import { useDemoSession } from "@/lib/hooks/use-demo-session";
 import { useRepo } from "@/data/repo";
 import { useRepoQuery } from "@/data/reactive";
 import type {
@@ -26,6 +29,13 @@ const newKey = () =>
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random()}`;
 
+function timeGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
 /**
  * The one event-bound Operations Agent surface. Dashboard and the dedicated
  * route deliberately use this exact component so the organizer never has to
@@ -33,7 +43,10 @@ const newKey = () =>
  */
 export function AgentWorkspace() {
   const { event } = useCurrentEvent();
+  const { user } = useUser();
+  const firstName = user?.firstName;
   const repo = useRepo();
+  const { isDemo } = useDemoSession();
   const [params, setParams] = useSearchParams();
   const selectedRunId = params.get("run") as AgentRunId | null;
   const access = useRepoQuery<boolean>("agentRuns.canUse", { eventId: event.id });
@@ -61,7 +74,7 @@ export function AgentWorkspace() {
   const running = Boolean(
     selected && !replyMode && ["queued", "running"].includes(selected.run.status),
   );
-  const busy = submitting || running;
+  const busy = submitting || running || isDemo;
 
   useEffect(() => {
     setError(undefined);
@@ -135,6 +148,7 @@ export function AgentWorkspace() {
 
   return (
     <Card className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-xl" aria-label="Operations Agent workspace">
+      {isDemo && <div className="flex items-center gap-2 border-b bg-muted/60 px-4 py-3 text-sm"><ShieldCheck className="h-5 w-5 text-primary" aria-hidden="true" />You're viewing a read-only demo — actions are disabled.</div>}
       <div className="flex shrink-0 items-center justify-between px-3 py-2">
         <div className="flex items-center gap-2" aria-label="Agent controls">
           <AgentHistoryPopover
@@ -164,6 +178,7 @@ export function AgentWorkspace() {
                   showRunMeta={false}
                   decisionPendingId={decisionPendingId}
                   error={error}
+                  readOnly={isDemo}
                   onApprove={approveProposal}
                   onReject={(proposalId) => decide(proposalId, () => repo.agentRuns.rejectProposal({ eventId: event.id, proposalId }))}
                   onCancel={() => repo.agentRuns.cancel({ eventId: event.id, runId: selected.run.id })}
@@ -172,16 +187,13 @@ export function AgentWorkspace() {
               )}
             </div>
           ) : (
-            <div className="flex min-h-full flex-1 flex-col items-center justify-center px-4 py-10 text-center">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted" aria-hidden="true">
-                <Bot className="h-5 w-5 text-foreground" />
-              </div>
-              <h2 className="mt-4 text-lg font-semibold">What should I check?</h2>
-              <p className="mt-1 max-w-lg text-sm text-muted-foreground">Ask about readiness, scheduling conflicts, speakers, reviews, or follow-up work.</p>
+            <div className="flex min-h-full flex-1 flex-col items-center justify-center px-4 py-12 text-center">
+              <h2 className="text-2xl font-semibold tracking-tight text-balance">{timeGreeting()}{firstName ? `, ${firstName}` : ""}.</h2>
+              <p className="mt-1.5 text-sm text-muted-foreground">How can I help you?</p>
               {suggestions.data && suggestions.data.length > 0 && (
-                <div className="mt-5 flex max-w-3xl flex-wrap justify-center gap-2" aria-label="Suggested reviews">
+                <div className="mt-6 flex max-w-3xl flex-wrap justify-center gap-2" aria-label="Suggested reviews">
                   {suggestions.data.map((suggestion) => (
-                    <Button key={suggestion.id} variant="outline" size="sm" onClick={() => setValue(suggestion.objective)}>
+                    <Button key={suggestion.id} variant="outline" size="sm" className="h-9 rounded-full px-4" disabled={isDemo} title={isDemo ? "This is a read-only demo." : undefined} onClick={() => setValue(suggestion.objective)}>
                       {suggestion.label}
                     </Button>
                   ))}
@@ -197,8 +209,12 @@ export function AgentWorkspace() {
         onSubmit={() => void submit()}
         mode={replyMode ? "reply" : "new"}
         disabled={busy}
+        readOnly={isDemo}
         error={error}
-        controls={<VoiceChatButton eventId={event.id} disabled={busy} onOpen={() => setVoiceOpen(true)} />}
+        controls={<>
+          <DictationButton eventId={event.id} disabled={busy} onTranscript={(text) => setValue((current) => (current ? `${current} ${text}` : text))} />
+          <VoiceChatButton eventId={event.id} disabled={busy} onOpen={() => setVoiceOpen(true)} />
+        </>}
       />
       <p className="sr-only" aria-live="polite">
         {selected ? `Review status: ${selected.run.status.replace(/_/g, " ")}` : "Ready to start a review"}

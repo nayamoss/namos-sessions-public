@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { AlertCircle, ArrowUpRight, BarChart3, RefreshCw } from "lucide-react";
+import { AlertCircle, ArrowUpRight, CheckCircle2, RefreshCw } from "lucide-react";
 import { Link } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
@@ -94,9 +94,10 @@ export default function EventAnalytics() {
           </section>
         ) : summary && empty ? (
           <EmptyState
-            icon={BarChart3}
-            title="No event activity yet"
-            action={<><Button asChild size="sm"><Link to={`${base}/program/forms`}>Set up a call</Link></Button><Button asChild variant="outline" size="sm"><Link to={`${base}/program/speakers`}>Add speakers</Link></Button></>}
+            icon={CheckCircle2}
+            title="Your event snapshot starts here"
+            message="Open a call for papers or add speakers to begin measuring program progress."
+            action={<><Button asChild size="sm"><Link to={`${base}/program/forms`}>Set up a call</Link></Button><Button asChild variant="outline" size="sm"><Link to={`${base}/program/event-speakers`}>Add speakers</Link></Button></>}
           />
         ) : summary ? (
           <>
@@ -116,12 +117,12 @@ export default function EventAnalytics() {
                   <ProgressRow label="Accepted" value={summary.submissions.accepted} total={summary.submissions.total} />
                   <ProgressRow label="Declined" value={summary.submissions.declined} total={summary.submissions.total} tone="muted" />
                 </Section>
-                <div className="border-t"><Section title="Speaker readiness" to={`${base}/program/speakers`}>
+                <div className="border-t"><Section title="Speaker readiness" description={`${summary.speakers.profileComplete} of ${summary.speakers.total} profiles include a bio and headshot.`} to={`${base}/program/event-speakers`}>
                   <ProgressRow label="Confirmed" value={summary.speakers.confirmed} total={summary.speakers.total} />
                   <ProgressRow label="Awaiting response" value={summary.speakers.awaiting} total={summary.speakers.total} tone="warning" />
                   <ProgressRow label="Profile complete" value={summary.speakers.profileComplete} total={summary.speakers.total} />
                 </Section></div>
-                <div className="border-t"><Section title="CRM pipeline" description="Event contacts by the organizer-owned relationship stage." to={`${base}/program/contacts`}>
+                <div className="border-t"><Section title="CRM pipeline" description="Event contacts by the organizer-owned relationship stage." to={`${base}/program/speakers`}>
                   <ProgressRow label="Qualified" value={summary.crm.qualified} total={summary.crm.total} />
                   <ProgressRow label="Invited" value={summary.crm.invited} total={summary.crm.total} />
                   <ProgressRow label="Confirmed" value={summary.crm.confirmed} total={summary.crm.total} />

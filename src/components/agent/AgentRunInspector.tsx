@@ -17,6 +17,7 @@ export function AgentRunInspector({
   decisionPendingId,
   error,
   showRunMeta = true,
+  readOnly = false,
 }: {
   run: AgentRun;
   proposals: AgentActionProposal[];
@@ -27,6 +28,7 @@ export function AgentRunInspector({
   decisionPendingId?: AgentProposalId;
   error?: string;
   showRunMeta?: boolean;
+  readOnly?: boolean;
 }) {
   const cancellable = [
     "queued",
@@ -112,7 +114,8 @@ export function AgentRunInspector({
               <Button
                 variant="outline"
                 size="sm"
-                disabled={decisionPendingId === proposal.id}
+                disabled={readOnly || decisionPendingId === proposal.id}
+                title={readOnly ? "This is a read-only demo." : undefined}
                 onClick={() => void onApprove(proposal)}
               >
                 {decisionPendingId === proposal.id
@@ -124,7 +127,8 @@ export function AgentRunInspector({
               <Button
                 variant="ghost"
                 size="sm"
-                disabled={decisionPendingId === proposal.id}
+                disabled={readOnly || decisionPendingId === proposal.id}
+                title={readOnly ? "This is a read-only demo." : undefined}
                 onClick={() => void onReject(proposal.id)}
               >
                 Reject
@@ -158,12 +162,12 @@ export function AgentRunInspector({
         </p>
       )}
       {run.status === "failed" && (
-        <Button variant="outline" size="sm" onClick={() => void onRetry()}>
+        <Button variant="outline" size="sm" disabled={readOnly} title={readOnly ? "This is a read-only demo." : undefined} onClick={() => void onRetry()}>
           Retry review
         </Button>
       )}
       {cancellable && (
-        <Button variant="outline" size="sm" onClick={() => void onCancel()}>
+        <Button variant="outline" size="sm" disabled={readOnly} title={readOnly ? "This is a read-only demo." : undefined} onClick={() => void onCancel()}>
           Cancel run
         </Button>
       )}

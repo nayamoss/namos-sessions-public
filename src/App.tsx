@@ -36,12 +36,14 @@ const EventTeam = lazy(() => import("@/pages/settings/EventTeam"));
 const Library = lazy(() => import("@/pages/settings/Library"));
 const TaskTemplates = lazy(() => import("@/pages/settings/TaskTemplates"));
 const Integrations = lazy(() => import("@/pages/settings/Integrations"));
+const AgentUsage = lazy(() => import("@/pages/settings/AgentUsage"));
 const ApiKeys = lazy(() => import("@/pages/settings/ApiKeys"));
 const ActivityLog = lazy(() => import("@/pages/settings/ActivityLog"));
 const ReadinessSettings = lazy(() => import("@/pages/settings/ReadinessSettings"));
 const SubmissionForms = lazy(() => import("@/pages/program/SubmissionForms"));
 const Abstracts = lazy(() => import("@/pages/program/Abstracts"));
 const Agenda = lazy(() => import("@/pages/program/Agenda"));
+const Recordings = lazy(() => import("@/pages/program/Recordings"));
 const Readiness = lazy(() => import("@/pages/program/Readiness"));
 const AgentOperations = lazy(() => import("@/pages/program/AgentOperations"));
 const Evaluation = lazy(() => import("@/pages/program/Evaluation"));
@@ -68,6 +70,7 @@ const EmbedPage = lazy(() => import("@/pages/public/EmbedPage"));
 const AttendeeSite = lazy(() => import("@/pages/public/AttendeeSite"));
 const PublicEmbedPage = lazy(() => import("@/pages/public/PublicEmbedPage"));
 const EmbedsListPage = lazy(() => import("@/pages/cms/EmbedsListPage"));
+const FeedsListPage = lazy(() => import("@/pages/cms/FeedsListPage"));
 const EmbedEditorPage = lazy(() => import("@/pages/cms/EmbedEditorPage"));
 const OnboardingWizard = lazy(
   () => import("@/pages/onboarding/OnboardingWizard"),
@@ -233,16 +236,16 @@ function AuthAltAction({
   action: string;
 }) {
   return (
-    <p className="mt-6 text-center text-sm text-[#4A5568]">
-      {prompt}{" "}
+    <div className="mt-6 flex flex-col items-center gap-2">
+      <p className="text-sm text-[#657086]">{prompt}</p>
       <Link
         to={to}
         onClick={() => track("cta_converted", { destination: to === "/sign-up" ? "sign_up" : "sign_in" })}
-        className="font-semibold text-[#0066FF] underline-offset-4 hover:underline"
+        className="w-full rounded-xl bg-[#0066FF] px-4 py-3.5 text-center text-base font-semibold text-white hover:bg-[#005CE6]"
       >
         {action}
       </Link>
-    </p>
+    </div>
   );
 }
 
@@ -337,7 +340,7 @@ export default function App() {
                     <AuthAltAction
                       to="/sign-up"
                       prompt="New to Namos Sessions?"
-                      action="Create an organizer account"
+                      action="Sign up"
                     />
                   </AuthSplitLayout>
                 }
@@ -491,6 +494,7 @@ export default function App() {
                     <Route path="program/contacts" element={<Contacts />} />
                     <Route path="program/contacts/new" element={<Contacts />} />
                     <Route path="program/contacts/:contactId/edit" element={<Contacts />} />
+                    <Route path="program/event-speakers" element={<Speakers />} />
                     <Route path="program/sponsors" element={<Sponsors />} />
                     <Route path="program/sponsors/new" element={<Sponsors />} />
                     <Route path="program/sponsors/:sponsorId/edit" element={<Sponsors />} />
@@ -498,6 +502,7 @@ export default function App() {
                     <Route path="program/agenda" element={<Agenda />} />
                     <Route path="program/agenda/new" element={<Agenda />} />
                     <Route path="program/agenda/:agendaId/edit" element={<Agenda />} />
+                    <Route path="program/recordings" element={<Recordings />} />
                     <Route path="program/readiness" element={<Readiness />} />
                     <Route path="program/agent" element={<AgentOperations />} />
                     <Route
@@ -545,10 +550,12 @@ export default function App() {
                         <Navigate to="../settings/integrations" replace />
                       }
                     />
+                    <Route path="settings/ai-usage" element={<SettingsPage title="AI Usage"><AgentUsage /></SettingsPage>} />
                     <Route path="settings/api" element={<SettingsPage title="API"><ApiKeys /></SettingsPage>} />
                     <Route path="settings/activity" element={<SettingsPage title="Activity"><ActivityLog /></SettingsPage>} />
                     <Route path="settings/readiness" element={<SettingsPage title="Readiness settings"><ReadinessSettings /></SettingsPage>} />
                     <Route path="cms/embeds" element={<EmbedsListPage />} />
+                    <Route path="cms/feeds" element={<FeedsListPage />} />
                     <Route path="cms/embeds/new" element={<EmbedEditorPage />} />
                     <Route path="cms/embeds/:embedId/edit" element={<EmbedEditorPage />} />
                     <Route path="cms/embeds/:embedId" element={<LegacyEmbedRedirect />} />

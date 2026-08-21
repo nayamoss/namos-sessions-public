@@ -16,6 +16,7 @@ const genericDocumentLists = new Set<ReadOperation>([
   "comms.templates.list", "apiKeys.list", "apiKeys.auditLog", "organizations.listMine",
   "sponsors.list", "sponsorTiers.list", "sponsorContacts.listBySponsor", "crm.list", "crm.segments.list", "crm.sources.list",
   "comms.listDrafts", "portalResources.listAdmin", "portalResources.listPublished",
+  "comms.inbox.list", "comms.inboundDomains.list", "publicFeeds.list",
 ]);
 
 function fixtureFor(operation: ReadOperation): unknown {
@@ -27,7 +28,7 @@ function fixtureFor(operation: ReadOperation): unknown {
   if (operation === "events.portalSpeakerIdentity") {
     return { event: document, speaker: { ...document, firstName: "Grace", lastName: "Hopper" }, publishedEvents: [document] };
   }
-  if (operation === "events.get" || operation === "events.getBySlug" || operation === "emailIntegrations.status" || operation === "contentIntegrations.status" || operation === "organizers.getMine" || operation === "organizations.getMine" || operation === "profiles.getMine" || operation === "publicEmbeds.getAdmin" || operation === "tasks.get") return document;
+  if (operation === "events.get" || operation === "events.getBySlug" || operation === "emailIntegrations.status" || operation === "contentIntegrations.status" || operation === "organizers.getMine" || operation === "organizations.getMine" || operation === "profiles.getMine" || operation === "publicEmbeds.getAdmin" || operation === "tasks.get" || operation === "evaluations.assessment.get") return document;
   if (genericDocumentLists.has(operation)) return [document];
   if (operation === "forms.list") return [{ ...document, internalName: "Internal CFP", status: "open" }];
   if (operation === "speakers.list") return [{ ...document, firstName: "Ada", lastName: "Lovelace" }];
@@ -35,6 +36,15 @@ function fixtureFor(operation: ReadOperation): unknown {
   if (operation === "submissions.list") return [{ ...document, speakerId: "speaker-a", tagIds: undefined }];
   if (operation === "submissions.getForSpeaker") {
     return { submission: { ...document, speakerId: "speaker-a", tagIds: ["tag-a"] }, form: { title: "CFP" } };
+  }
+  if (operation === "recordings.list") {
+    return [{ ...document, speakerNames: ["Ada Lovelace"], recording: { id: "recording-a", sourceType: "hosted", publicationStatus: "draft" } }];
+  }
+  if (operation === "recordings.get") {
+    return { session: document, recordings: [{ ...document, role: "active", publicationStatus: "draft" }], history: [document] };
+  }
+  if (operation === "recordings.listAssets") {
+    return [{ ...document, fileName: "keynote.mp4", mimeType: "video/mp4", sizeBytes: 1024 }];
   }
   if (operation === "sponsors.get") return { ...document, contacts: [], tasks: [], submissions: [] };
   if (operation === "comms.list") return [{ ...document, channel: "email" }];

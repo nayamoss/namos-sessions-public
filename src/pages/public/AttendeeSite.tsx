@@ -200,6 +200,7 @@ function SessionDetail({
       )}
 
       <div className="mt-6 flex flex-col items-stretch gap-2">
+        {item.recording && <Button asChild size="sm"><a href={item.recording.url} target="_blank" rel="noreferrer">Watch recording<span className="sr-only"> (opens in a new tab)</span></a></Button>}
         <SaveButton saved={saved} onToggle={onToggleSaved} />
         <Button asChild size="sm" variant="outline">
           <a href={googleCalendarUrl(item, embed.eventName, embed.eventLocation)} target="_blank" rel="noreferrer">

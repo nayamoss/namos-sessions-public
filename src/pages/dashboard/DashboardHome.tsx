@@ -113,7 +113,7 @@ export default function DashboardHome() {
           icon: UserRoundX,
           label: `${speakerSummary.profileIncomplete} incomplete profile${speakerSummary.profileIncomplete === 1 ? "" : "s"}`,
           detail: "Missing a bio or headshot · Review speakers",
-          to: `/events/${event.slug}/program/speakers?view=profile-incomplete`,
+          to: `/events/${event.slug}/program/event-speakers?view=profile-incomplete`,
         }]
       : []),
     awaitingDecision > 0
@@ -121,7 +121,7 @@ export default function DashboardHome() {
       : unscheduledAccepted > 0
         ? { icon: CalendarDays, label: `${unscheduledAccepted} need a time slot`, detail: "Schedule on the agenda", to: `/events/${event.slug}/program/agenda` }
         : speakerSummary.needsAttention > 0
-          ? { icon: Users, label: `${speakerSummary.needsAttention} need onboarding`, detail: "Review speakers", to: `/events/${event.slug}/program/speakers?view=needs-attention` }
+          ? { icon: Users, label: `${speakerSummary.needsAttention} need onboarding`, detail: "Review speakers", to: `/events/${event.slug}/program/event-speakers?view=needs-attention` }
           : { icon: CalendarDays, label: "Keep the program ready", detail: "Open readiness", to: `/events/${event.slug}/program/readiness` },
   ];
 
@@ -129,17 +129,17 @@ export default function DashboardHome() {
   // actually outstanding, so an all-clear event shows an empty state instead of
   // a list of zeroes.
   const actionItems = [
-    speakerSummary.profileIncomplete > 0 ? { icon: UserRoundX, label: `${speakerSummary.profileIncomplete} incomplete profile${speakerSummary.profileIncomplete === 1 ? "" : "s"}`, detail: "Missing a bio or headshot · Review speakers", to: `/events/${event.slug}/program/speakers?view=profile-incomplete` } : null,
+    speakerSummary.profileIncomplete > 0 ? { icon: UserRoundX, label: `${speakerSummary.profileIncomplete} incomplete profile${speakerSummary.profileIncomplete === 1 ? "" : "s"}`, detail: "Missing a bio or headshot · Review speakers", to: `/events/${event.slug}/program/event-speakers?view=profile-incomplete` } : null,
     awaitingDecision > 0 ? { icon: ClipboardList, label: `${awaitingDecision} awaiting decision`, detail: "Review submissions", to: `/events/${event.slug}/program/abstracts` } : null,
     unscheduledAccepted > 0 ? { icon: CalendarDays, label: `${unscheduledAccepted} need a time slot`, detail: "Schedule on the agenda", to: `/events/${event.slug}/program/agenda` } : null,
-    speakerSummary.needsAttention > 0 ? { icon: Users, label: `${speakerSummary.needsAttention} need onboarding`, detail: "Review speakers", to: `/events/${event.slug}/program/speakers?view=needs-attention` } : null,
+    speakerSummary.needsAttention > 0 ? { icon: Users, label: `${speakerSummary.needsAttention} need onboarding`, detail: "Review speakers", to: `/events/${event.slug}/program/event-speakers?view=needs-attention` } : null,
   ].filter((item): item is { icon: typeof ClipboardList; label: string; detail: string; to: string } => item !== null);
 
   const quickAccess = [
     { icon: Megaphone, label: "Calls for papers", to: `/events/${event.slug}/program/forms` },
     { icon: ClipboardList, label: "Submissions", to: `/events/${event.slug}/program/abstracts` },
     { icon: ClipboardCheck, label: "Judge", to: `/events/${event.slug}/program/evaluation` },
-    { icon: Users, label: "Speakers", to: `/events/${event.slug}/program/speakers` },
+    { icon: Users, label: "Event speakers", to: `/events/${event.slug}/program/event-speakers` },
     { icon: CalendarDays, label: "Schedule", to: `/events/${event.slug}/program/agenda` },
     { icon: Mail, label: "Communications", to: `/events/${event.slug}/program/communications` },
   ];
@@ -203,7 +203,7 @@ export default function DashboardHome() {
   );
 
   return (
-    <AppLayout title="Program Control Room" utility={sidebarDetail} contentVariant="conversation">
+    <AppLayout title="Dashboard" utility={sidebarDetail} contentVariant="conversation">
       <AgentWorkspace />
     </AppLayout>
   );

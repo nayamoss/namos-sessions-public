@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AudioLines, Loader2 } from "lucide-react";
+import { Loader2, Mic } from "lucide-react";
 // Every other reactive read in this app goes through the cache-wrapped useQuery from
 // convex-helpers, because the app is wrapped in ConvexQueryCacheProvider (see
 // src/data/client-providers.tsx). Importing useQuery from the raw "convex/react" package
@@ -40,7 +40,7 @@ function UnavailableVoiceChatButton() {
           aria-label={label}
           className="compact-hit-target h-8 w-8 rounded-lg text-muted-foreground opacity-40"
         >
-          <AudioLines className="h-4 w-4" />
+          <Mic className="h-4 w-4" />
         </Button>
       </TooltipTrigger>
       <TooltipContent><p className="max-w-64 text-xs">{label}</p></TooltipContent>
@@ -70,9 +70,9 @@ function VoiceChatButtonContent({ eventId, disabled, onOpen }: VoiceChatButtonPr
           onClick={onOpen}
           disabled={disabled || stillChecking || unavailable}
           aria-label={label}
-          className={cn("compact-hit-target h-8 w-8 rounded-lg text-muted-foreground", "hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40")}
+          className={cn("compact-hit-target h-8 w-8 rounded-lg text-accent-foreground bg-accent/40", "hover:bg-accent/70 disabled:cursor-not-allowed disabled:bg-transparent disabled:text-muted-foreground disabled:opacity-40")}
         >
-          {stillChecking ? <Loader2 className="h-4 w-4 animate-spin" /> : <AudioLines className="h-4 w-4" />}
+          {stillChecking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className="h-4 w-4" />}
         </Button>
       </TooltipTrigger>
       <TooltipContent><p className="max-w-64 text-xs">{label}</p></TooltipContent>

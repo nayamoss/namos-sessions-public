@@ -196,7 +196,7 @@ export default function Contacts() {
   };
   const syncSource = async (provider: CrmSourceProvider) => { setBusy(true); setSourceMessage(undefined); try { const result = await repo.crm.syncSource({ eventId: event.id, provider }); setSourceMessage(`${provider === "airtable" ? "Airtable" : "Notion"} synced: ${result.created} created, ${result.updated} updated, ${result.skipped} skipped.`); await load(); } catch (cause) { setSourceMessage(cause instanceof Error ? cause.message : "Source sync could not run."); } finally { setBusy(false); } };
 
-  if (selectedBackend() !== "convex") return <AppLayout title="Contacts"><section className="flex min-h-64 flex-col items-center justify-center text-center"><UsersRound className="h-6 w-6 text-muted-foreground" aria-hidden="true" /><h2 className="mt-3 text-base font-semibold">Contacts require a managed workspace</h2><p className="mt-1 max-w-md text-sm text-muted-foreground">The organization CRM is available only when this workspace uses the managed Convex data service.</p></section></AppLayout>;
+  if (selectedBackend() !== "convex") return <AppLayout title="Speaker CRM"><section className="flex min-h-64 flex-col items-center justify-center text-center"><UsersRound className="h-6 w-6 text-muted-foreground" aria-hidden="true" /><h2 className="mt-3 text-base font-semibold">Speaker CRM requires a managed workspace</h2><p className="mt-1 max-w-md text-sm text-muted-foreground">The organization directory is available only when this workspace uses the managed Convex data service.</p></section></AppLayout>;
 
   if (contactId || creatingContact) {
     const creating = creatingContact;

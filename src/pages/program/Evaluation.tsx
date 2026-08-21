@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";
-import { ListChecks } from "lucide-react";
+import { Bot, ListChecks } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { BlindedBadge } from "@/components/shared/BlindedBadge";
@@ -42,6 +42,7 @@ import { CriteriaEditor } from "./CriteriaEditor";
 import { ScorecardForm } from "./ScorecardForm";
 import type {
   AssignmentFilter,
+  AiAssessment,
   Evaluation,
   EvaluationAssignment,
   EvaluationCriterion,
@@ -60,6 +61,7 @@ type QueueRow = {
   id: string;
   eventId: string;
   submissionId: string;
+  evaluationPlanId: string;
   round: number;
   scoringScaleMax: number;
   planName: string;
@@ -160,6 +162,8 @@ export default function Evaluation() {
   >([]);
   const [criteriaDraft, setCriteriaDraft] = useState<EvaluationCriterion[]>([]);
   const [criteriaSaved, setCriteriaSaved] = useState(false);
+  const [assessment, setAssessment] = useState<AiAssessment | null>();
+  const [assessmentBusy, setAssessmentBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
@@ -314,6 +318,7 @@ export default function Evaluation() {
             id: row.assignmentId,
             eventId: row.eventId,
             submissionId: row.submissionId,
+            evaluationPlanId: row.evaluationPlanId,
             round: row.round,
             scoringScaleMax: row.scoringScaleMax,
             planName: row.planName,
@@ -346,6 +351,7 @@ export default function Evaluation() {
                 id: assignment.id,
                 eventId: assignment.eventId,
                 submissionId: assignment.submissionId,
+                evaluationPlanId: assignment.evaluationPlanId,
                 round: assignment.round,
                 scoringScaleMax:
                   planById.get(assignment.evaluationPlanId)?.scoringScaleMax ??
@@ -423,6 +429,24 @@ export default function Evaluation() {
     setCommentsDraft(active.review?.comments ?? "");
     setCriteriaScoresDraft(active.review?.criteriaScores ?? []);
   }, [active]);
+
+  useEffect(() => {
+    if (!active) { setAssessment(undefined); return; }
+    if (typeof repo.evaluations.getAssessment !== "function") { setAssessment(null); return; }
+    let current = true;
+    void repo.evaluations.getAssessment({ eventId: active.eventId as EventId, submissionId: active.submissionId as never, evaluationPlanId: active.evaluationPlanId }).then((value) => { if (current) setAssessment(value); }).catch(() => { if (current) setAssessment(null); });
+    return () => { current = false; };
+  }, [active, repo]);
+
+  const requestAssessment = async () => {
+    if (!active || typeof repo.evaluations.requestAssessment !== "function" || typeof repo.evaluations.getAssessment !== "function") return;
+    setAssessmentBusy(true); setError(undefined);
+    try {
+      await repo.evaluations.requestAssessment({ eventId: active.eventId as EventId, submissionId: active.submissionId as never, evaluationPlanId: active.evaluationPlanId });
+      setAssessment(await repo.evaluations.getAssessment({ eventId: active.eventId as EventId, submissionId: active.submissionId as never, evaluationPlanId: active.evaluationPlanId }));
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "AI assessment could not be requested."); }
+    finally { setAssessmentBusy(false); }
+  };
 
   const createPlan = async () => {
     if (!eventId || !newPlanName.trim()) return;
@@ -584,6 +608,29 @@ export default function Evaluation() {
           ? cause.message
           : "Could not save these criteria.",
       );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const setAiAssistEnabled = async (enabled: boolean) => {
+    if (!eventId || !selectedPlan) return;
+    setSaving(true);
+    setError(undefined);
+    try {
+      await repo.evaluations.savePlan({
+        id: selectedPlan.id,
+        eventId: eventId as never,
+        name: selectedPlan.name,
+        rounds: selectedPlan.rounds,
+        scoringScaleMax: selectedPlan.scoringScaleMax,
+        aiAssistEnabled: enabled,
+        anonymized: selectedPlan.anonymized,
+        criteria: selectedPlan.criteria,
+      });
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not update AI assistance.");
     } finally {
       setSaving(false);
     }
@@ -833,6 +880,19 @@ export default function Evaluation() {
 
                 {planWorkspaceTab === "criteria" && (
                   <section className={cardSurfaceClasses("default", "p-6")}>
+                    <label className="mb-6 flex items-start gap-3 text-sm">
+                      <Checkbox
+                        checked={selectedPlan.aiAssistEnabled}
+                        onCheckedChange={(value) => void setAiAssistEnabled(value === true)}
+                        disabled={saving}
+                      />
+                      <span className="space-y-1">
+                        <span className="block font-medium">AI first-pass assistance</span>
+                        <span className="block text-muted-foreground">
+                          Give organizers and assigned reviewers a non-binding score and concise rationale. Human reviews and decisions remain authoritative.
+                        </span>
+                      </span>
+                    </label>
                     <CriteriaEditor
                       criteria={criteriaDraft}
                       scoringScaleMax={selectedPlan.scoringScaleMax}
@@ -974,6 +1034,7 @@ export default function Evaluation() {
                     </div>
                   </div>
                   {active.abstract && <p className="mt-5 text-sm leading-6">{active.abstract}</p>}
+                  <section className="mt-5 rounded-md bg-muted/50 p-4" aria-label="AI review assistance"><div className="flex flex-wrap items-start justify-between gap-3"><div className="flex gap-2"><Bot className="mt-0.5 h-4 w-4 text-muted-foreground" aria-hidden="true" /><div><h3 className="text-sm font-medium">AI first-pass context</h3><p className="mt-1 text-xs text-muted-foreground">Non-binding guidance only. Your review and the final program decision remain authoritative.</p></div></div>{!reviewerOnly && <Button type="button" size="sm" variant="outline" disabled={assessmentBusy || assessment?.status === "queued"} onClick={() => void requestAssessment()}>{assessmentBusy || assessment?.status === "queued" ? "Assessing…" : assessment?.status === "failed" ? "Retry assessment" : assessment?.status === "completed" ? "Regenerate" : "Generate assessment"}</Button>}</div>{assessment?.status === "completed" && <div className="mt-4 space-y-2"><p className="text-sm font-medium">Suggested score: {assessment.score}</p><p className="text-sm leading-6">{assessment.rationale}</p>{assessment.criteria?.map((criterion) => <div key={criterion.criterionId} className="text-xs text-muted-foreground"><span className="font-medium text-foreground">{criterion.score === undefined ? "Criterion" : `${criterion.score} · Criterion`}</span> — {criterion.rationale}</div>)}<p className="text-xs text-muted-foreground">{assessment.model} · prompt {assessment.promptVersion}</p></div>}{assessment?.status === "failed" && <p role="alert" className="mt-3 text-sm text-destructive">{assessment.error || "The assessment failed. An organizer can retry it."}</p>}{assessment === null && reviewerOnly && <p className="mt-3 text-sm text-muted-foreground">No AI assessment has been generated for this submission.</p>}</section>
                   {usesScorecard ? (
                     <ScorecardForm
                       criteria={active.criteria}

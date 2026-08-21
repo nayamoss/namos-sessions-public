@@ -3,12 +3,13 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import type { UserIdentity } from "convex/server";
 import { internalQuery } from "./_generated/server";
-import { mutation, query } from "./_generated/server";
 import {
   assertAnyOrganizer,
   assertEventAccess,
   assertEventOrganizerAccess,
+  mutation,
   organizationIdsForUser,
+  query,
   requireIdentity,
 } from "./functions";
 import { assertEventSchedule } from "./eventValidation";

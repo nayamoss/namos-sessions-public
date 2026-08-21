@@ -1,9 +1,10 @@
-import { AlertTriangle, CalendarClock, Check, Circle, ClipboardCheck, ClipboardList, FileWarning, MailWarning, Send, UserRoundX } from "lucide-react";
+import { AlertTriangle, CalendarClock, Check, Circle, ClipboardCheck, ClipboardList, FileWarning, MailWarning, Send, ShieldCheck, UserRoundX } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, cardSurfaceClasses } from "@/components/ui/card";
 import type { ControlRoomCategoryKind, ControlRoomState } from "@/data/types";
 import { cn } from "@/lib/utils";
+import { useDemoSession } from "@/lib/hooks/use-demo-session";
 
 const definitions: Array<{ kind: ControlRoomCategoryKind; label: string; icon: typeof ClipboardList }> = [
   { kind: "decisions", label: "Decisions waiting", icon: ClipboardList },
@@ -23,6 +24,7 @@ function LoadingControlRoom() {
 }
 
 export function ProgramControlRoom({ state, loading, error }: { state?: ControlRoomState; loading: boolean; error?: string }) {
+  const { isDemo } = useDemoSession();
   if (error) return <Card variant="muted" className="rounded-xl p-6" role="alert">
     <p className="text-sm font-semibold">The Program Control Room could not load.</p>
     <p className="mt-1 text-xs text-muted-foreground">{error}</p>
@@ -33,6 +35,7 @@ export function ProgramControlRoom({ state, loading, error }: { state?: ControlR
   const nextStep = state.walkthrough.find((step) => !step.complete);
 
   return <div className="space-y-4">
+    {isDemo && <Card variant="muted" className="flex items-center gap-2 rounded-xl p-4 text-sm"><ShieldCheck className="h-5 w-5 text-primary" aria-hidden="true" />You're viewing a read-only demo — actions are disabled.</Card>}
     <Card variant="muted" className="rounded-xl p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>

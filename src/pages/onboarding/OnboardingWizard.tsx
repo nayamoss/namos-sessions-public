@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent, type ReactNode } from "react";
-import { useUser } from "@clerk/clerk-react";
+import { SignOutButton, useUser } from "@clerk/clerk-react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowRight, ChevronDown, Loader2, Upload } from "lucide-react";
+import { ArrowRight, ChevronDown, Loader2, LogOut, Upload } from "lucide-react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { TimezoneCombobox } from "@/components/shared/TimezoneCombobox";
 import { DateTimeField } from "@/components/shared/DateTimeField";
@@ -267,6 +267,12 @@ export default function OnboardingWizard() {
   const next = async () => {
     setError(undefined);
     if (step === 0) {
+      const trimmedName = displayName.trim();
+      const trimmedLastName = lastName.trim();
+      if (!trimmedName) {
+        setError("Enter your first name to continue.");
+        return;
+      }
       if (!organizerExists) {
         setBusy(true);
         try {
@@ -283,12 +289,6 @@ export default function OnboardingWizard() {
         } finally {
           setBusy(false);
         }
-      }
-      const trimmedName = displayName.trim();
-      const trimmedLastName = lastName.trim();
-      if (!trimmedName) {
-        setError("Enter your first name to continue.");
-        return;
       }
       const nameChanged = trimmedName !== (user?.firstName ?? "") || trimmedLastName !== (user?.lastName ?? "");
       if (nameChanged || avatarFile) {
@@ -389,6 +389,17 @@ export default function OnboardingWizard() {
       <header className="flex items-center justify-between px-6 py-6 sm:px-10">
         <Wordmark />
         <div className="flex items-center gap-4">
+          <SignOutButton redirectUrl="/sign-in">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
+              Log out
+            </Button>
+          </SignOutButton>
           {/* Organizer setup is reached by anyone signed in without an organizer record —
               which is also what a speaker looks like, since a speaker is matched by email
               on a per-event basis and has no cross-event signal to route on. Without an

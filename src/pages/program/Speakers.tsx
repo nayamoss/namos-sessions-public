@@ -1772,7 +1772,7 @@ export default function Speakers() {
 
   const closeDetail = () => {
     if (routeSpeakerId && event?.slug) {
-      navigate(`/events/${event.slug}/program/speakers${listSearch}`);
+      navigate(`/events/${event.slug}/program/event-speakers${listSearch}`);
       return;
     }
     rowToRestoreFocus.current = selectedId ?? undefined;

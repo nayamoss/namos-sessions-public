@@ -47,6 +47,7 @@
     "deploy:cloudflare": "node scripts/deploy-cloudflare.mjs",
     "preview:cloudflare": "npm run build && wrangler dev",
     "test": "vitest run",
+    "test:convex": "vitest run --config vitest.convex.config.ts",
     "test:sdk": "vitest run --configLoader runner packages/sdk",
     "check:agent-no-stubs": "node scripts/check-agent-no-stubs.mjs",
     "validate:config": "node scripts/lib/validate-wrangler-config.mjs",
@@ -141,6 +142,7 @@
     "zustand": "5.0.15"
   },
   "devDependencies": {
+    "convex-test": "^0.0.56",
     "@eslint/js": "^9.32.0",
     "@tailwindcss/typography": "^0.5.16",
     "@testing-library/dom": "^10.4.1",

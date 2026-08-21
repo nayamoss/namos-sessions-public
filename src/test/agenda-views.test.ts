@@ -4,6 +4,7 @@ import {
   agendaRoomSlots,
   agendaTrackGroups,
   agendaWeekGroups,
+  parseAgendaDragItem,
   snapToAgendaInterval,
 } from "@/pages/program/Agenda";
 
@@ -70,5 +71,18 @@ describe("agenda view grouping", () => {
     const value = Date.UTC(2026, 8, 15, 13, 22);
     const snapped = snapToAgendaInterval(value, timeZone);
     expect(new Intl.DateTimeFormat("en-US", { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(snapped)).toBe("09:15");
+  });
+
+  it("reads the dragged item directly from the drop payload", () => {
+    expect(parseAgendaDragItem("session:agenda-item-1")).toEqual({
+      kind: "session",
+      id: "agenda-item-1",
+    });
+    expect(parseAgendaDragItem("submission:submission:with-colons")).toEqual({
+      kind: "submission",
+      id: "submission:with-colons",
+    });
+    expect(parseAgendaDragItem("other:item-1")).toBeUndefined();
+    expect(parseAgendaDragItem("session:")).toBeUndefined();
   });
 });

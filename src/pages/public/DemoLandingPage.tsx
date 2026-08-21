@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowRight, CalendarCheck, ClipboardCheck, Mic2, RotateCcw, ShieldCheck, UserRoundCheck, Users } from "lucide-react";
+import { ArrowRight, CalendarCheck, ClipboardCheck, Mic2, RotateCcw, ShieldCheck } from "lucide-react";
 import { PublicLayout } from "@/components/PublicLayout";
 import { TurnstileWidget } from "@/components/security/TurnstileWidget";
 import { cardSurfaceClasses } from "@/components/ui/card";
@@ -57,7 +57,7 @@ export default function DemoLandingPage() {
       if (active) { setWorkspace(payload.workspace); setCsrf(payload.csrf ?? null); }
     }).catch(() => undefined);
     return () => { active = false; };
-  }, []);
+  }, [requestedProof]);
 
   useEffect(() => {
     if (!autoLaunch || !workspace || !csrf || autoLaunchStarted.current) return;
@@ -118,17 +118,17 @@ export default function DemoLandingPage() {
       </header>
       <section className="grid gap-8 py-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(22rem,0.8fr)] lg:items-start lg:py-14">
         <div>
-          <p className="text-sm font-semibold text-primary">Resettable seeded event · no account setup</p>
-          <h1 className="mt-4 max-w-3xl font-display text-5xl tracking-[-0.04em] text-balance sm:text-6xl">See the whole conference workflow in five minutes.</h1>
-          <p className="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">Enter as an organizer, reviewer, or speaker. Every role uses the same isolated event, so decisions, reviews, tasks, scheduling, and publication stay connected.</p>
+          <p className="text-sm font-semibold text-primary">Interactive conference program management demo</p>
+          <h1 className="mt-4 max-w-3xl font-display text-5xl tracking-[-0.04em] text-balance sm:text-6xl">Follow a conference from CFP review to published schedule.</h1>
+          <p className="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">Inspect Namos Sessions as an organizer, reviewer, or speaker in a fully seeded event—no account setup required. This demo is read-only, so nothing you explore can change or publish anything.</p>
           <div className="mt-8 grid gap-3 sm:grid-cols-3" aria-label="Demo highlights">
-            {["Real seeded event state", "Confirmation before agent writes", "No external demo email"].map((item) => <div key={item} className="flex items-center gap-2 text-sm"><ShieldCheck className="h-4 w-4 text-primary" aria-hidden="true" />{item}</div>)}
+            {["Real seeded event state", "Read-only walkthrough", "No external demo email"].map((item) => <div key={item} className="flex items-center gap-2 text-sm"><ShieldCheck className="h-4 w-4 text-primary" aria-hidden="true" />{item}</div>)}
           </div>
         </div>
         <aside className={cardSurfaceClasses("muted", "p-5 sm:p-6")} aria-label="Five-minute route">
-          <h2 className="text-lg font-semibold">What you’ll demonstrate</h2>
+          <h2 className="text-lg font-semibold">What the demo covers</h2>
           <ol className="mt-4 space-y-3 text-sm leading-6 text-muted-foreground">
-            <li>1. Submit and review a conditional CFP.</li><li>2. Accept without accidental notification.</li><li>3. Complete speaker work and upload a file.</li><li>4. Schedule, detect, and resolve a conflict.</li><li>5. Send the reviewed acceptance, then publish.</li>
+            <li>1. Inspect a proposal submitted through a conditional CFP form.</li><li>2. Explore review scores and acceptance decisions.</li><li>3. View speaker tasks, files, and event resources.</li><li>4. Examine schedule conflicts and program readiness.</li><li>5. Browse the published program workflow.</li>
           </ol>
         </aside>
       </section>

@@ -24,6 +24,7 @@ const LOOKS_TECHNICAL = /^\s*[{[]|Uncaught|NoAuthProvider|ConvexError|\bat\s+\S+
 
 export function friendlyErrorMessage(error: unknown, fallback: string): string {
   console.error(error);
+  if (error instanceof Error && error.message.includes("demo_read_only")) return "This is a read-only demo.";
   const message = cleanErrorMessage(error, fallback);
   if (!message || message.length > 160 || LOOKS_TECHNICAL.test(message)) return fallback;
   return message;

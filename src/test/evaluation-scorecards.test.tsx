@@ -157,6 +157,7 @@ describe("criteria editor validation", () => {
 // ---------------------------------------------------------------------------
 const baseQueueRow: ReviewerQueueRow = {
   assignmentId: "assignment-1", eventId: "event-1" as EventId, submissionId: "submission-1" as SubmissionId,
+  evaluationPlanId: "plan-1",
   submissionTitle: "Reliable systems", submissionAnswers: { abstract: "Why retries are hard.", track: "Engineering" },
   speakerNames: ["Ada Lovelace"], round: 1, planName: "Program committee", scoringScaleMax: 5,
 };

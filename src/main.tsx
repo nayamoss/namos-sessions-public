@@ -1,12 +1,12 @@
 import { createRoot } from "react-dom/client";
 import { lazy, Suspense } from "react";
-import { ThemeProvider } from "next-themes";
+import { ThemeProvider, useTheme } from "next-themes";
 import { ClerkProvider } from "@clerk/clerk-react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { ErrorBoundary } from "./components/ErrorBoundary.tsx";
 import { DataClientProviders } from "./data/client-providers.tsx";
 import { PublicEmbedRepoProvider } from "./data/provider.tsx";
-import { clerkAppearance, clerkLocalization } from "./lib/clerk-appearance.ts";
+import { clerkAppearanceForTheme, clerkLocalization } from "./lib/clerk-appearance.ts";
 import App from "./App.tsx";
 import "./index.css";
 
@@ -22,11 +22,16 @@ if (!clerkConfigured && !publicDocsFallback && !publicEmbedRoute) {
 }
 
 const root = createRoot(document.getElementById("root")!);
+function AuthenticatedApp() {
+  const { resolvedTheme } = useTheme();
+  return <ClerkProvider publishableKey={publishableKey!} signInUrl="/sign-in" signUpUrl="/sign-up" appearance={clerkAppearanceForTheme(resolvedTheme)} localization={clerkLocalization}><DataClientProviders><ErrorBoundary fallback={<p>Something went wrong. Please refresh the page.</p>}><App /></ErrorBoundary></DataClientProviders></ClerkProvider>;
+}
+
 if (publicEmbedRoute) {
   root.render(
     <PublicEmbedRepoProvider>
       <ErrorBoundary fallback={<p>Something went wrong. Please refresh the page.</p>}>
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <BrowserRouter>
             <Suspense fallback={<main className="min-h-screen p-4 text-sm text-muted-foreground">Loading embed…</main>}>
               <Routes>
@@ -41,17 +46,11 @@ if (publicEmbedRoute) {
 } else if (publicDocsFallback) {
   root.render(
     <ErrorBoundary fallback={<p>Something went wrong. Please refresh the page.</p>}>
-      <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}><Suspense fallback={<p className="p-6 text-sm text-muted-foreground">Loading API documentation…</p>}><PublicApiDocs /></Suspense></ThemeProvider>
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem><Suspense fallback={<p className="p-6 text-sm text-muted-foreground">Loading API documentation…</p>}><PublicApiDocs /></Suspense></ThemeProvider>
     </ErrorBoundary>
   );
 } else {
   root.render(
-    <ClerkProvider publishableKey={publishableKey!} signInUrl="/sign-in" signUpUrl="/sign-up" appearance={clerkAppearance} localization={clerkLocalization}>
-      <DataClientProviders>
-        <ErrorBoundary fallback={<p>Something went wrong. Please refresh the page.</p>}>
-          <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}><App /></ThemeProvider>
-        </ErrorBoundary>
-      </DataClientProviders>
-    </ClerkProvider>
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem><AuthenticatedApp /></ThemeProvider>
   );
 }

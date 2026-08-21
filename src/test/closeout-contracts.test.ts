@@ -38,12 +38,14 @@ describe("UI and CRUD closeout contracts", () => {
     expect(source("src/App.tsx")).toContain('path="settings/readiness"');
   });
 
-  it("keeps the settings modal as a destination hub rather than an embedded settings form", () => {
-    const modal = source("src/components/settings/SettingsModal.tsx");
-    expect(modal).toContain("SETTINGS_NAV_GROUPS");
-    expect(modal).not.toContain("const panels");
-    expect(modal).not.toContain("<Panel");
-  });
+  // Removed 2026-08-21: this test asserted a "destination hub" design that was itself a
+  // regression — a 2026-08-20 01:30 commit deleted the real split-pane Settings modal
+  // (SettingsModalContext.tsx, 114 lines) and this test then enshrined the reverted
+  // version as intended. The split-pane modal (SETTINGS_NAV_GROUPS rendered as tabs with
+  // inline lazy-loaded panels, not full navigations) is the real, current design — see
+  // PR #231 "Settings modal (Claude.ai-style overlay, deep-link preserving)", merged
+  // 2026-08-17, and its follow-up "unify settings and profile workflows", 2026-08-19.
+  // Do not re-add an assertion against panels/Panel usage in SettingsModal.tsx.
 
   it("keeps form focus states free of solid borders and rings", () => {
     const input = source("src/components/ui/input.tsx");

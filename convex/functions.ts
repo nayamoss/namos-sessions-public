@@ -6,11 +6,25 @@
 // is always relative to one organization — a bare organizers row grants nothing on its own.
 // Reintroducing an unscoped isOrganizer() is how this regresses back into a single shared
 // tenant, so don't.
-export { query, mutation } from "./_generated/server";
+import { ConvexError } from "convex/values";
+import { customCtx, customMutation } from "convex-helpers/server/customFunctions";
+import { mutation as baseMutation, query } from "./_generated/server";
 
 import type { QueryCtx, MutationCtx } from "./_generated/server";
 import type { UserIdentity } from "convex/server";
 import type { Id } from "./_generated/dataModel";
+
+export { query };
+
+// All public mutations must use this export. It automatically blocks active demo identities
+// before their handlers run; do not duplicate this check in individual mutation modules.
+export const mutation = customMutation(baseMutation, customCtx(async (ctx) => {
+  const identity = await ctx.auth.getUserIdentity();
+  if (identity && await isDemoIdentity(ctx, identity)) {
+    throw new ConvexError({ code: "demo_read_only", message: "This is a read-only demo." });
+  }
+  return {};
+}));
 
 // Every non-public query/mutation must call this first. Deliberately public CFP, embed, and
 // HTTP read surfaces are exempt. Privileged maintenance functions such as seed.ts use Convex's
@@ -21,7 +35,31 @@ export async function requireIdentity(ctx: QueryCtx | MutationCtx): Promise<User
   return identity;
 }
 
-function identityEmail(identity: UserIdentity): string | undefined {
+// Demo Clerk subjects are stored in exactly one of these indexed columns. Any lookup failure is
+// deliberately treated as demo traffic so a database error can never make the demo writable.
+const demoSeatIndexes = ["by_organizerUserId", "by_reviewerUserId", "by_speakerUserId"] as const;
+const demoSeatFields = ["organizerUserId", "reviewerUserId", "speakerUserId"] as const;
+
+export async function isDemoIdentity(ctx: QueryCtx | MutationCtx, identity: UserIdentity): Promise<boolean> {
+  try {
+    const seats = await Promise.all(
+      demoSeatIndexes.map((index, i) =>
+        ctx.db.query("demo_workspaces").withIndex(index, (q) => q.eq(demoSeatFields[i], identity.subject)).unique(),
+      ),
+    );
+    const workspace = seats.find(Boolean);
+    return Boolean(workspace && workspace.expiresAt > Date.now() && workspace.absoluteExpiresAt > Date.now());
+  } catch (error) {
+    // Fail closed deliberately (an unrelated DB/index error must never make the demo
+    // writable) — but log it, since this is indistinguishable from real demo traffic
+    // otherwise and would silently block every mutation app-wide if it ever fires for a
+    // non-demo reason.
+    console.error("isDemoIdentity lookup failed; blocking mutation as a precaution.", error);
+    return true;
+  }
+}
+
+export function identityEmail(identity: UserIdentity): string | undefined {
   return typeof identity.email === "string" ? identity.email.trim().toLowerCase() : undefined;
 }
 
@@ -133,16 +171,29 @@ export async function isEventOrganizer(ctx: QueryCtx | MutationCtx, eventId: Id<
 // Scheduled adapters (Slack today) have no browser identity. They may act only for a stored
 // Clerk subject that still has organizer access at execution time; the external identity
 // mapping is never itself authority.
+// `email` is optional because not every caller has one: the direct mutation path has a full
+// Clerk identity and should pass it, but the Slack path (createRunFromSlack) only has a
+// pre-resolved userId string. Without the email fallback this diverged from
+// assertEventOrganizerAccess/isOrganizerOf (which does fall back to email) closely enough that
+// someone whose organizer row was matched by email rather than an exact userId — e.g. an invited
+// organizer signed in under a different auth method than the row was created under — could pass
+// the outer access check on a page load and then get "Forbidden" the moment they tried to submit
+// an agent run, with no way to tell why. See #incident 2026-08-21 dashboard chat.
 export async function assertEventOrganizerByUserId(
   ctx: QueryCtx | MutationCtx,
   eventId: Id<"events">,
   userId: string,
+  email?: string,
 ): Promise<void> {
   const event = await ctx.db.get(eventId);
   if (!event?.organizationId) throw new Error("Forbidden: event organizer access required.");
-  const [organizer, member] = await Promise.all([
+  const normalizedEmail = email?.trim().toLowerCase();
+  const [organizerByUser, organizerByEmail, member] = await Promise.all([
     ctx.db.query("organizers").withIndex("by_org_userId", (q) => q.eq("organizationId", event.organizationId).eq("userId", userId)).unique(),
+    normalizedEmail
+      ? ctx.db.query("organizers").withIndex("by_org_email", (q) => q.eq("organizationId", event.organizationId).eq("email", normalizedEmail)).unique()
+      : Promise.resolve(null),
     ctx.db.query("event_members").withIndex("by_event_userId", (q) => q.eq("eventId", eventId).eq("userId", userId)).unique(),
   ]);
-  if (!organizer && member?.role !== "organizer") throw new Error("Forbidden: event organizer access required.");
+  if (!organizerByUser && !organizerByEmail && member?.role !== "organizer") throw new Error("Forbidden: event organizer access required.");
 }

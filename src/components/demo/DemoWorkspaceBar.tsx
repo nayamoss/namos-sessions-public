@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Inbox, RotateCcw } from "lucide-react";
+import { Inbox, Lock, RotateCcw } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cardSurfaceClasses } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -45,11 +45,23 @@ export function DemoWorkspaceBar() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
+  // The demo cookie is `__Host-` prefixed, which forces `Path=/` at the browser level (that
+  // prefix rejects any other Path), so it is technically readable site-wide once a demo session
+  // has ever been started in this browser. That must never surface outside the demo experience
+  // itself — an organizer's real, authenticated session has nothing to do with a leftover demo
+  // cookie. Gate both the status check and the render on actually being under /demo so a stale
+  // cookie can never paint this bar over real account data again.
+  const inDemo = location.pathname === "/demo" || location.pathname.startsWith("/demo/");
+
   const refresh = useCallback(() => {
+    if (!inDemo) {
+      setState(null);
+      return;
+    }
     void request("/api/demo/workspaces/current")
       .then(setState)
       .catch(() => setState(null));
-  }, []);
+  }, [inDemo]);
 
   useEffect(() => {
     refresh();
@@ -112,7 +124,7 @@ export function DemoWorkspaceBar() {
             Demo workspace
           </p>
           <p className="text-xs text-muted-foreground">
-            Active until {expires}
+            <span className="inline-flex items-center gap-1"><Lock className="h-3 w-3" aria-hidden="true" />Read-only · Active until {expires}</span>
           </p>
         </div>
         <div
