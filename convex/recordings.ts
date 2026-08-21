@@ -11,9 +11,13 @@ export function hostedSource(value: string): { url: string; provider: Exclude<Pr
   try { url = new URL(value.trim()); } catch { throw new Error("Enter a valid HTTPS recording URL."); }
   if (url.protocol !== "https:" || url.username || url.password) throw new Error("Hosted recordings must be credential-free HTTPS URLs.");
   const host = url.hostname.toLowerCase().replace(/^www\./, "");
-  const youtube = host === "youtu.be" ? url.pathname.slice(1) : host.endsWith("youtube.com") ? url.searchParams.get("v") ?? (url.pathname.match(/^\/(?:embed|shorts)\/([^/]+)/)?.[1]) : undefined;
+  // Exact-match or require a "." boundary before the suffix — `host.endsWith("youtube.com")`
+  // alone also matches a hostile host like "evilyoutube.com", letting an attacker-controlled
+  // domain sail through as if it were really youtube.com/vimeo.com.
+  const isHost = (candidate: string, suffix: string) => candidate === suffix || candidate.endsWith(`.${suffix}`);
+  const youtube = host === "youtu.be" ? url.pathname.slice(1) : isHost(host, "youtube.com") ? url.searchParams.get("v") ?? (url.pathname.match(/^\/(?:embed|shorts)\/([^/]+)/)?.[1]) : undefined;
   if (youtube && /^[\w-]{6,}$/.test(youtube)) return { url: url.toString(), provider: "youtube", embedUrl: `https://www.youtube-nocookie.com/embed/${youtube}` };
-  const vimeo = host === "vimeo.com" || host.endsWith("vimeo.com") ? url.pathname.match(/\/(\d+)(?:\/|$)/)?.[1] : undefined;
+  const vimeo = isHost(host, "vimeo.com") ? url.pathname.match(/\/(\d+)(?:\/|$)/)?.[1] : undefined;
   if (vimeo) return { url: url.toString(), provider: "vimeo", embedUrl: `https://player.vimeo.com/video/${vimeo}` };
   return { url: url.toString(), provider: "external" };
 }

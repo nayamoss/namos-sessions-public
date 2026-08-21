@@ -71,6 +71,23 @@ describe("hostedSource host classification", () => {
   it("rejects malformed URLs", () => {
     expect(() => hostedSource("not a url")).toThrow(/valid HTTPS/);
   });
+
+  it("does not classify a spoofed host merely ending in youtube.com as youtube", () => {
+    const result = hostedSource("https://evilyoutube.com/watch?v=dQw4w9WgXcQ");
+    expect(result.provider).toBe("external");
+    expect(result.embedUrl).toBeUndefined();
+  });
+
+  it("does not classify a spoofed host merely ending in vimeo.com as vimeo", () => {
+    const result = hostedSource("https://attacker-vimeo.com/76979871");
+    expect(result.provider).toBe("external");
+    expect(result.embedUrl).toBeUndefined();
+  });
+
+  it("still classifies a real youtube.com subdomain as youtube", () => {
+    const result = hostedSource("https://m.youtube.com/watch?v=dQw4w9WgXcQ");
+    expect(result.provider).toBe("youtube");
+  });
 });
 
 describe("attachHosted", () => {
