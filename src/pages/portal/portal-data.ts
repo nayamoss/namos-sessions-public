@@ -16,6 +16,14 @@ export const defaultProfile: PortalProfile = { firstName: "Sam", lastName: "Diaz
 
 export type PortalProfileScope = { eventId: string; speakerId: string; speakerName: string };
 
-export function defaultPortalProfile(): PortalProfile {
-  return { ...defaultProfile, firstName: "", lastName: "", email: "" };
+function profileKey(scope: PortalProfileScope) { return `sessionboard:portal-profile:${scope.eventId}:${scope.speakerId}`; }
+function defaultProfileFor(scope?: PortalProfileScope): PortalProfile {
+  const names = scope?.speakerName.trim().split(/\s+/).filter(Boolean) ?? [];
+  return { ...defaultProfile, firstName: names[0] ?? "", lastName: names.slice(1).join(" "), email: "" };
 }
+export function loadPortalProfile(scope?: PortalProfileScope): PortalProfile {
+  const fallback = defaultProfileFor(scope);
+  if (!scope) return fallback;
+  try { const saved = window.localStorage.getItem(profileKey(scope)); return saved ? { ...fallback, ...JSON.parse(saved) } : fallback; } catch { return fallback; }
+}
+export function savePortalProfile(scope: PortalProfileScope, profile: PortalProfile) { window.localStorage.setItem(profileKey(scope), JSON.stringify(profile)); }

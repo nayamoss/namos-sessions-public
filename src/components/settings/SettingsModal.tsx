@@ -30,12 +30,12 @@ export function SettingsModal({ open, activeTab, onOpenChange, onTabChange }: { 
   const activeLabel = SETTINGS_NAV_GROUPS.flatMap((group) => group.items).find((item) => item.id === activeTab)?.label ?? "Settings";
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="grid h-[min(48rem,calc(100dvh-2rem))] max-h-[calc(100dvh-2rem)] w-[min(64rem,calc(100%-2rem))] max-w-none grid-cols-[13rem_minmax(0,1fr)] gap-0 overflow-hidden border-0 bg-background p-0 shadow-none sm:rounded-lg sm:p-0">
+      <DialogContent showCloseButton={activeTab !== "event"} onOpenAutoFocus={(event) => event.preventDefault()} className="grid h-[min(39rem,calc(100dvh-2rem))] max-h-[calc(100dvh-2rem)] w-[min(50rem,calc(100vw-2rem))] max-w-none grid-cols-[12rem_minmax(0,1fr)] gap-0 overflow-hidden border-0 bg-background p-0 shadow-none sm:rounded-lg sm:p-0">
         <DialogTitle className="sr-only">Settings</DialogTitle>
         <DialogDescription className="sr-only">Manage this event and organization.</DialogDescription>
         <aside className="min-h-0 overflow-y-auto bg-muted/40"><SettingsSidebarNav activeTab={activeTab} onTabChange={onTabChange} /></aside>
-        <div className="min-h-0 overflow-y-auto p-6 pr-12">
-          <h2 className="mb-6 text-base font-semibold text-foreground">{activeLabel}</h2>
+        <div className="min-h-0 overflow-y-auto p-5 pr-10">
+          {activeTab !== "event" && <h2 className="mb-4 text-base font-semibold text-foreground">{activeLabel}</h2>}
           <Suspense fallback={<p className="text-sm text-muted-foreground">Loading settings…</p>}><Panel /></Suspense>
         </div>
       </DialogContent>

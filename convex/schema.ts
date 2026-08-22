@@ -316,16 +316,23 @@ export default defineSchema({
     lastName: v.string(),
     stage: v.union(v.literal("prospect"), v.literal("contacted"), v.literal("qualified"), v.literal("invited"), v.literal("negotiating"), v.literal("confirmed"), v.literal("declined"), v.literal("archived")),
     score: v.number(),
+    mergedIntoContactId: v.optional(v.id("crm_contacts")),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_organization", ["organizationId"]).index("by_org_email", ["organizationId", "email"]),
+  }).index("by_organization", ["organizationId"]).index("by_org_email", ["organizationId", "email"]).index("by_merged_into", ["mergedIntoContactId"]),
   crm_event_contacts: defineTable({
     eventId: v.id("events"),
     contactId: v.id("crm_contacts"),
     speakerId: v.optional(v.id("speakers")),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_event", ["eventId"]).index("by_contact", ["contactId"]).index("by_event_contact", ["eventId", "contactId"]),
+  })
+    .index("by_event", ["eventId"])
+    .index("by_contact", ["contactId"])
+    .index("by_event_contact", ["eventId", "contactId"])
+    // Cross-event projection support (#268): resolving every event a contact belongs to, and
+    // efficiently checking one contact against a caller's authorized event set, without a scan.
+    .index("by_contact_event", ["contactId", "eventId"]),
   crm_stage_history: defineTable({
     organizationId: v.id("organizations"),
     contactId: v.id("crm_contacts"),
@@ -334,6 +341,48 @@ export default defineSchema({
     changedByUserId: v.string(),
     createdAt: v.number(),
   }).index("by_contact_createdAt", ["contactId", "createdAt"]),
+  // A merge never deletes a contact. The source becomes a tombstone and this immutable
+  // snapshot identifies every relationship that was moved, so reversal can be guarded
+  // and audited without losing speaker or import provenance.
+  crm_contact_merges: defineTable({
+    organizationId: v.id("organizations"),
+    sourceContactId: v.id("crm_contacts"),
+    targetContactId: v.id("crm_contacts"),
+    sourceSnapshot: v.object({
+      email: v.string(),
+      firstName: v.string(),
+      lastName: v.string(),
+      stage: v.union(v.literal("prospect"), v.literal("contacted"), v.literal("qualified"), v.literal("invited"), v.literal("negotiating"), v.literal("confirmed"), v.literal("declined"), v.literal("archived")),
+      score: v.number(),
+      membershipIds: v.array(v.id("crm_event_contacts")),
+      speakerIds: v.array(v.id("speakers")),
+      sourceRecordIds: v.array(v.id("crm_source_records")),
+      stageHistoryIds: v.array(v.id("crm_stage_history")),
+    }),
+    // Confirmation hash the caller had to present at merge time, bound to the exact source/
+    // target/affected-count preview they reviewed (#268 T005). Guards against a stale preflight
+    // being confirmed after the underlying references changed.
+    confirmationHash: v.optional(v.string()),
+    // One entry per source event membership that was NOT moved because the target already had
+    // its own membership for that event -- the source's row was deleted instead. Recorded so a
+    // reversal can recreate it precisely rather than silently dropping that event history, and so
+    // any speakerId the merge transferred onto the target's membership can be verified/undone
+    // (#268 T005).
+    droppedMemberships: v.optional(v.array(v.object({
+      eventId: v.id("events"),
+      targetMembershipId: v.id("crm_event_contacts"),
+      transferredSpeakerId: v.optional(v.id("speakers")),
+    }))),
+    mergedByUserId: v.string(),
+    mergedAt: v.number(),
+    reversedByUserId: v.optional(v.string()),
+    reversedAt: v.optional(v.number()),
+  })
+    .index("by_source", ["sourceContactId"])
+    .index("by_target", ["targetContactId"])
+    // Audit/support lookups scoped to one organization, newest first (#268 T002). Named after
+    // mergedAt -- this table's write timestamp -- rather than a nonexistent createdAt field.
+    .index("by_organization_mergedAt", ["organizationId", "mergedAt"]),
   crm_segments: defineTable({
     organizationId: v.id("organizations"),
     name: v.string(),
@@ -379,7 +428,7 @@ export default defineSchema({
     normalizedEmail: v.string(),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_source_record", ["sourceId", "providerRecordId"]).index("by_source_email", ["sourceId", "normalizedEmail"]),
+  }).index("by_source_record", ["sourceId", "providerRecordId"]).index("by_source_email", ["sourceId", "normalizedEmail"]).index("by_contact", ["contactId"]),
   // Kept separate from content OAuth state so a CRM authorization cannot be repurposed to
   // import CFP content. Both rows are short lived and never queryable by the browser.
   crm_oauth_states: defineTable({
@@ -415,7 +464,7 @@ export default defineSchema({
     status: v.union(v.literal("invited"), v.literal("active"), v.literal("inactive")),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_event", ["eventId"]).index("by_email", ["email"]).index("by_event_email", ["eventId", "email"]).index("by_event_contact", ["eventId", "contactId"]).index("by_event_sourceRef", ["eventId", "sourceRef"]).index("by_event_checkedIn", ["eventId", "checkedInAt"]),
+  }).index("by_event", ["eventId"]).index("by_email", ["email"]).index("by_event_email", ["eventId", "email"]).index("by_contact", ["contactId"]).index("by_event_contact", ["eventId", "contactId"]).index("by_event_sourceRef", ["eventId", "sourceRef"]).index("by_event_checkedIn", ["eventId", "checkedInAt"]),
   speaker_documents: defineTable({
     submissionId: v.id("submissions"),
     speakerId: v.id("speakers"),

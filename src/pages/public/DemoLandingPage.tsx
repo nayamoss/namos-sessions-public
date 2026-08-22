@@ -125,8 +125,8 @@ export default function DemoLandingPage() {
             {["Real seeded event state", "Read-only walkthrough", "No external demo email"].map((item) => <div key={item} className="flex items-center gap-2 text-sm"><ShieldCheck className="h-4 w-4 text-primary" aria-hidden="true" />{item}</div>)}
           </div>
         </div>
-        <aside className={cardSurfaceClasses("muted", "p-5 sm:p-6")} aria-label="Five-minute route">
-          <h2 className="text-lg font-semibold">What the demo covers</h2>
+        <aside aria-label="Five-minute route">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">What the demo covers</h2>
           <ol className="mt-4 space-y-3 text-sm leading-6 text-muted-foreground">
             <li>1. Inspect a proposal submitted through a conditional CFP form.</li><li>2. Explore review scores and acceptance decisions.</li><li>3. View speaker tasks, files, and event resources.</li><li>4. Examine schedule conflicts and program readiness.</li><li>5. Browse the published program workflow.</li>
           </ol>
@@ -153,7 +153,7 @@ export default function DemoLandingPage() {
         {error && <p role="alert" className="mt-4 text-sm text-destructive">{error}</p>}
       </section>}
 
-      <section className={cardSurfaceClasses("muted", "my-8 flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between")}>
+      <section className="my-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3"><RotateCcw className="mt-0.5 h-5 w-5 text-primary" aria-hidden="true" /><div><h2 className="font-semibold">Safe to explore</h2><p className="mt-1 text-sm text-muted-foreground">Your event is isolated, expires automatically, and can be reset from the demo bar.</p></div></div>
         <Link to="/demo/proof" className="shrink-0 text-sm font-semibold text-primary hover:underline">Inspect every proof route →</Link>
       </section>

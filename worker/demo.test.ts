@@ -113,6 +113,7 @@ describe("demo workspace edge boundary", () => {
     expect(legacy.status).toBe(302);
     expect(legacy.headers.get("location")).toBe("https://app.example.test/demo");
   });
+
   it("fails closed when the demo feature flag or required secrets are absent", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
@@ -141,9 +142,9 @@ describe("demo workspace edge boundary", () => {
     ]);
     expect(createUser.mock.calls.map(([input]) => input.privateMetadata.namosDemoRole)).toEqual(["organizer", "reviewer", "speaker"]);
     expect(createUser.mock.calls.map(([input]) => input.emailAddress[0])).toEqual([
-      expect.stringMatching(/^organizer\+[0-9a-f-]+@demo\.your-project\.example$/),
-      expect.stringMatching(/^reviewer\+[0-9a-f-]+@demo\.your-project\.example$/),
-      expect.stringMatching(/^speaker\+[0-9a-f-]+@demo\.your-project\.example$/),
+      expect.stringMatching(/^organizer\+[0-9a-f-]+@demo\.namos-sessions\.xyz$/),
+      expect.stringMatching(/^reviewer\+[0-9a-f-]+@demo\.namos-sessions\.xyz$/),
+      expect.stringMatching(/^speaker\+[0-9a-f-]+@demo\.namos-sessions\.xyz$/),
     ]);
     expect(response.headers.get("set-cookie")).toMatch(/^__Host-namos_demo_v2=.*HttpOnly; Secure; SameSite=Lax$/);
     const body = await response.json() as Record<string, unknown>;

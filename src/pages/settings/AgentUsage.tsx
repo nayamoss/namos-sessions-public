@@ -136,19 +136,29 @@ function ProviderTable({ stats }: { stats: AgentUsageStats }) {
   return (
     <Card className="p-4">
       <p className="text-sm font-semibold">Provider details</p>
-      <div className="mt-3 min-w-[520px] overflow-x-auto text-sm">
-        <div className="grid grid-cols-5 gap-3 border-b pb-2 text-xs font-medium text-muted-foreground">
-          <span>Provider</span><span>Requests</span><span>Input tokens</span><span>Output tokens</span><span>Billable</span>
-        </div>
-        {stats.providerBreakdown.map((row) => (
-          <div key={row.provider} className="grid grid-cols-5 gap-3 border-b py-2 last:border-0">
-            <span className="font-medium capitalize">{row.provider}</span>
-            <span className="tabular-nums">{row.requests.toLocaleString()}</span>
-            <span className="tabular-nums">{row.inputTokens.toLocaleString()}</span>
-            <span className="tabular-nums">{row.outputTokens.toLocaleString()}</span>
-            <span className="tabular-nums">{row.billableRequests.toLocaleString()}</span>
-          </div>
-        ))}
+      <div className="mt-3 overflow-x-auto">
+        <table className="w-full min-w-[520px] text-left text-sm">
+          <thead>
+            <tr className="text-xs font-medium text-muted-foreground">
+              <th className="pb-2 pr-4">Provider</th>
+              <th className="pb-2 pr-4">Requests</th>
+              <th className="pb-2 pr-4">Input tokens</th>
+              <th className="pb-2 pr-4">Output tokens</th>
+              <th className="pb-2">Billable</th>
+            </tr>
+          </thead>
+          <tbody>
+            {stats.providerBreakdown.map((row) => (
+              <tr key={row.provider} className="text-sm">
+                <td className="py-1.5 pr-4 font-medium capitalize">{row.provider}</td>
+                <td className="py-1.5 pr-4 tabular-nums">{row.requests.toLocaleString()}</td>
+                <td className="py-1.5 pr-4 tabular-nums">{row.inputTokens.toLocaleString()}</td>
+                <td className="py-1.5 pr-4 tabular-nums">{row.outputTokens.toLocaleString()}</td>
+                <td className="py-1.5 tabular-nums">{row.billableRequests.toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </Card>
   );
@@ -205,11 +215,11 @@ function LoadingState() {
   return (
     <div aria-busy="true" aria-label="Loading AI usage" className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-24 animate-pulse rounded-md bg-muted" />)}
+        {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-24 animate-pulse rounded-xl bg-muted" />)}
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
-        <div className="h-64 animate-pulse rounded-md bg-muted" />
-        <div className="h-64 animate-pulse rounded-md bg-muted" />
+        <div className="h-64 animate-pulse rounded-xl bg-muted" />
+        <div className="h-64 animate-pulse rounded-xl bg-muted" />
       </div>
     </div>
   );
