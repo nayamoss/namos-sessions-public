@@ -24,14 +24,14 @@ const fields = v.object({
     time: v.boolean(),
     room: v.boolean(),
     track: v.boolean(),
-    speakers: v.boolean(),
+    speakers: v.boolean(), recording: v.optional(v.boolean()),
   }),
   session: v.object({
     title: v.boolean(),
     time: v.boolean(),
     room: v.boolean(),
     track: v.boolean(),
-    speakers: v.boolean(),
+    speakers: v.boolean(), recording: v.optional(v.boolean()),
   }),
   speaker: v.object({
     name: v.boolean(),
@@ -188,8 +188,8 @@ async function safeHeadshotUrl(
 
 function normalizeFields(input: Doc<"embeds">["fields"]): Doc<"embeds">["fields"] {
   return {
-    agenda: { ...input.agenda, title: true, time: true, room: true },
-    session: { ...input.session, title: true },
+    agenda: { ...input.agenda, title: true, time: true, room: true, recording: input.agenda.recording ?? false },
+    session: { ...input.session, title: true, recording: input.session.recording ?? false },
     speaker: { ...input.speaker, name: true },
   };
 }
@@ -234,13 +234,17 @@ export async function publicFeedProjection(
 ) {
   const event = await ctx.db.get(eventId);
   if (!event || (requirePublished && event.status !== "published")) return null;
+  const sessionFields = config.view === "agenda" ? config.fields.agenda : config.fields.session;
 
-  const [agenda, rooms, tracks, submissions, speakers] = await Promise.all([
+  const [agenda, rooms, tracks, submissions, speakers, recordings] = await Promise.all([
     ctx.db.query("agenda_items").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
     ctx.db.query("rooms").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
     ctx.db.query("tracks").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
     ctx.db.query("submissions").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
     ctx.db.query("speakers").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
+    sessionFields.recording
+      ? ctx.db.query("session_recordings").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect()
+      : Promise.resolve([]),
   ]);
 
   const acceptedSpeakerIds = new Set(
@@ -274,13 +278,24 @@ export async function publicFeedProjection(
         (selectedTrackIds.size === 0 || (item.trackId ? selectedTrackIds.has(item.trackId) : false)),
     )
     .sort((left, right) => left.startTime - right.startTime || left.title.localeCompare(right.title));
-  const sessionFields = config.view === "agenda" ? config.fields.agenda : config.fields.session;
-  const sessions = sourceSessions.map((item, index) => {
+  const publishedRecordingsBySession = new Map(
+    recordings
+      .filter((recording) => recording.role === "active" && recording.publicationStatus === "published" && recording.availability !== "unavailable")
+      .map((recording) => [recording.agendaItemId, recording]),
+  );
+  const sessions = await Promise.all(sourceSessions.map(async (item, index) => {
     const track = item.trackId ? trackAliases.get(item.trackId) : undefined;
     const roomName = roomNames.get(item.roomId);
     const speakerNames = item.speakerIds
       .map((speakerId) => publicSpeakerNames.get(speakerId))
       .filter((name): name is string => Boolean(name));
+    const recording = publishedRecordingsBySession.get(item._id);
+    const asset = recording?.assetId ? await ctx.db.get(recording.assetId as Id<"event_assets">) : undefined;
+    const recordingUrl = recording?.sourceType === "hosted"
+      ? safePublicUrl(recording.hostedUrl)
+      : recording?.storageId
+        ? await ctx.storage.getUrl(recording.storageId)
+        : asset ? await ctx.storage.getUrl(asset.storageId) : undefined;
     return {
       key: `session-${index}`,
       title: item.title,
@@ -288,8 +303,11 @@ export async function publicFeedProjection(
       ...(sessionFields.room && roomName ? { roomName } : {}),
       ...(sessionFields.track && track ? { trackKey: track.key, trackName: track.name } : {}),
       ...(sessionFields.speakers && speakerNames.length > 0 ? { speakerNames } : {}),
+      ...(sessionFields.recording && recording && recordingUrl
+        ? { recording: { url: recordingUrl, sourceType: recording.sourceType, provider: recording.provider } }
+        : {}),
     };
-  });
+  }));
 
   const visibleSpeakers = selectedTrackIds.size === 0
     ? acceptedSpeakers
@@ -553,7 +571,7 @@ export const get = query({
     const logoUrl = await safeHeadshotUrl(ctx, event.logoStorageKey);
     const publishedRecordingsBySession = new Map(
       recordings
-        .filter((recording) => recording.role === "active" && recording.publicationStatus === "published" && recording.availability === "ready")
+        .filter((recording) => recording.role === "active" && recording.publicationStatus === "published" && recording.availability !== "unavailable")
         .map((recording) => [recording.agendaItemId, recording]),
     );
     const lastUpdatedAt = Math.max(
@@ -581,11 +599,11 @@ export const get = query({
           : undefined;
         const recording = publishedRecordingsBySession.get(item._id);
         const asset = recording?.assetId ? await ctx.db.get(recording.assetId) : undefined;
-        const recordingUrl = !recording
-          ? undefined
-          : recording.sourceType !== "hosted"
-            ? (recording.storageId ? await ctx.storage.getUrl(recording.storageId) : asset ? await ctx.storage.getUrl(asset.storageId) : undefined)
-            : safePublicUrl(recording.hostedUrl);
+        const recordingUrl = recording?.sourceType === "hosted"
+          ? safePublicUrl(recording.hostedUrl)
+          : recording?.storageId
+            ? await ctx.storage.getUrl(recording.storageId)
+            : asset ? await ctx.storage.getUrl(asset.storageId) : undefined;
         return {
           sessionKey: publicSessionKey(String(item._id)),
           title: item.title,

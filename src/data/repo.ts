@@ -11,8 +11,10 @@ import type {
   AgendaPlacementConflict,
   AgendaItem,
   RecordingDetail,
+  RecordingPage,
+  RecordingManagerFilters,
+  EventAsset,
   RecordingBulkResult,
-  EventVideoAsset,
   RecordingId,
   RecordingManagerRow,
   AgentProposalId,
@@ -125,16 +127,20 @@ export interface FilesRepo {
 }
 export interface RecordingsRepo {
   list(scope: EventScope): Promise<RecordingManagerRow[]>;
+  listPage(input: EventScope & RecordingManagerFilters & { paginationOpts: { numItems: number; cursor: string | null } }): Promise<RecordingPage>;
   get(input: EventScope & { agendaItemId: string }): Promise<RecordingDetail>;
-  listAssets(scope: EventScope): Promise<EventVideoAsset[]>;
+  listAssets(scope: EventScope): Promise<EventAsset[]>;
+  requestUpload(input: EventScope & { agendaItemId: string }): Promise<{ uploadUrl: string }>;
   attachHosted(input: EventScope & { agendaItemId: string; hostedUrl: string }): Promise<RecordingId>;
   attachUpload(input: EventScope & { agendaItemId: string; storageId: string; fileName: string }): Promise<RecordingId>;
   attachAsset(input: EventScope & { agendaItemId: string; assetId: string }): Promise<RecordingId>;
   publish(input: EventScope & { recordingId: string; overrideReason?: string }): Promise<RecordingId>;
   unpublish(input: EventScope & { recordingId: string }): Promise<void>;
   detach(input: EventScope & { recordingId: string }): Promise<void>;
-  bulkPublish(input: EventScope & { recordingIds: string[] }): Promise<RecordingBulkResult[]>;
+  retry(input: EventScope & { recordingId: string }): Promise<RecordingId>;
+  bulkPublish(input: EventScope & { recordingIds: string[]; overrideReason?: string }): Promise<RecordingBulkResult[]>;
   bulkUnpublish(input: EventScope & { recordingIds: string[] }): Promise<RecordingBulkResult[]>;
+  migrateLegacy(scope: EventScope): Promise<{ created: number; skipped: number; invalid: number; exceptions: Array<{ agendaItemId: string; title: string; value: string; reason: string }> }>;
 }
 export interface AnalyticsRepo {
   summary(scope: EventScope): Promise<EventAnalyticsSummary>;
@@ -368,6 +374,7 @@ export interface PublicFormParticipantInput {
     unavailable: Array<{
       date: number;
       hour?: number;
+      minute?: 0 | 30;
       part?: "morning" | "afternoon" | "evening";
     }>;
     notes?: string;

@@ -1,7 +1,7 @@
 # AI Schedule Proposals — Requirements
 
 **Type:** Feature
-**Status:** In Review
+**Status:** Ready for Implementation
 **Priority:** High
 **Last Updated:** 2026-08-20
 
@@ -14,32 +14,36 @@ The Operations Agent (`convex/agentRuntime.ts`) can read the agenda and detect c
 
 **Acceptance Criteria:**
 - GIVEN an event with accepted submissions that have no agenda item WHEN the organizer asks the agent to schedule them THEN the agent returns a `schedule_assignments` proposal listing a room/time for each session, or explains which sessions it could not place and why.
-- GIVEN a schedule proposal is pending WHEN the organizer views it THEN they see, per session: current placement (none), proposed room, proposed start/end time, proposed track (if any), and any soft warnings (e.g. speaker marked unavailable).
-- GIVEN a schedule proposal contains an assignment that would create a blocking conflict (room or speaker double-booking) WHEN the agent builds the proposal THEN that session is excluded from the proposal and listed as "could not place" with the reason — the agent never proposes a blocking conflict.
-- GIVEN a schedule proposal is pending WHEN the organizer clicks Approve THEN each assignment is applied via the existing `agenda.save` mutation (re-validated against current state at approval time), audited via `agenda_items_audit`, and the proposal is marked applied.
+- GIVEN a schedule proposal is pending WHEN the organizer views it THEN they see, per session: current placement (none), proposed room, proposed start/end time, proposed track (if any), the agent's rationale, and separately displayed server-derived soft warnings (e.g. speaker marked unavailable).
+- GIVEN a schedule proposal contains assignments that conflict with the live agenda or with another assignment in the same proposal (room or speaker double-booking) WHEN the server builds the proposal THEN the conflicting session is excluded and listed as "could not place" with the reason — the organizer never sees a proposal containing a blocking conflict.
+- GIVEN a schedule proposal is pending WHEN the organizer clicks Approve THEN the shared agenda validation rules are re-run against the complete batch inside the approval mutation, valid assignments are inserted with `agenda.save`-equivalent persistence semantics, every insert is audited via `agenda_items_audit`, and the proposal is marked applied.
 - GIVEN a schedule proposal is pending WHEN the organizer clicks Reject THEN no agenda items are created and the proposal is marked rejected.
-- GIVEN the underlying agenda has changed since the proposal was generated (e.g. another organizer manually placed one of the proposed sessions) WHEN the organizer approves THEN each assignment is independently re-validated at apply time; a session that no longer places cleanly is skipped and reported, valid ones are still applied.
+- GIVEN the underlying agenda or reviewed session metadata has changed since the proposal was generated WHEN the organizer approves THEN the complete batch is re-validated at apply time; a session that no longer matches or places cleanly is skipped and reported, while valid assignments are still applied.
 - GIVEN a schedule proposal was applied WHEN the organizer views agenda history THEN each created `agenda_items_audit` row records `source: "agent:schedule_proposal"` and the acting organizer's user id (the approver, not the agent).
 
 ## Functional Requirements
 - FR-001: New agent tool `propose_schedule_assignments` mirrors the existing `propose_create_tasks` / `propose_message_drafts` pattern — it never writes agenda data directly, only saves a proposal row and stops the run for approval.
-- FR-002: A new internal read-only planning function computes candidate assignments deterministically (not left to the LLM to invent room/time pairs) — the LLM selects *which* unscheduled sessions to include and in what order/rationale, but slot search and conflict validation reuse the existing `placementConflicts` helper (`convex/agenda.ts:106`), the same function `agenda.checkPlacement` and `agenda.save` already use.
+- FR-002: A new internal read-only planning function computes candidate slots deterministically (not left to the LLM to invent room/time pairs). The LLM may select a returned `submissionId`, `roomId`, and `startTime` and supply rationale, but the server derives authoritative title, speakers, track, and end time; enforces membership in the returned slot grid; and validates the complete proposal batch with the same conflict rules used by `agenda.checkPlacement` and `agenda.save`.
 - FR-003: The agent's system prompt is updated to allow proposing (not applying) schedule assignments, matching the existing task/message carve-outs.
 - FR-004: `agent_action_proposals.kind` gains a new literal `"schedule_assignments"` with a `scheduleAssignments` field (array of proposed sessions).
 - FR-005: A new mutation `agentRuns.approveScheduleProposal` applies each assignment via `agenda.save`-equivalent internal logic (see design.md), inside the existing organizer-approval/audit trail, and reports per-assignment success/skip.
 - FR-006: The Operations Agent UI (`AgentRunInspector.tsx`) renders a `schedule_assignments` proposal as a table/list of session → room/time, with per-row warnings, alongside the existing task/message proposal cards.
 - FR-007: `rejectProposal` (`convex/agentRuns.ts:273`) already generically rejects by `proposalId` — confirm it does not need a kind-specific branch; document if it does.
+- FR-008: Both proposal creation and approval reload every referenced submission and require that it belongs to the run's event, remains accepted, has no agenda item, and appears at most once in the proposal. Room, track, title, speaker ids, and end time are never trusted from model output.
+- FR-009: Non-blocking conflicts are stored as structured, server-derived warnings on each proposed assignment and displayed separately from the LLM-authored rationale.
 
 ## Non-Functional Requirements
-- NFR-001: The planning function must be transactional per-assignment at apply time — a partial failure (one session no longer placeable) must not block or roll back the other valid assignments in the same proposal.
-- NFR-002: The agent must never call `agenda.save` (or any write) directly — schedule changes only ever happen through the same organizer-approval mutation path as tasks/messages, no new write surface for the LLM.
+- NFR-001: Approval runs as one atomic Convex mutation. Expected per-assignment validation failures (for example, a newly occupied slot) are collected as skips so other valid assignments can be applied; an unexpected write or audit failure rolls back the entire approval.
+- NFR-002: The agent must never create or update `agenda_items` directly. Its only write is persisting an approval-gated proposal; schedule changes happen exclusively through the organizer-triggered approval mutation.
 - NFR-003: Candidate slot search must be bounded (see design.md for the exact search space) so a single tool call cannot run unbounded compute inside the Convex action.
+- NFR-004: All timestamps shown in the proposal UI must be formatted in the event timezone, not the browser's local timezone.
 
 ## Out of Scope
-- Optimization/scoring across multiple candidate schedules (e.g. minimizing gaps, balancing track distribution) — first version proposes one reasonable placement per session using existing rooms/slots already in use for other agenda items, not a novel optimizer.
+- Optimization/scoring across multiple candidate schedules (e.g. minimizing gaps, balancing track distribution) — first version proposes one reasonable placement per session using configured rooms and the deterministic event-hours slot grid, not a novel optimizer.
 - Personalized/attendee-facing agenda recommendations.
 - Rescheduling or moving *already-published* sessions — this only targets unscheduled accepted submissions with no existing `agenda_items` row.
 - A drag/drop diff-preview UI beyond the existing proposal-card pattern (no new visual diff component).
 
 ## Success Metrics
-- An organizer can go from "N accepted, unscheduled sessions" to a fully proposed draft placement for all placeable sessions in one agent run, with zero blocking conflicts in the proposal.
+- For a batch of up to 50 accepted, unscheduled sessions, an organizer can receive a proposed draft placement for all placeable sessions in one agent run, with zero blocking conflicts in the proposal. Larger events expose deterministic continuation rather than repeatedly returning the same first page.
+- Every applied agenda item uses authoritative event-scoped submission data, a server-generated valid slot, and an audit row attributed to the approving organizer.

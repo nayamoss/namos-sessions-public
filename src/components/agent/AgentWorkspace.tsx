@@ -41,7 +41,7 @@ function timeGreeting() {
  * route deliberately use this exact component so the organizer never has to
  * learn two ways to run or approve an agent review.
  */
-export function AgentWorkspace() {
+export function AgentWorkspace({ onVoiceOpen }: { onVoiceOpen?: () => void } = {}) {
   const { event } = useCurrentEvent();
   const { user } = useUser();
   const firstName = user?.firstName;
@@ -213,13 +213,13 @@ export function AgentWorkspace() {
         error={error}
         controls={<>
           <DictationButton eventId={event.id} disabled={busy} onTranscript={(text) => setValue((current) => (current ? `${current} ${text}` : text))} />
-          <VoiceChatButton eventId={event.id} disabled={busy} onOpen={() => setVoiceOpen(true)} />
+          <VoiceChatButton eventId={event.id} disabled={busy} onOpen={() => onVoiceOpen ? onVoiceOpen() : setVoiceOpen(true)} />
         </>}
       />
       <p className="sr-only" aria-live="polite">
         {selected ? `Review status: ${selected.run.status.replace(/_/g, " ")}` : "Ready to start a review"}
       </p>
-      {voiceOpen && <VoiceSessionPanel eventId={event.id} onClose={() => setVoiceOpen(false)} />}
+      {!onVoiceOpen && voiceOpen && <VoiceSessionPanel eventId={event.id} onClose={() => setVoiceOpen(false)} />}
     </Card>
   );
 }

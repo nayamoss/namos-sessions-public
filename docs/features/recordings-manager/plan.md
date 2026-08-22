@@ -3,6 +3,7 @@
 Route: `/events/:eventSlug/program/recordings` · Authorized event organizer
 Requirements: [requirements.md](./requirements.md) · Design: [design.md](./design.md)
 Acceptance journey: [USER_JOURNEY.md](./USER_JOURNEY.md)
+Staging verification: [STAGING_VERIFICATION.md](./STAGING_VERIFICATION.md)
 
 ## Outcome
 

@@ -1,3 +1,4 @@
+import { useEffect, type RefObject } from "react";
 import type {
   Embed,
   EmbedFieldOptions,
@@ -39,8 +40,8 @@ export const requiredEmbedFields = {
   speaker: ["name"],
 } as const;
 export const defaultEmbedFields: EmbedFieldOptions = {
-  agenda: { title: true, time: true, room: true, track: true, speakers: true },
-  session: { title: true, time: true, room: true, track: true, speakers: true },
+  agenda: { title: true, time: true, room: true, track: true, speakers: true, recording: true },
+  session: { title: true, time: true, room: true, track: true, speakers: true, recording: true },
   speaker: {
     name: true,
     headshot: true,
@@ -91,7 +92,7 @@ export function embedWriteFromEmbed(embed: Embed): EmbedWrite {
     dateFormat,
     timeFormat,
     trackIds: [...trackIds],
-    fields: structuredClone(fields),
+    fields: { ...structuredClone(fields), agenda: { ...fields.agenda, recording: fields.agenda.recording ?? false }, session: { ...fields.session, recording: fields.session.recording ?? false } },
   };
 }
 export function isHexColor(value: string) {
@@ -127,12 +128,32 @@ export function iframeHeight(view: EmbedView) {
         ? 900
         : 760;
 }
+/** Shared discriminator for the postMessage exchanged between an embed page and the
+ * inline resize listener shipped alongside its iframe snippet — see EMBED_RESIZE_SOURCE. */
+export const EMBED_RESIZE_SOURCE = "namos-embed";
 function escapeAttribute(value: string) {
   return value
     .replaceAll("&", "&amp;")
     .replaceAll('"', "&quot;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;");
+}
+/** JSON.stringify does not escape "<", ">" or "&", so a raw JSON.stringify result
+ * embedded inside an HTML <script> block can break out of it — e.g. a value
+ * containing "</script>" prematurely closes the tag and lets an attacker inject
+ * arbitrary HTML/script into the page. Escape those three characters to their
+ * \uXXXX form (valid inside a JS string, inert to the HTML parser) before any
+ * JSON.stringify output is interpolated into <script> markup below. */
+function jsonForScriptContext(value: unknown) {
+  return JSON.stringify(value)
+    .replaceAll("<", "\\u003C")
+    .replaceAll(">", "\\u003E")
+    .replaceAll("&", "\\u0026");
+}
+/** Frame id the resize listener below uses to pair a `message` event back to the
+ * right `<iframe>` on host pages that embed more than one at once. */
+function iframeElementId(embedId: EmbedId) {
+  return `namos-embed-${embedId}`;
 }
 export function iframeSnippet(
   origin: string,
@@ -143,7 +164,43 @@ export function iframeSnippet(
   const title = escapeAttribute(
     `${embedViewLabels[view]} embed — Namos Sessions`,
   );
-  return `<iframe src="${src}" title="${title}" loading="lazy" width="100%" height="${iframeHeight(view)}" style="border:0;width:100%;" referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
+  const frameId = escapeAttribute(iframeElementId(embedId));
+  const frame = `<iframe id="${frameId}" src="${src}" title="${title}" loading="lazy" width="100%" height="${iframeHeight(view)}" style="border:0;width:100%;" referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
+  // Auto-resizes the iframe's height to fit its content (see PublicEmbedPage's
+  // ResizeObserver). If this script is blocked (host CSP, JS disabled, a sandboxed
+  // iframe missing allow-scripts) the iframe simply stays at the static height
+  // attribute above — no broken embed, just today's fixed-height behavior.
+  const script = `<script>(function(){var f=document.getElementById(${jsonForScriptContext(frameId)});if(!f)return;var origin;try{origin=new URL(f.src).origin;}catch(e){return;}window.addEventListener("message",function(event){if(event.origin!==origin)return;var data=event.data;if(!data||data.source!==${jsonForScriptContext(EMBED_RESIZE_SOURCE)}||data.embedId!==${jsonForScriptContext(embedId)})return;if(typeof data.height==="number"&&data.height>0){f.style.height=data.height+"px";}});})();</script>`;
+  return `${frame}\n${script}`;
+}
+
+/** Reports this embed's rendered content height to whatever window it's embedded in
+ * (see the listener script iframeSnippet() emits alongside the copied <iframe>).
+ * A safe no-op when the page isn't inside an iframe (e.g. visiting /embed/:id directly). */
+export function useReportSizeToParent(embedId: EmbedId, ref: RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    if (window.parent === window) return;
+    const node = ref.current;
+    if (!node) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let lastHeight = -1;
+    const report = () => {
+      const height = Math.ceil(node.getBoundingClientRect().height);
+      if (height === lastHeight) return;
+      lastHeight = height;
+      window.parent.postMessage({ source: EMBED_RESIZE_SOURCE, embedId, height }, "*");
+    };
+    const observer = new ResizeObserver(() => {
+      clearTimeout(timer);
+      timer = setTimeout(report, 100);
+    });
+    observer.observe(node);
+    report();
+    return () => {
+      clearTimeout(timer);
+      observer.disconnect();
+    };
+  }, [embedId, ref]);
 }
 
 /** Legacy public feeds remain live while saved embeds migrate customers to opaque IDs. */

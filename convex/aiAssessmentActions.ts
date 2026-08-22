@@ -10,6 +10,7 @@ import { internal } from "./_generated/api";
 import { decryptAgentApiKey } from "./agentProviderSecrets";
 import type { Id } from "./_generated/dataModel";
 import { isManagedAiDisabled, MANAGED_AI_DISABLED_ERROR, MANAGED_AI_DISABLED_MESSAGE } from "./managedAi";
+import { hasUsableManagedOpenAiKey } from "./agentProviderConfig";
 
 function safeError(error: unknown) {
   if (error instanceof Error && error.message === MANAGED_AI_DISABLED_ERROR) return MANAGED_AI_DISABLED_MESSAGE;
@@ -49,7 +50,7 @@ async function apiKeyForAssessment(ctx: ActionCtx, eventId: Id<"events">, provid
     return decryptAgentApiKey(setting.credentialEnvelope);
   }
   if (isManagedAiDisabled()) throw new Error(MANAGED_AI_DISABLED_ERROR);
-  if (!process.env.OPENAI_API_KEY) throw new Error("MANAGED_KEY_MISSING");
+  if (!hasUsableManagedOpenAiKey(process.env.OPENAI_API_KEY)) throw new Error("MANAGED_KEY_MISSING");
   return process.env.OPENAI_API_KEY;
 }
 

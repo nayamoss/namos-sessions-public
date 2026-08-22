@@ -15,6 +15,7 @@ import { decryptAgentApiKey } from "./agentProviderSecrets";
 import { resolveManagedAllowance } from "./agentBillingResolver";
 import { isManagedAiDisabled, MANAGED_AI_DISABLED_ERROR, MANAGED_AI_DISABLED_MESSAGE } from "./managedAi";
 import { buildDemoAcceptanceProposal, type DemoAcceptanceCandidate } from "./demoAgent";
+import { hasUsableManagedOpenAiKey } from "./agentProviderConfig";
 
 type RunToolCtx = ToolCtx & { runId: Id<"agent_runs">; eventId: Id<"events"> };
 
@@ -146,7 +147,7 @@ function operationsAgent(apiKey: string, model: string) {
 
 async function resolveApiKey(ctx: any, eventId: Id<"events">, providerMode: "managed" | "bring_your_own") {
   if (providerMode === "managed") {
-    if (!process.env.OPENAI_API_KEY) throw new Error("MANAGED_KEY_MISSING");
+    if (!hasUsableManagedOpenAiKey(process.env.OPENAI_API_KEY)) throw new Error("MANAGED_KEY_INVALID");
     return process.env.OPENAI_API_KEY;
   }
   const stored = await ctx.runQuery(internal.agentProviderSettings.getInternal, { eventId });
@@ -154,13 +155,14 @@ async function resolveApiKey(ctx: any, eventId: Id<"events">, providerMode: "man
   return decryptAgentApiKey(stored.credentialEnvelope);
 }
 
-function safeProviderError(error: unknown) {
+function safeProviderError(error: unknown, providerMode: "managed" | "bring_your_own") {
   if (error instanceof Error && error.message === MANAGED_AI_DISABLED_ERROR) return MANAGED_AI_DISABLED_MESSAGE;
-  if (error instanceof Error && error.message === "MANAGED_KEY_MISSING") return "Namos-managed AI is temporarily unavailable. Choose Bring your own key in Settings, or contact support.";
+  if (error instanceof Error && error.message === "MANAGED_KEY_INVALID") return "Namos-managed AI is not configured. Choose Bring your own key in Settings, or contact support.";
   if (error instanceof Error && error.message === "BYOK_KEY_MISSING") return "This event's OpenAI key is unavailable. Reconnect it in Settings → Integrations.";
   const raw = error instanceof Error ? error.message : "The model provider failed.";
   const message = raw.replace(/sk-[A-Za-z0-9_-]{8,}/g, "[redacted]").replace(/Bearer\s+\S+/gi, "Bearer [redacted]");
-  if (/api.?key|authentication|unauthorized/i.test(message)) return "Operations Agent is not configured.";
+  if (/api.?key|authentication|unauthorized|invalid_api_key|incorrect api key/i.test(message)) return providerMode === "managed" ? "Namos-managed AI is not configured. Contact support." : "This event's OpenAI key was rejected. Reconnect it in Settings → Integrations.";
+  if (/forbidden|permission|not permitted|access denied/i.test(message)) return providerMode === "managed" ? "Namos-managed AI does not have permission to run. Contact support." : "This event's OpenAI key does not have permission to use the configured model. Reconnect it in Settings → Integrations.";
   if (/rate.?limit/i.test(message)) return "The model provider is temporarily rate limited. Retry this run shortly.";
   if (/timeout|timed out/i.test(message)) return "The model provider timed out. Retry this run.";
   return `Operations Agent failed: ${message.slice(0, 500)}`;
@@ -188,9 +190,11 @@ export const executeSegment = internalAction({
   args: { runId: v.id("agent_runs") },
   handler: async (ctx, args) => {
     let steps = 0;
+    let providerMode: "managed" | "bring_your_own" = "managed";
     try {
       const state = await ctx.runQuery(internal.agentState.executionContext, args);
       if (!state.runnable) return;
+      providerMode = state.run.providerMode ?? "managed";
       const demoWorkspace = await ctx.runQuery(internal.demoWorkspaces.getByEvent, { eventId: state.run.eventId });
       if (demoWorkspace) {
         await executeDeterministicDemoRun(ctx, args.runId, state);
@@ -205,7 +209,7 @@ export const executeSegment = internalAction({
           await ctx.runMutation(internal.agentBilling.reserve, { runId: args.runId, billingOwnerUserId, planSlug: allowance.planSlug, runLimit: allowance.runLimit, tokenLimit: allowance.tokenLimit, reserveTokens: allowance.reserveTokens });
         }
       }
-      const apiKey = await resolveApiKey(ctx, state.run.eventId, state.run.providerMode ?? "managed");
+      const apiKey = await resolveApiKey(ctx, state.run.eventId, providerMode);
       const agent = operationsAgent(apiKey, state.run.model);
       if (!(await ctx.runMutation(internal.agentState.begin, args))) return;
       const customCtx = { ...ctx, runId: state.run._id, eventId: state.run.eventId } as RunToolCtx;
@@ -240,7 +244,7 @@ export const executeSegment = internalAction({
       await ctx.runMutation(internal.agentBilling.settle, { runId: args.runId, ...usage });
     } catch (error) {
       await ctx.runMutation(internal.agentBilling.release, { runId: args.runId });
-      await ctx.runMutation(internal.agentState.fail, { runId: args.runId, message: safeProviderError(error), stepCount: steps });
+      await ctx.runMutation(internal.agentState.fail, { runId: args.runId, message: safeProviderError(error, providerMode), stepCount: steps });
     } finally {
       await ctx.scheduler.runAfter(0, internal.slackAgentActions.projectRunUpdate, { runId: args.runId });
     }

@@ -116,16 +116,20 @@ export const convexFunction: Record<
   "agenda.remove": "agenda:remove",
   "agenda.publishSchedule": "agenda:publishSchedule",
   "recordings.list": "recordings:list",
+  "recordings.listPage": "recordings:listPage",
   "recordings.get": "recordings:get",
   "recordings.listAssets": "recordings:listAssets",
   "recordings.attachHosted": "recordings:attachHosted",
+  "recordings.requestUpload": "recordings:requestUpload",
   "recordings.attachUpload": "recordings:attachUpload",
-  "recordings.attachAsset": "recordings:attachAsset",
   "recordings.publish": "recordings:publish",
   "recordings.unpublish": "recordings:unpublish",
+  "recordings.attachAsset": "recordings:attachAsset",
   "recordings.detach": "recordings:detach",
+  "recordings.retry": "recordings:retry",
   "recordings.bulkPublish": "recordings:bulkPublish",
   "recordings.bulkUnpublish": "recordings:bulkUnpublish",
+  "recordings.migrateLegacy": "recordings:migrateLegacy",
   "tasks.list": "tasks:list",
   "tasks.get": "tasks:get",
   "tasks.create": "tasks:create",
@@ -405,11 +409,15 @@ export function normalize(
     ...(document.recording && typeof document.recording === "object" ? { recording: document.recording } : {}),
     ...(document.replacement && typeof document.replacement === "object" ? { replacement: document.replacement } : {}),
   }));
+  if (operation === "recordings.listPage") {
+    const result = value as { page: unknown; isDone: boolean; continueCursor: string };
+    return { ...result, page: documentRows(result.page).map((document) => ({ ...row(document), ...(document.recording && typeof document.recording === "object" ? { recording: document.recording } : {}), ...(document.replacement && typeof document.replacement === "object" ? { replacement: document.replacement } : {}) })) };
+  }
+  if (operation === "recordings.listAssets") return documentRows(value).map(row);
   if (operation === "recordings.get") {
     const result = value as { session: unknown; recordings: unknown; history?: unknown };
     return { session: row(result.session), recordings: documentRows(result.recordings).map(row), ...(result.history ? { history: documentRows(result.history).map(row) } : {}) };
   }
-  if (operation === "recordings.listAssets") return documentRows(value).map(row);
   if (operation === "publicEmbeds.getAdmin" || operation === "tasks.get") return row(value);
   if (operation === "publicEmbeds.list") return documentRows(value).map(row);
   if (operation === "evaluations.assessment.get") return row(value);

@@ -776,7 +776,7 @@ export default defineSchema({
   speaker_availability: defineTable({
     eventId: v.id("events"),
     speakerId: v.id("speakers"),
-    unavailable: v.array(v.object({ date: v.number(), hour: v.optional(v.number()), part: v.optional(v.union(v.literal("morning"), v.literal("afternoon"), v.literal("evening"))) })),
+    unavailable: v.array(v.object({ date: v.number(), hour: v.optional(v.number()), minute: v.optional(v.union(v.literal(0), v.literal(30))), part: v.optional(v.union(v.literal("morning"), v.literal("afternoon"), v.literal("evening"))) })),
     notes: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -788,8 +788,8 @@ export default defineSchema({
     dateFormat: v.union(v.literal("weekday_long"), v.literal("weekday_short"), v.literal("numeric")),
     timeFormat: v.union(v.literal("12_hour"), v.literal("24_hour")), trackIds: v.array(v.id("tracks")),
     fields: v.object({
-      agenda: v.object({ title: v.boolean(), time: v.boolean(), room: v.boolean(), track: v.boolean(), speakers: v.boolean() }),
-      session: v.object({ title: v.boolean(), time: v.boolean(), room: v.boolean(), track: v.boolean(), speakers: v.boolean() }),
+      agenda: v.object({ title: v.boolean(), time: v.boolean(), room: v.boolean(), track: v.boolean(), speakers: v.boolean(), recording: v.optional(v.boolean()) }),
+      session: v.object({ title: v.boolean(), time: v.boolean(), room: v.boolean(), track: v.boolean(), speakers: v.boolean(), recording: v.optional(v.boolean()) }),
       speaker: v.object({ name: v.boolean(), headshot: v.boolean(), bio: v.boolean(), links: v.boolean(), sessions: v.boolean() }),
     }), createdAt: v.number(), updatedAt: v.number(),
   }).index("by_event", ["eventId"]).index("by_event_enabled", ["eventId", "enabled"]),
@@ -827,13 +827,16 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_event", ["eventId"])
+    .index("by_event_startTime", ["eventId", "startTime"])
+    .index("by_event_room_startTime", ["eventId", "roomId", "startTime"])
+    .index("by_event_track_startTime", ["eventId", "trackId", "startTime"])
     .index("by_room", ["roomId"])
     .index("by_submission", ["submissionId"]),
   event_assets: defineTable({
     eventId: v.id("events"), kind: v.literal("video"), storageId: v.id("_storage"),
     fileName: v.string(), mimeType: v.string(), sizeBytes: v.number(),
     createdByUserId: v.string(), createdAt: v.number(), updatedAt: v.number(),
-  }).index("by_event", ["eventId"]).index("by_storage", ["storageId"]),
+  }).index("by_event", ["eventId"]).index("by_storage", ["storageId"]).index("by_createdAt", ["createdAt"]),
   // Attachment and publication are separate lifecycles. A staged replacement stays private
   // until it is explicitly promoted, so a working public recording cannot disappear mid-event.
   session_recordings: defineTable({
@@ -859,10 +862,12 @@ export default defineSchema({
   })
     .index("by_event", ["eventId"])
     .index("by_agenda_item", ["agendaItemId"])
-    .index("by_agenda_item_role", ["agendaItemId", "role"]),
+    .index("by_agenda_item_role", ["agendaItemId", "role"])
+    .index("by_event_and_agenda_item", ["eventId", "agendaItemId"])
+    .index("by_asset", ["assetId"]),
   recording_activity: defineTable({
     eventId: v.id("events"), agendaItemId: v.id("agenda_items"), recordingId: v.optional(v.id("session_recordings")),
-    action: v.union(v.literal("attached"), v.literal("published"), v.literal("published_early"), v.literal("unpublished"), v.literal("replaced"), v.literal("detached"), v.literal("migrated")),
+    action: v.union(v.literal("attached"), v.literal("published"), v.literal("published_early"), v.literal("unpublished"), v.literal("replaced"), v.literal("detached"), v.literal("retried"), v.literal("migrated")),
     detail: v.optional(v.string()), actorUserId: v.string(), createdAt: v.number(),
   }).index("by_event_createdAt", ["eventId", "createdAt"]).index("by_recording", ["recordingId"]),
   // Append-only evidence for every application-level agenda write. A missing delete entry when

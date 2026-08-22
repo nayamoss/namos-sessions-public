@@ -395,6 +395,7 @@ function DashboardLayoutInner({
   children,
   detail,
   utility,
+  forceUtilityOpen = false,
   bodyToolbar,
   homeHref,
   navSections,
@@ -406,6 +407,7 @@ function DashboardLayoutInner({
   detail?: ReactNode;
   /** A page-level utility rail, rendered beside—not inside—the content surface. */
   utility?: ReactNode;
+  forceUtilityOpen?: boolean;
   bodyToolbar?: ReactNode;
   homeHref: string;
   navSections: DashboardNavSection[];
@@ -434,6 +436,10 @@ function DashboardLayoutInner({
       return next;
     });
   }, []);
+
+  useEffect(() => {
+    if (forceUtilityOpen) setUtilityCollapsed(false);
+  }, [forceUtilityOpen]);
 
   return (
     <div className="mobile-safe-shell h-dvh overflow-hidden bg-background text-foreground lg:p-0">
@@ -499,6 +505,7 @@ export function DashboardLayout({
   children,
   detail,
   utility,
+  forceUtilityOpen,
   bodyToolbar,
   homeHref,
   navSections,
@@ -509,6 +516,7 @@ export function DashboardLayout({
   children: ReactNode;
   detail?: ReactNode;
   utility?: ReactNode;
+  forceUtilityOpen?: boolean;
   bodyToolbar?: ReactNode;
   homeHref: string;
   navSections: DashboardNavSection[];
@@ -517,7 +525,7 @@ export function DashboardLayout({
 }) {
   return (
     <SidebarProvider>
-      <DashboardLayoutInner accountContext={accountContext} detail={detail} utility={utility} bodyToolbar={bodyToolbar} homeHref={homeHref} navSections={navSections} title={title} contentVariant={contentVariant}>
+      <DashboardLayoutInner accountContext={accountContext} detail={detail} utility={utility} forceUtilityOpen={forceUtilityOpen} bodyToolbar={bodyToolbar} homeHref={homeHref} navSections={navSections} title={title} contentVariant={contentVariant}>
         {children}
       </DashboardLayoutInner>
     </SidebarProvider>
@@ -549,6 +557,11 @@ export function AppLayout({
     void repo.agentRuns.canUse({ eventId: current.id }).then((allowed) => { if (active) setAgentAccess(allowed); }).catch(() => { if (active) setAgentAccess(false); });
     return () => { active = false; };
   }, [current, repo]);
+  useEffect(() => {
+    const openVoiceAgent = () => setVoiceOpen(true);
+    window.addEventListener("namos:open-voice-agent", openVoiceAgent);
+    return () => window.removeEventListener("namos:open-voice-agent", openVoiceAgent);
+  }, []);
   const openCommandPalette = useCallback(() => setCommandPaletteOpen(true), []);
   const managedCrm = selectedBackend() === "convex";
   // "All contacts" links to the organization-wide CRM workspace (#268), not an event-scoped
@@ -562,7 +575,8 @@ export function AppLayout({
     <DashboardLayout
       accountContext="admin"
       detail={detail}
-      utility={utility}
+      utility={current && voiceOpen ? <VoiceSessionPanel eventId={current.id} onClose={() => setVoiceOpen(false)} /> : utility}
+      forceUtilityOpen={voiceOpen}
       bodyToolbar={(
         <>
           <button
@@ -599,11 +613,6 @@ export function AppLayout({
       >
         {voiceOpen ? <X className="h-5 w-5 text-foreground" /> : <VoiceOrb state="idle" className="h-full w-full" />}
       </button>
-    )}
-    {current && voiceOpen && (
-      <div className="fixed bottom-20 right-2.5 z-40 hidden w-[20rem] lg:block">
-        <VoiceSessionPanel eventId={current.id} onClose={() => setVoiceOpen(false)} />
-      </div>
     )}
     </SettingsModalProvider>
   );

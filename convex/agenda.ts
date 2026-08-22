@@ -90,6 +90,7 @@ function unavailableSlotKeys(
     month: "2-digit",
     day: "2-digit",
     hour: "numeric",
+    minute: "numeric",
     hourCycle: "h23",
   });
   for (let cursor = startTime; cursor < endTime; cursor += 30 * 60_000) {
@@ -97,11 +98,20 @@ function unavailableSlotKeys(
     const number = (type: string) =>
       Number(parts.find((part) => part.type === type)?.value);
     const hour = number("hour");
+    const minute = number("minute") < 30 ? 0 : 30;
     const date = Date.UTC(number("year"), number("month") - 1, number("day"));
-    values.add(`${date}:hour:${hour}`);
+    values.add(`${date}:hour:${hour}:${minute}`);
     values.add(`${date}:part:${hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening"}`);
   }
   return values;
+}
+
+function isUnavailableDuring(record: { unavailable: Array<{ date: number; hour?: number; minute?: number; part?: "morning" | "afternoon" | "evening" }> }, blocked: Set<string>) {
+  return record.unavailable.some((entry) => entry.hour !== undefined
+    ? entry.minute !== undefined
+      ? blocked.has(`${entry.date}:hour:${entry.hour}:${entry.minute}`)
+      : blocked.has(`${entry.date}:hour:${entry.hour}:0`) || blocked.has(`${entry.date}:hour:${entry.hour}:30`)
+    : entry.part !== undefined && blocked.has(`${entry.date}:part:${entry.part}`));
 }
 
 async function placementConflicts(
@@ -129,9 +139,7 @@ async function placementConflicts(
   const blocked = unavailableSlotKeys(args.startTime, args.endTime, eventDoc.timezone);
   for (const speakerId of candidate.speakerIds) {
     const record = availability.find((entry) => entry.speakerId === speakerId);
-    if (record?.unavailable.some((entry) => entry.hour !== undefined
-      ? blocked.has(`${entry.date}:hour:${entry.hour}`)
-      : entry.part !== undefined && blocked.has(`${entry.date}:part:${entry.part}`))) {
+    if (record && isUnavailableDuring(record, blocked)) {
       results.push({ reason: "speaker_unavailable", blocking: false, message: "This speaker is marked unavailable at this time." });
     }
   }
@@ -227,11 +235,7 @@ export const detectConflicts = query({
           (entry) => entry.speakerId === speakerId,
         );
         if (
-          record?.unavailable.some((entry) =>
-            entry.hour !== undefined
-              ? blocked.has(`${entry.date}:hour:${entry.hour}`)
-              : entry.part !== undefined && blocked.has(`${entry.date}:part:${entry.part}`),
-          )
+          record && isUnavailableDuring(record, blocked)
         )
           conflicts.push({
             itemA: item._id,
