@@ -290,6 +290,22 @@ export default function Evaluation() {
       Math.min(Math.max(1, current), plan?.rounds ?? 1),
     );
   };
+  // The dropdown is available from both the organizer workspace and the reviewer queue.
+  // Always select a concrete plan-workspace panel so its entries do more than merely close
+  // the menu when the organizer is already on the plans surface.
+  const openPlanWorkspace = (
+    tab: "progress" | "criteria" | "assignments",
+  ) => {
+    setSurface("plans");
+    setPlanWorkspaceTab(tab);
+  };
+  const openCreatePlan = () => {
+    setSurface("plans");
+    setShowCreatePlan(true);
+    requestAnimationFrame(() =>
+      document.getElementById("new-evaluation-plan")?.focus(),
+    );
+  };
   const reviewByAssignment = useMemo(
     () =>
       new Map(
@@ -724,7 +740,9 @@ export default function Evaluation() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onSelect={() => setSurface("plans")}>
+                  <DropdownMenuItem
+                    onSelect={() => openPlanWorkspace("criteria")}
+                  >
                     Evaluation plans
                   </DropdownMenuItem>
                   <DropdownMenuItem onSelect={() => setSurface("queue")}>
@@ -748,17 +766,17 @@ export default function Evaluation() {
                       )}
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
-                        onSelect={() => setPlanWorkspaceTab("progress")}
+                        onSelect={() => openPlanWorkspace("progress")}
                       >
                         Review progress
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        onSelect={() => setPlanWorkspaceTab("criteria")}
+                        onSelect={() => openPlanWorkspace("criteria")}
                       >
                         Scoring criteria
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        onSelect={() => setPlanWorkspaceTab("assignments")}
+                        onSelect={() => openPlanWorkspace("assignments")}
                       >
                         Assign reviewers
                       </DropdownMenuItem>
@@ -766,12 +784,7 @@ export default function Evaluation() {
                     </>
                   )}
                   <DropdownMenuItem
-                    onSelect={() => {
-                      setShowCreatePlan(true);
-                      requestAnimationFrame(() =>
-                        document.getElementById("new-evaluation-plan")?.focus(),
-                      );
-                    }}
+                    onSelect={openCreatePlan}
                   >
                     Create evaluation plan
                   </DropdownMenuItem>

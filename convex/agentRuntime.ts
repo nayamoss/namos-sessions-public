@@ -168,23 +168,20 @@ function safeProviderError(error: unknown) {
 
 async function executeDeterministicDemoRun(ctx: any, runId: Id<"agent_runs">, state: any) {
   if (!(await ctx.runMutation(internal.agentState.begin, { runId }))) return;
-  const billingOwnerUserId = state.event.billingOwnerUserId;
-  if (!billingOwnerUserId) throw new Error("This event needs a billing owner before Namos-managed AI can run.");
-  const allowance = await resolveManagedAllowance(billingOwnerUserId);
-  await ctx.runMutation(internal.agentBilling.reserve, { runId, billingOwnerUserId, planSlug: allowance.planSlug, runLimit: allowance.runLimit, tokenLimit: allowance.tokenLimit, reserveTokens: allowance.reserveTokens });
+  // Demo runs are deterministic and never call an AI provider. They therefore must not
+  // resolve the temporary demo organizer through Clerk Billing or reserve managed-AI
+  // usage. Those generated demo identities have no Clerk subscription, which otherwise
+  // makes the suggested acceptance-draft action fail before it can inspect the event.
   await ctx.runMutation(internal.agentState.append, { runId, type: "tool_call", message: "Inspecting accepted submissions and notification history.", toolName: "prepare_demo_acceptance_drafts", toolCallId: `demo-${runId}` });
   const grounded = await ctx.runQuery(internal.agentData.demoAcceptanceCandidates, { eventId: state.run.eventId }) as { eventName: string; candidates: DemoAcceptanceCandidate[] };
   await ctx.runMutation(internal.agentState.append, { runId, type: "tool_result", message: `Found ${grounded.candidates.length} accepted, unnotified submission${grounded.candidates.length === 1 ? "" : "s"}.`, toolName: "prepare_demo_acceptance_drafts", toolCallId: `demo-${runId}`, detailsJson: JSON.stringify({ resultCount: grounded.candidates.length }) });
   const proposal = buildDemoAcceptanceProposal(grounded.eventName, grounded.candidates);
-  const usage = await ctx.runMutation(internal.agentProviderSettings.recordUsage, { runId, inputTokens: 0, outputTokens: 0 });
   if (!proposal) {
     await ctx.runMutation(internal.agentState.finish, { runId, summary: "No accepted speakers are waiting for notification. Nothing was changed.", stepCount: 1, inputTokens: 0, outputTokens: 0 });
-    await ctx.runMutation(internal.agentBilling.settle, { runId, ...usage });
     return;
   }
   const payloadHash = createHash("sha256").update(proposal.canonicalPayload).digest("hex");
   await ctx.runMutation(internal.agentState.saveMessageProposal, { runId, summary: proposal.summary, messages: proposal.messages, payloadHash, toolCallId: `demo-${runId}` });
-  await ctx.runMutation(internal.agentBilling.settle, { runId, ...usage });
 }
 
 export const executeSegment = internalAction({

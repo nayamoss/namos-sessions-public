@@ -220,7 +220,7 @@ describe("AppLayout", () => {
 
     act(() => configureButton.click());
     expect(document.querySelector('[role="dialog"]')).toHaveTextContent("Event details");
-    expect(document.querySelector('[role="dialog"]')).toHaveTextContent("AI Usage");
+    expect(document.querySelector('[role="dialog"]')).toHaveTextContent("Embeds");
 
     act(() => programToggle.click());
     expect(programHeader.querySelector("button")).toHaveAttribute("aria-expanded", "true");

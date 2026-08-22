@@ -15,9 +15,12 @@ describe("evaluation page layout", () => {
     expect(source).toContain("Manage evaluations");
     expect(source).not.toContain('aria-label="Selected evaluation plan"');
     expect(source).not.toContain('<dl className="mt-4 flex flex-wrap');
-    expect(source).toContain('setPlanWorkspaceTab("progress")');
-    expect(source).toContain('setPlanWorkspaceTab("criteria")');
-    expect(source).toContain('setPlanWorkspaceTab("assignments")');
+    expect(source).toContain("const openPlanWorkspace");
+    expect(source).toContain("setPlanWorkspaceTab(tab)");
+    expect(source).toContain('onSelect={() => openPlanWorkspace("criteria")}');
+    expect(source).toContain('onSelect={() => openPlanWorkspace("progress")}');
+    expect(source).toContain('onSelect={() => openPlanWorkspace("assignments")}');
+    expect(source).toContain("onSelect={openCreatePlan}");
     expect(source).not.toContain("<TabsList");
     expect(source).toContain("showCreatePlan");
     expect(source.match(/Manage evaluations/g)).toHaveLength(1);

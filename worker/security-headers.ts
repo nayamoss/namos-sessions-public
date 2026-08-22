@@ -1,99 +1,29 @@
-type PublicCspConfig = {
-  VITE_CLERK_PUBLISHABLE_KEY?: string;
-  VITE_CONVEX_URL?: string;
-  CONVEX_SITE_URL?: string;
+type ConvexOrigins = {
+  VITE_CONVEX_URL: string;
+  CONVEX_SITE_URL: string;
+  VITE_PUBLIC_EMBED_ORIGIN: string;
+  CLERK_FRONTEND_API_URL?: string;
+  PUBLIC_EMBED_ORIGIN?: string;
 };
 
-const placeholderFragments = ["your-project", "your-clerk-publishable-key"];
-
-function isPlaceholder(value: string) {
-  return placeholderFragments.some((fragment) => value.includes(fragment));
+function httpsOrigin(value: string, label: string) {
+  const url = new URL(value);
+  if (url.protocol !== "https:") throw new Error(`${label} must use HTTPS.`);
+  return url.origin;
 }
 
-function safeServiceOrigin(value: string | undefined, hostnameSuffix: string) {
-  if (!value || isPlaceholder(value)) return null;
-
-  try {
-    const url = new URL(value);
-    if (
-      url.protocol !== "https:" ||
-      url.username ||
-      url.password ||
-      url.port ||
-      url.pathname !== "/" ||
-      url.search ||
-      url.hash ||
-      !url.hostname.endsWith(hostnameSuffix)
-    ) {
-      return null;
-    }
-    return url.origin;
-  } catch {
-    return null;
+function convexCspOrigins(env: ConvexOrigins) {
+  const cloud = new URL(env.VITE_CONVEX_URL);
+  const site = new URL(env.CONVEX_SITE_URL);
+  if (cloud.protocol !== "https:" || site.protocol !== "https:") {
+    throw new Error("Convex production origins must use HTTPS.");
   }
+  return `${cloud.origin} wss://${cloud.host} ${site.origin}`;
 }
 
-function clerkOriginFromPublishableKey(value: string | undefined) {
-  if (!value || isPlaceholder(value) || !/^pk_(test|live)_/.test(value))
-    return null;
-
-  try {
-    const encoded = value.replace(/^pk_(test|live)_/, "");
-    const hostname = atob(encoded).replace(/\$$/, "");
-    if (!/^[a-z0-9.-]+$/i.test(hostname)) return null;
-
-    const url = new URL(`https://${hostname}`);
-    if (url.hostname !== hostname || url.port || !hostname.includes("."))
-      return null;
-    return url.origin;
-  } catch {
-    return null;
-  }
-}
-
-function directive(name: string, values: Array<string | null>) {
-  return `${name} ${[...new Set(values.filter((value): value is string => Boolean(value)))].join(" ")}`;
-}
-
-export function createContentSecurityPolicy(
-  env: PublicCspConfig,
-  pathname: string,
-) {
-  const clerkOrigin = clerkOriginFromPublishableKey(
-    env.VITE_CLERK_PUBLISHABLE_KEY,
-  );
-  const convexOrigin = safeServiceOrigin(env.VITE_CONVEX_URL, ".convex.cloud");
-  const convexSiteOrigin = safeServiceOrigin(
-    env.CONVEX_SITE_URL,
-    ".convex.site",
-  );
-  const convexWebSocketOrigin =
-    convexOrigin?.replace(/^https:/, "wss:") ?? null;
-
-  return [
-    "default-src 'self'",
-    "base-uri 'self'",
-    "object-src 'none'",
-    "form-action 'self'",
-    directive("script-src", [
-      "'self'",
-      clerkOrigin,
-      "https://challenges.cloudflare.com",
-      "https://browser.sentry-cdn.com",
-    ]),
-    directive("connect-src", [
-      "'self'",
-      clerkOrigin,
-      convexOrigin,
-      convexWebSocketOrigin,
-      convexSiteOrigin,
-      "https://sentry-org.ingest.us.sentry.io",
-    ]),
-    "img-src 'self' data: blob: https:",
-    "style-src 'self' 'unsafe-inline'",
-    "font-src 'self' data:",
-    directive("frame-src", [clerkOrigin, "https://challenges.cloudflare.com"]),
-    "worker-src 'self' blob:",
-    `frame-ancestors ${pathname.startsWith("/embed/") ? "*" : "'none'"}`,
-  ].join("; ");
+export function contentSecurityPolicy(env: ConvexOrigins, pathname: string) {
+  const clerk = httpsOrigin(env.CLERK_FRONTEND_API_URL || "https://clerk.your-project.example", "Clerk origin");
+  const publicEmbed = httpsOrigin(env.PUBLIC_EMBED_ORIGIN || env.VITE_PUBLIC_EMBED_ORIGIN, "Public embed origin");
+  const common = `default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self' ${clerk} https://challenges.cloudflare.com https://browser.sentry-cdn.com; connect-src 'self' ${clerk} ${convexCspOrigins(env)} https://o4506791000096768.ingest.us.sentry.io; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; frame-src 'self' ${publicEmbed} ${clerk} https://challenges.cloudflare.com; worker-src 'self' blob:`;
+  return `${common}; frame-ancestors ${pathname.startsWith("/embed/") ? "*" : "'none'"}`;
 }

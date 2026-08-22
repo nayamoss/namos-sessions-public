@@ -1,11 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ChevronDown, ChevronUp, Download, Search } from "lucide-react";
+import {
+  Columns3,
+  ChevronDown,
+  ChevronUp,
+  Download,
+  LayoutGrid,
+  Search,
+  Table2,
+} from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
 import { DataGrid, type DataGridColumn } from "@/components/shared/DataGrid";
 import { DecisionButtons } from "@/components/shared/DecisionButtons";
+import { SubmissionStatusBadge } from "@/components/shared/SubmissionStatusBadge";
 import { StarRating } from "@/components/shared/StarRating";
 import { FilterMenu } from "@/components/shared/StatusTabs";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -27,6 +36,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useRepo } from "@/data/repo";
 import type {
   Comm,
@@ -85,6 +95,10 @@ type AbstractDraft = {
   status: SubmissionStatus;
 };
 
+type SubmissionViewMode = "table" | "kanban" | "grid";
+
+const SUBMISSIONS_VIEW_MODE_KEY = "namos-submissions-view-mode";
+
 const abstractColumnKeys = [
   "status",
   "source",
@@ -123,6 +137,16 @@ const statusLabels: Record<SubmissionStatus, string> = {
   declined: "Declined",
   withdrawn: "Withdrawn",
 };
+const submissionStatusOrder: SubmissionStatus[] = [
+  "accepted",
+  "accept_queue",
+  "maybe",
+  "pending",
+  "decline_queue",
+  "declined",
+  "withdrawn",
+  "draft",
+];
 const editableStatuses: SubmissionStatus[] = [
   "accepted",
   "accept_queue",
@@ -403,6 +427,104 @@ function loadColumnPreferences() {
   }
 }
 
+function loadViewMode(): SubmissionViewMode {
+  try {
+    const stored = window.localStorage.getItem(SUBMISSIONS_VIEW_MODE_KEY);
+    return stored === "kanban" || stored === "grid" ? stored : "table";
+  } catch {
+    return "table";
+  }
+}
+
+function SubmissionViewToggle({
+  value,
+  onChange,
+}: {
+  value: SubmissionViewMode;
+  onChange: (value: SubmissionViewMode) => void;
+}) {
+  const options = [
+    { value: "table", label: "Table", icon: Table2 },
+    { value: "kanban", label: "Kanban", icon: Columns3 },
+    { value: "grid", label: "Grid", icon: LayoutGrid },
+  ] as const;
+
+  return (
+    <ToggleGroup
+      type="single"
+      value={value}
+      onValueChange={(next) => {
+        if (next) onChange(next as SubmissionViewMode);
+      }}
+      size="sm"
+      aria-label="Submission view"
+      className="rounded-md bg-muted/60 p-0.5"
+    >
+      {options.map((option) => {
+        const Icon = option.icon;
+        return (
+          <ToggleGroupItem
+            key={option.value}
+            value={option.value}
+            aria-label={`${option.label} view`}
+            className="h-7 gap-1.5 px-2.5 data-[state=on]:bg-card"
+          >
+            <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>{option.label}</span>
+          </ToggleGroupItem>
+        );
+      })}
+    </ToggleGroup>
+  );
+}
+
+function SubmissionCard({
+  row,
+  onOpen,
+  compact = false,
+}: {
+  row: AbstractRow;
+  onOpen: (row: AbstractRow) => void;
+  compact?: boolean;
+}) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      onClick={() => onOpen(row)}
+      className={cardSurfaceClasses(
+        "default",
+        `block h-auto w-full min-w-0 whitespace-normal text-left outline-none transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring/30 ${compact ? "p-3" : "p-4"}`,
+      )}
+      aria-label={`Open ${row.title}`}
+    >
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <h3 className="line-clamp-2 min-w-0 text-sm font-semibold leading-5">
+          {row.title}
+        </h3>
+        <SubmissionStatusBadge
+          status={row.status}
+          label={statusLabels[row.status]}
+          className="shrink-0"
+        />
+      </div>
+      <p className="mt-2 truncate text-xs text-muted-foreground">
+        {row.source}
+      </p>
+      <dl className={`grid gap-x-3 gap-y-1 text-xs ${compact ? "mt-3 grid-cols-1" : "mt-4 grid-cols-2"}`}>
+        <div className="min-w-0">
+          <dt className="text-muted-foreground">Speaker</dt>
+          <dd className="mt-0.5 truncate text-foreground">{row.speaker}</dd>
+        </div>
+        <div className="min-w-0">
+          <dt className="text-muted-foreground">Track</dt>
+          <dd className="mt-0.5 truncate text-foreground">{row.track}</dd>
+        </div>
+      </dl>
+    </Button>
+  );
+}
+
 function ColumnsControl({
   preferences,
   onChange,
@@ -585,6 +707,8 @@ export default function Abstracts() {
   });
   const [columnPreferences, setColumnPreferences] =
     useState<AbstractGridPreferences>(loadColumnPreferences);
+  const [viewMode, setViewMode] =
+    useState<SubmissionViewMode>(loadViewMode);
 
   const updateColumnPreferences = useCallback(
     (next: AbstractGridPreferences) => {
@@ -604,6 +728,15 @@ export default function Abstracts() {
     },
     [],
   );
+
+  const updateViewMode = useCallback((next: SubmissionViewMode) => {
+    setViewMode(next);
+    try {
+      window.localStorage.setItem(SUBMISSIONS_VIEW_MODE_KEY, next);
+    } catch {
+      /* Browser storage can be disabled; keep the in-memory choice. */
+    }
+  }, []);
 
   const loadRows = useCallback(async () => {
     setLoading(true);
@@ -903,19 +1036,7 @@ export default function Abstracts() {
       setAdding(false);
     }
   };
-  const tabs = (
-    [
-      "all",
-      "accepted",
-      "accept_queue",
-      "maybe",
-      "pending",
-      "decline_queue",
-      "declined",
-      "withdrawn",
-      "draft",
-    ] as const
-  ).map((value) => ({
+  const tabs = (["all", ...submissionStatusOrder] as const).map((value) => ({
     value,
     label: value === "all" ? "All submissions" : statusLabels[value],
     count:
@@ -1059,6 +1180,39 @@ export default function Abstracts() {
     .filter((key) => !columnPreferences.hidden.includes(key))
     .map((key) => byColumnKey.get(key))
     .filter((column): column is DataGridColumn<AbstractRow> => Boolean(column));
+  const openSubmission = (row: AbstractRow) => {
+    navigate(`${listPath}/${encodeURIComponent(row.id)}/edit`);
+  };
+  const emptySubmissions = (
+    <EmptyState
+      compact
+      icon={Search}
+      title={rows.length ? "No abstracts match this view" : "No abstracts yet"}
+      message={
+        rows.length
+          ? "Clear the filters to see every abstract."
+          : "Add an abstract or publish a call for papers."
+      }
+      action={
+        rows.length ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setQuery("");
+              setStatus("all");
+            }}
+          >
+            Clear filters
+          </Button>
+        ) : (
+          <Button variant="accent" size="sm" onClick={openAddAbstract}>
+            Add abstract
+          </Button>
+        )
+      }
+    />
+  );
 
   const addDetail = (
     <section className={cardSurfaceClasses("default", "mx-auto max-w-3xl space-y-5 p-6")} aria-label="New submission">
@@ -1462,10 +1616,16 @@ export default function Abstracts() {
               >
                 <Download className="h-4 w-4" />
               </Button>
-              <ColumnsControl
-                preferences={columnPreferences}
-                onChange={updateColumnPreferences}
+              <SubmissionViewToggle
+                value={viewMode}
+                onChange={updateViewMode}
               />
+              {viewMode === "table" && (
+                <ColumnsControl
+                  preferences={columnPreferences}
+                  onChange={updateColumnPreferences}
+                />
+              )}
             </>
           }
           primaryAction={
@@ -1474,46 +1634,93 @@ export default function Abstracts() {
             </Button>
           }
         />
-        <DataGrid
-          rows={visibleRows}
-          columns={columns}
-          empty={
-            <EmptyState
-              compact
-              icon={Search}
-              title={
-                rows.length
-                  ? "No abstracts match this view"
-                  : "No abstracts yet"
-              }
-              message={
-                rows.length
-                  ? "Clear the filters to see every abstract."
-                  : "Add an abstract or publish a call for papers."
-              }
-              action={
-                rows.length ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setQuery("");
-                      setStatus("all");
-                    }}
+        {viewMode === "table" ? (
+          <DataGrid
+            rows={visibleRows}
+            columns={columns}
+            empty={emptySubmissions}
+            loading={loading}
+            paginated
+          />
+        ) : loading ? (
+          <div
+            className="grid grid-cols-[repeat(auto-fit,minmax(17rem,1fr))] gap-3"
+            aria-busy="true"
+            aria-live="polite"
+          >
+            {Array.from({ length: 6 }, (_, index) => (
+              <div
+                key={index}
+                className={cardSurfaceClasses(
+                  "default",
+                  "h-32 animate-pulse bg-muted/60",
+                )}
+              />
+            ))}
+            <span className="sr-only">Loading submissions…</span>
+          </div>
+        ) : !visibleRows.length ? (
+          emptySubmissions
+        ) : viewMode === "kanban" ? (
+          <div
+            className="flex min-w-0 gap-3 overflow-x-auto pb-2"
+            aria-label="Submissions kanban board"
+          >
+            {(status === "all" ? submissionStatusOrder : [status]).map(
+              (columnStatus) => {
+                const statusRows = visibleRows.filter(
+                  (row) => row.status === columnStatus,
+                );
+                return (
+                  <section
+                    key={columnStatus}
+                    className={cardSurfaceClasses(
+                      "muted",
+                      "w-72 shrink-0 self-start p-3",
+                    )}
+                    aria-labelledby={`submission-column-${columnStatus}`}
                   >
-                    Clear filters
-                  </Button>
-                ) : (
-                  <Button variant="accent" size="sm" onClick={openAddAbstract}>
-                    Add abstract
-                  </Button>
-                )
-              }
-            />
-          }
-          loading={loading}
-          paginated
-        />
+                    <div className="mb-3 flex items-center justify-between gap-3 px-1">
+                      <h2
+                        id={`submission-column-${columnStatus}`}
+                        className="text-sm font-semibold"
+                      >
+                        {statusLabels[columnStatus]}
+                      </h2>
+                      <span className="text-xs tabular-nums text-muted-foreground">
+                        {statusRows.length}
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      {statusRows.map((row) => (
+                        <SubmissionCard
+                          key={row.id}
+                          row={row}
+                          onOpen={openSubmission}
+                          compact
+                        />
+                      ))}
+                      {!statusRows.length && (
+                        <p className="px-2 py-6 text-center text-xs text-muted-foreground">
+                          No submissions
+                        </p>
+                      )}
+                    </div>
+                  </section>
+                );
+              },
+            )}
+          </div>
+        ) : (
+          <div
+            className="grid grid-cols-[repeat(auto-fit,minmax(17rem,1fr))] gap-3"
+            aria-label="Submissions grid"
+          >
+            {visibleRows.map((row) => (
+              <SubmissionCard key={row.id} row={row} onOpen={openSubmission} />
+            ))}
+          </div>
+        )}
       </div>
     </AppLayout>
   );

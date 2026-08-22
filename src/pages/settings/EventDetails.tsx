@@ -306,6 +306,7 @@ export default function EventDetails() {
                   <TimezoneCombobox
                     value={event.timezone}
                     onChange={(timezone) => update("timezone", timezone)}
+                    triggerClassName="h-8 rounded-md bg-muted px-3 py-1.5 text-sm"
                   />
                 </FormField>
                 <FormField label="Event color">

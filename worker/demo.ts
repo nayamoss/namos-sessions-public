@@ -208,9 +208,9 @@ async function createWorkspace(request: Request, env: Env, mode: WorkspaceCreati
   const users: Partial<Record<DemoRole, string>> = {};
   try {
     const emails = {
-      organizer: `organizer+${workspaceId}@demo.your-project.example`,
-      reviewer: `reviewer+${workspaceId}@demo.your-project.example`,
-      speaker: `speaker+${workspaceId}@demo.your-project.example`,
+      organizer: `organizer+${workspaceId}@demo.namos-sessions.xyz`,
+      reviewer: `reviewer+${workspaceId}@demo.namos-sessions.xyz`,
+      speaker: `speaker+${workspaceId}@demo.namos-sessions.xyz`,
     } as const;
     for (const role of ["organizer", "reviewer", "speaker"] as const) {
       const user = await clerk.users.createUser({

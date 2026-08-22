@@ -7,6 +7,7 @@ import { ContentToolbar } from "@/components/shared/ContentToolbar";
 import { DataGrid, type DataGridColumn } from "@/components/shared/DataGrid";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { SkeletonList } from "@/components/shared/SkeletonList";
+import { SubmissionStatusBadge } from "@/components/shared/SubmissionStatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,17 +15,15 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useRepo } from "@/data/repo";
 import { selectedBackend } from "@/data/backend";
-import type { CrmContact, CrmContactId, CrmSegment, CrmSource, CrmSourceProvider, CrmStage } from "@/data/types";
+import { crmStageLabel as stageLabel, crmStages as stages } from "@/lib/crm-stages";
+import type { CrmContact, CrmContactId, CrmSegment, CrmSource, CrmSourceProvider, CrmStage, Submission } from "@/data/types";
 
-const stages: CrmStage[] = ["prospect", "contacted", "qualified", "invited", "negotiating", "confirmed", "declined", "archived"];
-const stageLabel: Record<CrmStage, string> = {
-  prospect: "Prospect", contacted: "Contacted", qualified: "Qualified", invited: "Invited",
-  negotiating: "Negotiating", confirmed: "Confirmed", declined: "Declined", archived: "Archived",
-};
-
-function ContactPane({ contact, onClose, onSaved }: { contact?: CrmContact; onClose: () => void; onSaved: () => void }) {
+function ContactPane({ contact, submissions, onClose, onSaved }: { contact?: CrmContact; submissions: Submission[]; onClose: () => void; onSaved: () => void }) {
   const repo = useRepo();
   const { event } = useCurrentEvent();
+  const contactSubmissions = contact?.speakerId
+    ? submissions.filter((submission) => submission.speakerIds.includes(contact.speakerId!))
+    : [];
   const [firstName, setFirstName] = useState(contact?.firstName ?? "");
   const [lastName, setLastName] = useState(contact?.lastName ?? "");
   const [email, setEmail] = useState(contact?.email ?? "");
@@ -65,6 +64,28 @@ function ContactPane({ contact, onClose, onSaved }: { contact?: CrmContact; onCl
         <div className="space-y-1.5"><Label htmlFor="crm-score">Score</Label><Input id="crm-score" inputMode="numeric" value={score} onChange={(e) => setScore(e.target.value)} disabled={saving} /></div>
       </div>
       {contact?.speakerId && <p className="text-xs leading-5 text-muted-foreground">This contact is linked to a speaker record. Archiving keeps speaker and portal history intact.</p>}
+      {contact?.speakerId && (
+        <div className="space-y-1.5">
+          <Label>Submissions</Label>
+          {contactSubmissions.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No submissions from this speaker yet.</p>
+          ) : (
+            <ul className="space-y-1">
+              {contactSubmissions.map((submission) => (
+                <li key={submission.id}>
+                  <Link
+                    to={`/events/${event.slug}/program/abstracts/${submission.id}/edit`}
+                    className="flex items-center justify-between gap-2 rounded-md bg-muted/50 px-3 py-2 text-sm hover:bg-muted"
+                  >
+                    <span className="min-w-0 truncate">{submission.title || "Untitled submission"}</span>
+                    <SubmissionStatusBadge status={submission.status} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       <div className="flex flex-wrap justify-between gap-2">{contact ? <Button type="button" variant="outline" onClick={() => void unlink()} disabled={saving || Boolean(contact.speakerId)}>Remove from event</Button> : <span />}<div className="flex gap-2"><Button type="button" variant="outline" onClick={onClose} disabled={saving}>Cancel</Button><Button type="submit" disabled={saving}>{saving ? "Saving…" : "Save contact"}</Button></div></div>
     </form>
@@ -150,6 +171,7 @@ export default function Contacts() {
   const [contacts, setContacts] = useState<CrmContact[]>([]);
   const [segments, setSegments] = useState<CrmSegment[]>([]);
   const [sources, setSources] = useState<CrmSource[]>([]);
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [search, setSearch] = useState("");
@@ -165,8 +187,16 @@ export default function Contacts() {
 
   const load = useCallback(async () => {
     setLoading(true); setError(undefined);
-    try { const [nextContacts, nextSegments, nextSources] = await Promise.all([repo.crm.list({ eventId: event.id }), repo.crm.listSegments({ eventId: event.id }), typeof repo.crm.listSources === "function" ? repo.crm.listSources({ eventId: event.id }) : Promise.resolve([])]); setContacts(nextContacts); setSegments(nextSegments); setSources(nextSources); }
-    catch (cause) { setContacts([]); setSources([]); setError(cause instanceof Error ? cause.message : "Contacts could not be loaded."); }
+    try {
+      const [nextContacts, nextSegments, nextSources, nextSubmissions] = await Promise.all([
+        repo.crm.list({ eventId: event.id }),
+        repo.crm.listSegments({ eventId: event.id }),
+        typeof repo.crm.listSources === "function" ? repo.crm.listSources({ eventId: event.id }) : Promise.resolve([]),
+        repo.submissions.list({ eventId: event.id }),
+      ]);
+      setContacts(nextContacts); setSegments(nextSegments); setSources(nextSources); setSubmissions(nextSubmissions);
+    }
+    catch (cause) { setContacts([]); setSources([]); setSubmissions([]); setError(cause instanceof Error ? cause.message : "Contacts could not be loaded."); }
     finally { setLoading(false); }
   }, [event.id, repo]);
   useEffect(() => { void load(); }, [load]);
@@ -203,14 +233,27 @@ export default function Contacts() {
     const contact = creating ? undefined : contacts.find((row) => row.id === contactId);
     if (loading) return <AppLayout title={creating ? "New contact" : "Edit contact"}><SkeletonList rows={4} label="Loading contact…" /></AppLayout>;
     if (!creating && !contact) return <AppLayout title="Contact not found"><EmptyState icon={UsersRound} title="Contact not found" action={<Button onClick={() => navigate(`/events/${event.slug}/program/contacts`)}>Back to contacts</Button>} /></AppLayout>;
-    return <ContactPane contact={contact} onClose={() => navigate(`/events/${event.slug}/program/contacts`)} onSaved={() => void load()} />;
+    return <ContactPane contact={contact} submissions={submissions} onClose={() => navigate(`/events/${event.slug}/program/contacts`)} onSaved={() => void load()} />;
   }
 
   const columns: DataGridColumn<CrmContact>[] = [
     { key: "contact", header: "Contact", kind: "row-header", sortValue: (row) => `${row.lastName} ${row.firstName}`, cell: (row) => <div className="min-w-0"><Button type="button" variant="ghost" size="sm" className="h-auto max-w-full justify-start truncate p-0 font-medium hover:bg-transparent hover:underline" onClick={() => navigate(`/events/${event.slug}/program/contacts/${row.id}/edit`)}>{row.firstName} {row.lastName}</Button><p className="truncate text-xs text-muted-foreground">{row.email}</p></div> },
     { key: "stage", header: "Stage", width: "11rem", sortValue: (row) => row.stage, cell: (row) => <span className="text-sm">{stageLabel[row.stage]}</span> },
     { key: "score", header: "Score", width: "6rem", align: "right", sortValue: (row) => row.score, cell: (row) => <span className="tabular-nums">{row.score}</span> },
-    { key: "linked", header: "Speaker", width: "8rem", cell: (row) => <span className="text-sm text-muted-foreground">{row.speakerId ? "Linked" : "—"}</span> },
+    {
+      key: "linked",
+      header: "Speaker",
+      width: "10rem",
+      cell: (row) => {
+        if (!row.speakerId) return <span className="text-sm text-muted-foreground">—</span>;
+        const count = submissions.filter((submission) => submission.speakerIds.includes(row.speakerId!)).length;
+        return (
+          <span className="text-sm text-muted-foreground">
+            Linked{count > 0 ? ` · ${count} submission${count === 1 ? "" : "s"}` : ""}
+          </span>
+        );
+      },
+    },
   ];
   return <AppLayout title="Contacts">
     <div className="space-y-4">
@@ -220,7 +263,9 @@ export default function Contacts() {
         <Button type="button" variant="outline" size="sm" onClick={() => setSegmentDialogOpen(true)}>{selectedSegment ? "Edit segment" : "Save filters"}</Button>
         <Button type="button" variant="outline" size="sm" onClick={() => void backfillSpeakers()} disabled={busy}><UsersRound className="h-4 w-4" aria-hidden="true" />Backfill speakers</Button>
         <Button type="button" variant="outline" size="sm" onClick={() => setSourceDialogOpen(true)}><Database className="h-4 w-4" aria-hidden="true" />Connect source</Button>
+        {event.organizationId && <Button asChild type="button" variant="outline" size="sm"><Link to={`/organizations/${event.organizationId}/contacts?event=${event.id}`}><UsersRound className="h-4 w-4" aria-hidden="true" />Open organization directory</Link></Button>}
         <Button type="button" variant="outline" size="sm" onClick={() => void load()} disabled={loading}><RefreshCw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"} aria-hidden="true" />Refresh</Button>
+        {event.organizationId && <Button asChild type="button" variant="outline" size="sm"><Link to={`/organizations/${event.organizationId}/contacts?event=${event.id}`}><UsersRound className="h-4 w-4" aria-hidden="true" />Open organization directory</Link></Button>}
       </>} primaryAction={<Button type="button" size="sm" onClick={() => navigate(`/events/${event.slug}/program/contacts/new`)}>Add contact</Button>} />
       {backfillMessage && <p role="status" className="text-sm text-muted-foreground">{backfillMessage}</p>}
       {sources.length > 0 && <section aria-label="CRM source sync" className="flex flex-wrap items-center gap-2 rounded-md bg-muted/50 px-3 py-2">{sources.map((source) => <div key={source.id} className="flex items-center gap-2 text-sm"><span>{source.provider === "airtable" ? "Airtable" : "Notion"}</span><span className={source.status === "error" ? "text-destructive" : "text-muted-foreground"}>{source.status === "error" ? source.lastError || "Needs attention" : source.lastSyncedAt ? "Synced" : "Ready to sync"}</span><Button type="button" variant="outline" size="sm" onClick={() => void syncSource(source.provider)} disabled={busy}>Sync now</Button></div>)}</section>}
