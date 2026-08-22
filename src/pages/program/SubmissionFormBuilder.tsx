@@ -15,6 +15,7 @@ import {
 } from "@/components/forms/RoutingRulesEditor";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
 import { FormField } from "@/components/shared/FormField";
+import { friendlyErrorMessage } from "@/lib/errors";
 import { SkeletonList } from "@/components/shared/SkeletonList";
 import { ToggleField } from "@/components/shared/ToggleField";
 import { WizardShell, type WizardStep } from "@/components/shared/WizardShell";
@@ -573,7 +574,7 @@ function AppearanceStep({ event, onUpdate }: { event: Event; onUpdate: (patch: P
       const { storageId } = await response.json() as { storageId?: string };
       if (!storageId) throw new Error("Missing storage id");
       await onUpdate({ logoStorageKey: storageId });
-      setLogoUrl((await repo.files.getUrl(storageId)) ?? undefined);
+      setLogoUrl(URL.createObjectURL(file));
     } catch { setUploadError("Couldn't upload image — try again"); }
     finally { setUploading(false); }
   };
@@ -1115,11 +1116,12 @@ export default function SubmissionFormBuilder() {
     try {
       setExistingStatus(await repo.forms.setStatus({ id: formId, eventId: event.id, status: nextStatus }));
     } catch (cause) {
-      setLoadError(
-        cause instanceof Error
-          ? cause.message
-          : "Could not change this form's status.",
-      );
+      // Convex wraps a thrown server Error in request-id framing ("[Request ID: ...] Server
+      // Error\nUncaught Error: <message>") before it reaches the browser — using cause.message
+      // directly showed organizers that raw envelope instead of the actual validation message
+      // (e.g. "Publish the event before opening its call for proposals."). Route through the
+      // same unwrapping helper the rest of the app already uses for this.
+      setLoadError(friendlyErrorMessage(cause, "Could not change this form's status."));
     } finally {
       setStatusSaving(false);
     }

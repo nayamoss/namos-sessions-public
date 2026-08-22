@@ -12,7 +12,8 @@ export function hostedSource(value: string): { url: string; provider: Exclude<Pr
   if (url.protocol !== "https:" || url.username || url.password) throw new Error("Hosted recordings must be credential-free HTTPS URLs.");
   const host = url.hostname.toLowerCase().replace(/^www\./, "");
   // Exact-match or require a "." boundary before the suffix — `host.endsWith("youtube.com")`
-  // alone also matches a hostile host like "evilyoutube.com", letting an attacker-controlled
+  // alone also matches a hostile host like "evilyoutube.com" or "attacker.com/youtube.com"
+  // (path, not host, so irrelevant here, but the same class of bug), letting an attacker-controlled
   // domain sail through as if it were really youtube.com/vimeo.com.
   const isHost = (candidate: string, suffix: string) => candidate === suffix || candidate.endsWith(`.${suffix}`);
   const youtube = host === "youtu.be" ? url.pathname.slice(1) : isHost(host, "youtube.com") ? url.searchParams.get("v") ?? (url.pathname.match(/^\/(?:embed|shorts)\/([^/]+)/)?.[1]) : undefined;

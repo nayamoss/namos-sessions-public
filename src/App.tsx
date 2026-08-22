@@ -61,6 +61,7 @@ const CommTemplateEditor = lazy(
 );
 const Speakers = lazy(() => import("@/pages/program/Speakers"));
 const Contacts = lazy(() => import("@/pages/program/Contacts"));
+const OrganizationContacts = lazy(() => import("@/pages/organization/Contacts"));
 const Sponsors = lazy(() => import("@/pages/program/Sponsors"));
 const DashboardHome = lazy(() => import("@/pages/dashboard/DashboardHome"));
 const EventAnalytics = lazy(() => import("@/pages/dashboard/EventAnalytics"));
@@ -69,6 +70,7 @@ const PortalHome = lazy(() => import("@/pages/portal/PortalHome"));
 const EmbedPage = lazy(() => import("@/pages/public/EmbedPage"));
 const AttendeeSite = lazy(() => import("@/pages/public/AttendeeSite"));
 const PublicEmbedPage = lazy(() => import("@/pages/public/PublicEmbedPage"));
+const EmbedShowcasePage = lazy(() => import("@/pages/public/EmbedShowcasePage"));
 const EmbedsListPage = lazy(() => import("@/pages/cms/EmbedsListPage"));
 const FeedsListPage = lazy(() => import("@/pages/cms/FeedsListPage"));
 const EmbedEditorPage = lazy(() => import("@/pages/cms/EmbedEditorPage"));
@@ -390,6 +392,13 @@ export default function App() {
                     path="/settings/organization"
                     element={<EventsLanding />}
                   />
+                  {/* Cross-event speaker CRM workspace (#268). Deliberately outside
+                  EventProvider — it spans every event in the organization, not one — so it
+                  resolves its own organizationId from the route param instead of event context. */}
+                  <Route
+                    path="/organizations/:organizationId/contacts"
+                    element={<OrganizationContacts />}
+                  />
                   <Route path="/settings/:tab" element={<LegacySettingsEntry />} />
                   <Route
                     path="/dashboard"
@@ -584,6 +593,7 @@ export default function App() {
                 }
               />
               <Route path="/embed/:embedId" element={<Suspense fallback={<main className="min-h-screen p-4 text-sm text-muted-foreground">Loading embed…</main>}><PublicEmbedPage /></Suspense>} />
+              <Route path="/embeds" element={<Suspense fallback={<PublicLoading>Loading embed showcase…</PublicLoading>}><EmbedShowcasePage /></Suspense>} />
               <Route
                 path="/submit/:eventSlug/:formId"
                 element={

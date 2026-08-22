@@ -79,6 +79,8 @@ const navSections: DashboardNavSection[] = [
     items: [
       { to: "/program/speakers", label: "Speaker CRM", icon: ContactRound },
       { to: "/program/event-speakers", label: "Event speakers", icon: Users },
+      { to: "/program/contacts", label: "Contacts", icon: ContactRound },
+      { to: "/organizations/:organizationId/contacts", label: "All contacts", icon: ContactRound },
       { to: "/program/agenda", label: "Schedule", icon: CalendarDays },
       { to: "/program/recordings", label: "Recordings", icon: Video },
       { to: "/program/sponsors", label: "Sponsors", icon: Handshake },
@@ -175,14 +177,18 @@ function Navigation({
     });
   };
 
+  // A nav item's `to` can carry a query string (the "All contacts" deep link below stamps on
+  // `?event=`); active-state matching only ever cares about the path portion.
+  const basePath = (to: string) => to.split("?")[0]!;
+
   return (
     <nav className={cn("space-y-6 py-4", collapsed ? "px-2" : "px-3")}>
       {sections.map((section) => {
         const isCollapsible = section.items.length > 1;
         const hasActiveItem = section.items.some((item) =>
           item.end
-            ? location.pathname === item.to
-            : location.pathname === item.to || location.pathname.startsWith(`${item.to}/`),
+            ? location.pathname === basePath(item.to)
+            : location.pathname === basePath(item.to) || location.pathname.startsWith(`${basePath(item.to)}/`),
         );
         // Auto-collapsed by default: a section only opens if the user explicitly
         // expanded it, or it holds the active route.
@@ -221,8 +227,8 @@ function Navigation({
               {(collapsed ? section.items.slice(0, 1) : section.items).map((item) => {
                 const isConfigure = item.label === "Configure";
                 const active = item.end
-                  ? location.pathname === item.to
-                  : location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
+                  ? location.pathname === basePath(item.to)
+                  : location.pathname === basePath(item.to) || location.pathname.startsWith(`${basePath(item.to)}/`);
                 const className = cn(
                   "touch-target group relative flex items-center rounded-md text-base font-medium transition-colors",
                   collapsed ? "justify-center p-2" : "gap-3 px-3 py-2",
@@ -412,9 +418,9 @@ function DashboardLayoutInner({
   const [utilityCollapsed, setUtilityCollapsed] = useState(() => {
     try {
       const stored = localStorage.getItem("sessionboard.utilityCollapsed");
-      return stored === null ? false : stored === "true";
+      return stored === null ? true : stored === "true";
     } catch {
-      return false;
+      return true;
     }
   });
   const toggleUtilityCollapsed = useCallback(() => {
@@ -440,17 +446,17 @@ function DashboardLayoutInner({
           utility && !utilityCollapsed && "lg:pr-[23.75rem] xl:pr-[25.75rem]",
         )}
       >
-        <header className="flex h-14 shrink-0 items-center pl-14 pr-4 md:pl-16 md:pr-4 lg:px-3">
-          <div className="min-w-0"><PageHeader title={title} /></div>
+        <header className="flex h-14 shrink-0 items-center gap-3 pl-14 pr-4 md:pl-16 md:pr-4 lg:px-3">
+          <div className="min-w-0 flex-1"><PageHeader title={title} /></div>
+          {bodyToolbar && contentVariant !== "conversation" && (
+            <nav aria-label="Workspace utilities" className="flex shrink-0 items-center gap-2">
+              {bodyToolbar}
+            </nav>
+          )}
         </header>
         <div className="flex min-h-0 min-w-0 flex-1 px-3 pb-3 md:px-4 md:pb-4">
           <PageContentSurface variant={contentVariant} className="min-w-0">
             <div className={cn("min-w-0 flex-1", contentVariant === "conversation" ? "flex min-h-0 overflow-hidden" : "p-4 md:p-5 lg:overflow-y-auto")}>
-              {bodyToolbar && contentVariant !== "conversation" && (
-                <nav aria-label="Workspace utilities" className="mb-4 flex items-center justify-end gap-2">
-                  {bodyToolbar}
-                </nav>
-              )}
               {children}
             </div>
             {detail && (
@@ -545,7 +551,11 @@ export function AppLayout({
   }, [current, repo]);
   const openCommandPalette = useCallback(() => setCommandPaletteOpen(true), []);
   const managedCrm = selectedBackend() === "convex";
-  const visibleNavSections = current ? navSections.map(section => ({ ...section, items: section.items.filter(item => (item.to !== "/program/sponsors" || current.sponsorsEnabled) && (item.to !== "/program/agent" || agentAccess) && (item.to !== "/program/speakers" || managedCrm)).map(item => ({ ...item, to: `/events/${current.slug}${item.to}` })) })) : repo ? [] : navSections;
+  // "All contacts" links to the organization-wide CRM workspace (#268), not an event-scoped
+  // route, so it needs `current.organizationId` in hand and must skip the `/events/:slug` prefix
+  // every other nav item gets below. Legacy events with no organizationId hide the item rather
+  // than link somewhere broken.
+  const visibleNavSections = current ? navSections.map(section => ({ ...section, items: section.items.filter(item => (item.to !== "/program/sponsors" || current.sponsorsEnabled) && (item.to !== "/program/agent" || agentAccess) && (item.to !== "/program/speakers" || managedCrm) && (item.to !== "/program/contacts" || managedCrm) && (item.to !== "/organizations/:organizationId/contacts" || (managedCrm && current.organizationId))).map(item => ({ ...item, to: item.to.startsWith("/organizations/") ? `${item.to.replace(":organizationId", current.organizationId ?? "")}?event=${current.id}` : `/events/${current.slug}${item.to}` })) })) : repo ? [] : navSections;
 
   return (
     <SettingsModalProvider>

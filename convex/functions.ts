@@ -8,23 +8,61 @@
 // tenant, so don't.
 import { ConvexError } from "convex/values";
 import { customCtx, customMutation } from "convex-helpers/server/customFunctions";
-import { mutation as baseMutation, query } from "./_generated/server";
+import { mutation as baseMutation, query as rawQuery } from "./_generated/server";
 
 import type { QueryCtx, MutationCtx } from "./_generated/server";
 import type { UserIdentity } from "convex/server";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 
-export { query };
+// In a deployed (non-dev) Convex environment, a plain `throw new Error("...")` from a handler
+// is treated as an unexpected server fault: the client never receives the message at all, only
+// an opaque "[Request ID: ...] Server Error". Only a thrown `ConvexError`'s data is forwarded to
+// the client, in every environment. Every handler in this codebase throws plain `Error`s for
+// user-facing validation ("Publish the event before opening its call for proposals.", "Form not
+// found for this event.", etc) — that's the readable, greppable convention we want to keep, not
+// something to migrate 650+ call sites away from. So this is the single place that bridges the
+// two: catch a plain Error a handler throws and re-raise it as a ConvexError carrying the exact
+// same string as `.data`/`.message` (a bare string, not `{message: ...}` — a bare string is what
+// `src/lib/errors.ts`'s client-side unwrapping already expects verbatim, with no envelope to
+// strip), so the organizer actually sees why their action failed instead of a meaningless
+// request id. A cause that is already a ConvexError (e.g. the demo-read-only guard below) passes
+// through unchanged rather than getting double-wrapped.
+function toConvexError(cause: unknown): ConvexError<string> {
+  if (cause instanceof ConvexError) return cause;
+  if (cause instanceof Error) return new ConvexError(cause.message);
+  return new ConvexError("Something went wrong.");
+}
+
+function withFriendlyErrors<Handler extends (ctx: any, args: any) => any>(handler: Handler): Handler {
+  return (async (ctx: any, args: any) => {
+    try {
+      return await handler(ctx, args);
+    } catch (cause) {
+      throw toConvexError(cause);
+    }
+  }) as Handler;
+}
+
+export const query: typeof rawQuery = ((config: any) =>
+  typeof config === "function"
+    ? rawQuery(withFriendlyErrors(config))
+    : rawQuery({ ...config, handler: withFriendlyErrors(config.handler) })) as typeof rawQuery;
 
 // All public mutations must use this export. It automatically blocks active demo identities
 // before their handlers run; do not duplicate this check in individual mutation modules.
-export const mutation = customMutation(baseMutation, customCtx(async (ctx) => {
+const withDemoGuard = customMutation(baseMutation, customCtx(async (ctx) => {
   const identity = await ctx.auth.getUserIdentity();
   if (identity && await isDemoIdentity(ctx, identity)) {
     throw new ConvexError({ code: "demo_read_only", message: "This is a read-only demo." });
   }
   return {};
 }));
+
+export const mutation: typeof withDemoGuard = ((config: any) =>
+  withDemoGuard({
+    ...config,
+    handler: withFriendlyErrors(config.handler),
+  })) as typeof withDemoGuard;
 
 // Every non-public query/mutation must call this first. Deliberately public CFP, embed, and
 // HTTP read surfaces are exempt. Privileged maintenance functions such as seed.ts use Convex's
@@ -166,6 +204,54 @@ export async function isEventOrganizer(ctx: QueryCtx | MutationCtx, eventId: Id<
   const event = await ctx.db.get(eventId);
   if (event && (await isOrganizerOf(ctx, identity, event.organizationId))) return true;
   return (await getEventMembership(ctx, eventId, identity))?.role === "organizer";
+}
+
+// All event_members rows with organizer role for this caller, across every event -- used to
+// resolve which events an "event-limited" caller (no organizers row of their own) may see in
+// organization-wide surfaces such as the CRM directory. Reviewer-role rows are excluded: only
+// "organizer" grants elevated event access (mirrors isEventOrganizer above).
+export async function eventOrganizerMembershipsForUser(ctx: QueryCtx | MutationCtx, identity: UserIdentity): Promise<Doc<"event_members">[]> {
+  const email = identityEmail(identity);
+  const [byUser, byEmail] = await Promise.all([
+    ctx.db.query("event_members").withIndex("by_userId", (q) => q.eq("userId", identity.subject)).collect(),
+    email
+      ? ctx.db.query("event_members").withIndex("by_email", (q) => q.eq("email", email)).collect()
+      : Promise.resolve([] as Doc<"event_members">[]),
+  ]);
+  const seen = new Set<string>();
+  return [...byUser, ...byEmail].filter((row) => {
+    if (row.role !== "organizer" || seen.has(row._id)) return false;
+    seen.add(row._id);
+    return true;
+  });
+}
+
+export type OrganizationCrmAccess =
+  | { identity: UserIdentity; scope: "organization" }
+  | { identity: UserIdentity; scope: "events"; eventIds: Id<"events">[] };
+
+// Gate for organization-wide CRM projections (the cross-event contact directory and detail
+// pane). An organization owner/admin sees the full directory. Someone who is not an organizer
+// of this organization but holds an explicit organizer-role event_members row on one or more of
+// its events sees ONLY the contacts linked to those authorized events -- never the rest of the
+// organization's directory, and the server does the filtering; the browser is never sent an
+// unauthorized contact to hide client-side. Fails closed: authenticated but neither an
+// organizer here nor an event organizer anywhere in this organization throws.
+export async function assertOrganizationCrmAccess(
+  ctx: QueryCtx | MutationCtx,
+  organizationId: Id<"organizations">,
+): Promise<OrganizationCrmAccess> {
+  const identity = await requireIdentity(ctx);
+  if (await isOrganizerOf(ctx, identity, organizationId)) return { identity, scope: "organization" };
+  const memberships = await eventOrganizerMembershipsForUser(ctx, identity);
+  const events = await Promise.all(memberships.map((membership) => ctx.db.get(membership.eventId)));
+  const eventIds = [...new Set(
+    events
+      .filter((event): event is NonNullable<typeof event> => Boolean(event) && event.organizationId === organizationId)
+      .map((event) => event._id),
+  )];
+  if (eventIds.length === 0) throw new Error("Forbidden: organization CRM access required.");
+  return { identity, scope: "events", eventIds };
 }
 
 // Scheduled adapters (Slack today) have no browser identity. They may act only for a stored

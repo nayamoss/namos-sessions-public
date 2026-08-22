@@ -6,4 +6,12 @@ interface Env {
   DEMO_EDGE_SECRET: string;
   DEMO_COOKIE_SECRET: string;
   CLERK_SECRET_KEY: string;
+  INBOUND_EMAIL_EDGE_SECRET: string;
+  RESEND_API_KEY: string;
+  RESEND_WEBHOOK_SIGNING_SECRET: string;
+  SES_INBOUND_SNS_TOPIC_ARN: string;
+  CONVEX_SITE_URL: string;
+  CONVEX_CLOUD_URL: string;
+  CLERK_FRONTEND_API_URL: string;
+  PUBLIC_EMBED_ORIGIN: string;
 }

@@ -28,4 +28,15 @@ describe("deterministic demo Operations Agent", () => {
     expect(runtime.indexOf("if (demoWorkspace)")).toBeLessThan(runtime.indexOf("const apiKey = await resolveApiKey"));
     expect(runtime).toContain("safeProviderError(error)");
   });
+
+  it("does not require a Clerk subscription or consume managed AI allowance for a deterministic demo run", async () => {
+    const runtime = await import("node:fs").then(({ readFileSync }) => readFileSync("convex/agentRuntime.ts", "utf8"));
+    const deterministicRun = runtime.slice(
+      runtime.indexOf("async function executeDeterministicDemoRun"),
+      runtime.indexOf("export const executeSegment"),
+    );
+    expect(deterministicRun).not.toContain("resolveManagedAllowance");
+    expect(deterministicRun).not.toContain("internal.agentBilling");
+    expect(deterministicRun).not.toContain("internal.agentProviderSettings.recordUsage");
+  });
 });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Inbox, Lock, RotateCcw } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -20,7 +20,7 @@ import {
 
 type DemoRole = "organizer" | "reviewer" | "speaker";
 type WorkspaceState = {
-  workspace: { activeRole: DemoRole; expiresAt: number };
+  workspace: { activeRole: DemoRole; expiresAt: number; eventSlug: string };
   csrf: string;
 };
 
@@ -44,34 +44,47 @@ export function DemoWorkspaceBar() {
   const [state, setState] = useState<WorkspaceState | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-
-  // The demo cookie is `__Host-` prefixed, which forces `Path=/` at the browser level (that
-  // prefix rejects any other Path), so it is technically readable site-wide once a demo session
-  // has ever been started in this browser. That must never surface outside the demo experience
-  // itself — an organizer's real, authenticated session has nothing to do with a leftover demo
-  // cookie. Gate both the status check and the render on actually being under /demo so a stale
-  // cookie can never paint this bar over real account data again.
-  const inDemo = location.pathname === "/demo" || location.pathname.startsWith("/demo/");
+  const refreshId = useRef(0);
 
   const refresh = useCallback(() => {
-    if (!inDemo) {
-      setState(null);
-      return;
-    }
+    const id = ++refreshId.current;
     void request("/api/demo/workspaces/current")
-      .then(setState)
-      .catch(() => setState(null));
-  }, [inDemo]);
+      .then((next) => {
+        if (id === refreshId.current) setState(next);
+      })
+      .catch(() => {
+        if (id === refreshId.current) setState(null);
+      });
+  }, []);
 
   useEffect(() => {
     refresh();
+    return () => {
+      refreshId.current += 1;
+    };
   }, [location.pathname, refresh]);
 
+  // The demo cookie is `__Host-` prefixed, forcing Path=/ (that prefix rejects any other
+  // Path), so once a demo session has ever started in this browser the cookie is technically
+  // readable on every route — including a real, authenticated session in the same browser
+  // (see 66c05f53: this bar previously bled onto real accounts). It must never render outside
+  // the demo experience itself. But gating on a bare "/demo" path prefix also hid it on the
+  // demo's own event pages (/events/demo-{id}/..., which don't start with "/demo") — that was
+  // the #280 regression. Match the workspace's own event slug exactly instead: that's specific
+  // enough to rule out bleeding onto a real event (real slugs never equal this demo's slug)
+  // while covering every page the demo experience actually spans.
+  const inThisDemo = (workspace: WorkspaceState["workspace"]) =>
+    location.pathname === "/demo" ||
+    location.pathname.startsWith("/demo/") ||
+    location.pathname.startsWith(`/events/${workspace.eventSlug}`) ||
+    (workspace.activeRole === "speaker" && location.pathname.startsWith("/portal"));
+  const visible = state !== null && inThisDemo(state.workspace) && location.pathname !== "/demo";
+
   useEffect(() => {
-    if (!state || location.pathname === "/demo") return;
+    if (!visible) return;
     document.body.classList.add("demo-workspace-active");
     return () => document.body.classList.remove("demo-workspace-active");
-  }, [location.pathname, state]);
+  }, [visible]);
 
   const expires = useMemo(
     () =>
@@ -83,7 +96,7 @@ export function DemoWorkspaceBar() {
         : "",
     [state],
   );
-  if (!state || location.pathname === "/demo") return null;
+  if (!visible) return null;
 
   const mutate = async (path: string, body?: object) => {
     setBusy(true);

@@ -20,7 +20,11 @@ export type SubmissionStatus =
   | "maybe" | "decline_queue" | "declined" | "withdrawn";
 
 export type EventStatus = "draft" | "published" | "archived";
-export interface Event { id: EventId; name: string; slug: string; type?: string; websiteUrl?: string; location?: string; timezone: string; startDate: number; endDate: number; description?: string; contactEmail?: string; logoFileId?: string; programPublishedAt?: number; scheduleStartTime?: string; scheduleEndTime?: string; theme?: string; logoStorageKey?: string; accentColor?: string; backgroundStorageKey?: string; industry?: string; readinessCategories?: Array<"agenda_conflicts" | "speaker_confirmations" | "onboarding_tasks" | "proposal_decisions" | "comms_delivery">; exhibitorsEnabled: boolean; sponsorsEnabled: boolean; defaultOnboardingTemplateId?: string; status: EventStatus; }
+// `organizationId` is optional to match the backend (see convex/schema.ts's `events` comment):
+// events written before the multi-tenancy migration may not carry one yet. Every consumer that
+// deep-links into the organization CRM workspace (#268) must treat a missing value as "no
+// cross-event directory available for this event" rather than assume it is always present.
+export interface Event { id: EventId; name: string; slug: string; type?: string; websiteUrl?: string; location?: string; timezone: string; startDate: number; endDate: number; description?: string; contactEmail?: string; logoFileId?: string; programPublishedAt?: number; scheduleStartTime?: string; scheduleEndTime?: string; theme?: string; logoStorageKey?: string; accentColor?: string; backgroundStorageKey?: string; industry?: string; readinessCategories?: Array<"agenda_conflicts" | "speaker_confirmations" | "onboarding_tasks" | "proposal_decisions" | "comms_delivery">; exhibitorsEnabled: boolean; sponsorsEnabled: boolean; defaultOnboardingTemplateId?: string; status: EventStatus; organizationId?: string; }
 
 export type ApiScope = "events:read" | "submissions:read" | "submissions:write" | "speakers:read" | "agenda:read" | "tasks:read";
 export interface ApiKey { id: string; label: string; keyPrefix: string; scopes: ApiScope[]; createdAt: number; lastUsedAt?: number; revokedAt?: number; }

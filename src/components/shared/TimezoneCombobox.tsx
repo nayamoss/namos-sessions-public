@@ -22,7 +22,8 @@ export const TimezoneCombobox = forwardRef<HTMLButtonElement, {
   onChange: (zone: string) => void;
   id?: string;
   autoFocus?: boolean;
-}>(function TimezoneCombobox({ value, onChange, id, autoFocus }, ref) {
+  triggerClassName?: string;
+}>(function TimezoneCombobox({ value, onChange, id, autoFocus, triggerClassName }, ref) {
   const [open, setOpen] = useState(false);
   const now = useMemo(() => new Date(), []);
   const zones = useMemo(() => getTimezoneOptions(value), [value]);
@@ -38,7 +39,7 @@ export const TimezoneCombobox = forwardRef<HTMLButtonElement, {
           autoFocus={autoFocus}
           role="combobox"
           aria-expanded={open}
-          className="h-11 w-full justify-between rounded-[12px] bg-card px-4 text-left font-normal"
+          className={cn("h-11 w-full justify-between rounded-[12px] bg-card px-4 text-left font-normal", triggerClassName)}
         >
           <span className="flex min-w-0 items-center gap-2">
             <Globe className="h-4 w-4 shrink-0 text-muted-foreground" />

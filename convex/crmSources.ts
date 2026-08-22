@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery, query } from "./_generated/server";
 import { assertEventAccess } from "./functions";
+import { findActiveContactByEmail, resolveCanonicalContact } from "./crm";
 
 const provider = v.union(v.literal("notion"), v.literal("airtable"));
 const envelope = v.object({ version: v.literal(1), iv: v.string(), ciphertext: v.string(), tag: v.string() });
@@ -91,7 +92,11 @@ export const consumeOAuthPendingInternal = internalMutation({
 });
 
 // Idempotent source upsert. Imports change identity fields only; CRM stage, score, segment
-// membership and already-linked events are deliberately never overwritten.
+// membership and already-linked events are deliberately never overwritten. Respects canonical/
+// merged identity (#268 T006): a previously mapped contact that has since been merged into
+// another one is resolved forward to that canonical contact rather than resurrected with fresh
+// import data, and a by-email fallback lookup never resolves to a tombstoned contact even though
+// a merge deliberately leaves the tombstone's email unchanged for audit display.
 export const upsertIdentityInternal = internalMutation({
   args: { sourceId: v.id("crm_sources"), providerRecordId: v.string(), email: v.string(), firstName: v.string(), lastName: v.string() },
   handler: async (ctx, args) => {
@@ -103,7 +108,8 @@ export const upsertIdentityInternal = internalMutation({
     const now = Date.now();
     const mapped = await ctx.db.query("crm_source_records").withIndex("by_source_record", (q) => q.eq("sourceId", args.sourceId).eq("providerRecordId", args.providerRecordId)).unique();
     let contact = mapped ? await ctx.db.get(mapped.contactId) : null;
-    if (!contact) contact = await ctx.db.query("crm_contacts").withIndex("by_org_email", (q) => q.eq("organizationId", event.organizationId).eq("email", email)).unique();
+    if (contact?.mergedIntoContactId) contact = await resolveCanonicalContact(ctx, contact);
+    if (!contact) contact = await findActiveContactByEmail(ctx, event.organizationId, email);
     const created = !contact;
     if (contact) await ctx.db.patch(contact._id, { email, firstName: args.firstName, lastName: args.lastName, updatedAt: now });
     else {

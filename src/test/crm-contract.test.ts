@@ -50,7 +50,12 @@ describe("event CRM contract", () => {
     expect(source).toContain("crmSources.consumeOAuthPendingInternal");
     expect(crons).toContain("crm-source-sync");
     expect(data).toContain('withIndex("by_source_record"');
-    expect(data).toContain('withIndex("by_org_email"');
+    // #268 T006: email lookup is delegated to the shared findActiveContactByEmail helper (which
+    // still queries by_org_email, in convex/crm.ts) so a tombstoned contact's stored email can
+    // never resolve as an import's match -- resurrecting a merged contact -- and so it can never
+    // hit Convex's `.unique()` throwing when a merge leaves two same-email rows in one org.
+    expect(data).toContain("findActiveContactByEmail(ctx, event.organizationId, email)");
+    expect(data).toContain("resolveCanonicalContact(ctx, contact)");
     expect(data).not.toMatch(/stage:\s*args\.|score:\s*args\./);
     expect(schema).toContain("crm_oauth_states: defineTable");
     expect(schema).toContain("crm_oauth_pending: defineTable");
@@ -90,5 +95,20 @@ describe("event CRM contract", () => {
     expect(archive).not.toContain("ctx.db.delete");
     expect(bulk).toContain('withIndex("by_event_contact"');
     expect(bulk).toContain("crm_stage_history");
+  });
+
+  it("only permits reviewed exact-email merges and preserves a source audit snapshot", () => {
+    const schema = readFileSync("convex/schema.ts", "utf8");
+    const source = readFileSync("convex/crm.ts", "utf8");
+    const preflight = source.slice(source.indexOf("export const mergePreflight"), source.indexOf("export const mergeExactEmail"));
+    const merge = source.slice(source.indexOf("export const mergeExactEmail"), source.indexOf("export const listForEvent"));
+
+    expect(schema).toContain("crm_contact_merges: defineTable");
+    expect(schema).toContain("mergedIntoContactId");
+    expect(preflight).toContain("assertOrganizerOf(ctx, args.organizationId)");
+    expect(preflight).toContain("Only contacts with the exact same email address can be merged.");
+    expect(merge).toContain('withIndex("by_contact"');
+    expect(merge).toContain("sourceSnapshot");
+    expect(merge).toContain("mergedIntoContactId: target._id");
   });
 });

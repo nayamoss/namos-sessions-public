@@ -2,16 +2,16 @@
 
 ## Phase 1: Authorization and data model
 
-- [ ] T001: Define organization owner/admin and event-limited projection rules with adversarial tests.
-- [ ] T002: Add merge tombstone/audit schema and cross-event indexes; deploy additive migration.
-- [ ] T003: Build paginated organization directory/detail projections without N+1 reads.
+- [x] T001: Define organization owner/admin and event-limited projection rules with adversarial tests.
+- [x] T002: Add merge tombstone/audit schema and cross-event indexes; deploy additive migration.
+- [x] T003: Build paginated organization directory/detail projections without N+1 reads.
 
 ## Phase 2: Membership and merge lifecycle
 
-- [ ] T004: Implement event assignment/unlink while preserving contact/speaker history.
-- [ ] T005: Implement exact-email duplicate preflight, confirmation hash, transactional merge, audit,
+- [x] T004: Implement event assignment/unlink while preserving contact/speaker history.
+- [x] T005: Implement exact-email duplicate preflight, confirmation hash, transactional merge, audit,
   idempotency, and guarded reversal.
-- [ ] T006: Reconcile CRM imports so source sync respects canonical/merged identities and CRM fields.
+- [x] T006: Reconcile CRM imports so source sync respects canonical/merged identities and CRM fields.
 
 ## Phase 3: Frontend UI
 
@@ -29,10 +29,10 @@
 
 ### Tasks
 
-- [ ] T007: Add org route/navigation and event-filtered deep-link compatibility.
-- [ ] T008: Build directory, toolbars, URL state, pagination, mobile rows, and empty/error/loading states.
-- [ ] T009: Build detail pane, event assignment, timeline/source/readiness sections.
-- [ ] T010: Build duplicate preflight/merge/reverse UI with accessible confirmation/announcements.
+- [x] T007: Add org route/navigation and event-filtered deep-link compatibility.
+- [x] T008: Build directory, toolbars, URL state, pagination, mobile rows, and empty/error/loading states.
+- [x] T009: Build detail pane, event assignment, timeline/source/readiness sections.
+- [x] T010: Build duplicate preflight/merge/reverse UI with accessible confirmation/announcements.
 
 ## Phase 4: Verification
 
