@@ -8,6 +8,7 @@ import { internal } from "./_generated/api";
 import { workflow } from "./agentWorkflow";
 import { isManagedAiDisabled, MANAGED_AI_DISABLED_MESSAGE } from "./managedAi";
 import { releaseManagedAllowance } from "./agentBilling";
+import { hasUsableManagedOpenAiKey } from "./agentProviderConfig";
 
 const cancellableStatuses = new Set(["queued", "running", "needs_input", "needs_approval"]);
 
@@ -133,7 +134,7 @@ export async function createRunForUser(ctx: MutationCtx, args: { eventId: Id<"ev
   if (providerMode === "bring_your_own" && (!providerSetting?.credentialEnvelope || providerSetting.status !== "ready")) throw new Error("Reconnect this event's OpenAI key in Settings before starting a run.");
   if (providerMode === "managed") {
     if (isManagedAiDisabled()) throw new Error(MANAGED_AI_DISABLED_MESSAGE);
-    if (!process.env.OPENAI_API_KEY) throw new Error("Namos-managed AI is temporarily unavailable. Choose Bring your own key in Settings, or contact support.");
+    if (!hasUsableManagedOpenAiKey(process.env.OPENAI_API_KEY)) throw new Error("Namos-managed AI is not configured. Choose Bring your own key in Settings, or contact support.");
     const event = await ctx.db.get(args.eventId);
     if (!event?.billingOwnerUserId) throw new Error("This event needs a billing owner before Namos-managed AI can run.");
   }

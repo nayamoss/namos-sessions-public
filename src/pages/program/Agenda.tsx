@@ -950,6 +950,7 @@ export default function Agenda() {
           onSave={saveSession}
           onCancel={closeDetail}
           onDelete={() => setPendingDelete(selectedItem)}
+          recordingManagerHref={`/events/${event.slug}/program/recordings?selected=${encodeURIComponent(selectedItem.id)}`}
         />
     ) : undefined;
   if (agendaId || creating) {

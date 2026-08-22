@@ -1,3 +1,4 @@
+import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
 import { recordAgendaItemAudit } from "./agendaAudit";
 import { derivePages } from "./formPages";
@@ -15,11 +16,12 @@ export const demo = internalMutation({
     let event = await ctx.db.query("events").withIndex("by_slug", (q) => q.eq("slug", eventSlug)).first();
     const eventWasMissing = !event;
     if (!event) {
-      const eventId = await ctx.db.insert("events", { name: "Example Conference Fixture", slug: eventSlug, type: "conference", location: "Example City", timezone: "UTC", startDate: Date.UTC(2026, 8, 15), endDate: Date.UTC(2026, 8, 17), description: "Unmistakably synthetic conference data for local testing.", contactEmail: "program@example.invalid", logoFileId: "example-conference-mark", programPublishedAt: seededAt, exhibitorsEnabled: false, sponsorsEnabled: true, status: "published", createdAt: seededAt, updatedAt: now });
+      const eventId = await ctx.db.insert("events", { name: "Example Conference Fixture", slug: eventSlug, type: "conference", location: "Example City", timezone: "UTC", startDate: Date.UTC(2026, 8, 15), endDate: Date.UTC(2026, 8, 17), description: "Unmistakably synthetic conference data for local testing.", contactEmail: "program@example.invalid", logoFileId: "example-conference-mark", programPublishedAt: seededAt, readinessCategories: ["agenda_conflicts", "speaker_confirmations", "onboarding_tasks", "proposal_decisions", "comms_delivery", "recording_coverage"], exhibitorsEnabled: false, sponsorsEnabled: true, status: "published", createdAt: seededAt, updatedAt: now });
       event = await ctx.db.get(eventId);
-    } else if (event.status !== "published" || !event.sponsorsEnabled) {
-      await ctx.db.patch(event._id, { status: "published", sponsorsEnabled: true, updatedAt: now });
-      event = { ...event, status: "published", sponsorsEnabled: true };
+    } else if (event.status !== "published" || !event.sponsorsEnabled || !event.readinessCategories?.includes("recording_coverage")) {
+      const readinessCategories = event.readinessCategories?.includes("recording_coverage") ? event.readinessCategories : [...new Set([...(event.readinessCategories ?? ["agenda_conflicts", "speaker_confirmations", "onboarding_tasks", "proposal_decisions", "comms_delivery"]), "recording_coverage"])] as NonNullable<typeof event.readinessCategories>;
+      await ctx.db.patch(event._id, { status: "published", sponsorsEnabled: true, readinessCategories, updatedAt: now });
+      event = { ...event, status: "published", sponsorsEnabled: true, readinessCategories };
     }
     if (!event) throw new Error("Could not create the demo event.");
     const eventId = event._id;
@@ -222,6 +224,11 @@ export const demo = internalMutation({
       { title: "Example agenda item A", submissionId: submissionIds[0], roomId: roomIds[0], trackId: trackIds[3], startTime: start, endTime: start + 60 * 60_000, speakerIds: [speakers[0]] },
       { title: "Example agenda item B", submissionId: submissionIds[1], roomId: roomIds[0], trackId: trackIds[0], startTime: start + 30 * 60_000, endTime: start + 90 * 60_000, speakerIds: [speakers[0]] },
       { title: "Example agenda item C", submissionId: submissionIds[2], roomId: roomIds[1], trackId: trackIds[0], startTime: start + 45 * 60_000, endTime: start + 105 * 60_000, speakerIds: [speakers[2]] },
+      { title: "Example agenda item D", submissionId: submissionIds[7], roomId: roomIds[2], trackId: trackIds[1], startTime: start + 6 * 60 * 60_000, endTime: start + 7 * 60 * 60_000, speakerIds: [speakers[7]] },
+      { title: "Example agenda item E", submissionId: submissionIds[8], roomId: roomIds[3], trackId: trackIds[2], startTime: start + 7 * 60 * 60_000, endTime: start + 8 * 60 * 60_000, speakerIds: [speakers[8]] },
+      { title: "Example agenda item F", submissionId: submissionIds[9], roomId: roomIds[1], trackId: trackIds[2], startTime: start + 8 * 60 * 60_000, endTime: start + 9 * 60 * 60_000, speakerIds: [speakers[9]], videoUrl: "https://vimeo.com/76979871" },
+      { title: "Example agenda item G", submissionId: submissionIds[10], roomId: roomIds[2], trackId: trackIds[0], startTime: start + 9 * 60 * 60_000, endTime: start + 10 * 60 * 60_000, speakerIds: [speakers[10]] },
+      { title: "Example agenda item H", submissionId: submissionIds[11], roomId: roomIds[3], trackId: trackIds[1], startTime: start + 10 * 60 * 60_000, endTime: start + 11 * 60 * 60_000, speakerIds: [speakers[11]] },
     ];
     await Promise.all(agendaFixtures.map(async (item) => {
       if (agenda.some((entry) => entry.title === item.title)) return;
@@ -235,6 +242,26 @@ export const demo = internalMutation({
         source: "seed:demo",
       });
     }));
+
+    // These durable hosted examples deliberately avoid fake storage ids. Direct-upload assets
+    // are created only through the real browser upload protocol, where Convex owns the binary.
+    const recordingAgenda = await ctx.db.query("agenda_items").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect();
+    const existingRecordings = await ctx.db.query("session_recordings").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect();
+    const agendaByTitle = new Map(recordingAgenda.map(item => [item.title, item]));
+    const seedRecording = async (title: string, data: Omit<typeof existingRecordings[number], "_id" | "_creationTime" | "eventId" | "agendaItemId" | "createdAt" | "updatedAt" | "createdByUserId">) => {
+      const item = agendaByTitle.get(title);
+      if (!item || existingRecordings.some(recording => recording.agendaItemId === item._id && recording.role === data.role)) return;
+      await ctx.db.insert("session_recordings", { eventId, agendaItemId: item._id, ...data, createdByUserId: "system:seed", createdAt: seededAt, updatedAt: now });
+    };
+    await seedRecording("Example agenda item A", { sourceType: "hosted", hostedUrl: "https://www.youtube.com/watch?v=9bZkp7q19f0", provider: "youtube", availability: "ready", role: "replacement", publicationStatus: "draft" });
+    await seedRecording("Example agenda item D", { sourceType: "hosted", hostedUrl: "https://cdn.example.com/recording.mp4", provider: "external", availability: "unavailable", role: "active", publicationStatus: "draft" });
+    await seedRecording("Example agenda item F", { sourceType: "hosted", hostedUrl: "https://vimeo.com/76979871", provider: "vimeo", availability: "ready", legacySource: "agenda_video_url", role: "active", publicationStatus: "draft" });
+    const draftUploadAgendaItem = agendaByTitle.get("Example agenda item G");
+    const publishedUploadAgendaItem = agendaByTitle.get("Example agenda item H");
+    const hasSeededDirectUpload = existingRecordings.some(recording => recording.sourceType === "upload" && (recording.agendaItemId === draftUploadAgendaItem?._id || recording.agendaItemId === publishedUploadAgendaItem?._id));
+    if (draftUploadAgendaItem && publishedUploadAgendaItem && !hasSeededDirectUpload) {
+      await ctx.scheduler.runAfter(0, internal.recordingSeedActions.createDemoDirectUploads, { eventId, draftAgendaItemId: draftUploadAgendaItem._id, publishedAgendaItemId: publishedUploadAgendaItem._id });
+    }
 
     const comms = await ctx.db.query("comms_log").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect();
     await Promise.all((["sent", "queued", "failed"] as const).map(async (status, index) => {

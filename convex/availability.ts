@@ -2,14 +2,18 @@ import { v } from "convex/values";
 import { mutation, query, assertEventOrganizerAccess } from "./functions";
 import { assertOrganizerOrOwnsSpeaker } from "./speakers";
 
-const unavailable = v.array(v.object({ date: v.number(), hour: v.optional(v.number()), part: v.optional(v.union(v.literal("morning"), v.literal("afternoon"), v.literal("evening"))) }));
+const unavailable = v.array(v.object({ date: v.number(), hour: v.optional(v.number()), minute: v.optional(v.union(v.literal(0), v.literal(30))), part: v.optional(v.union(v.literal("morning"), v.literal("afternoon"), v.literal("evening"))) }));
 
-function validateSlots(slots: Array<{ date: number; hour?: number; part?: string }>) {
+function validateSlots(slots: Array<{ date: number; hour?: number; minute?: number; part?: string }>) {
   for (const slot of slots) {
     if (slot.hour === undefined && slot.part === undefined)
       throw new Error("Each unavailable slot needs an hour.");
     if (slot.hour !== undefined && (!Number.isInteger(slot.hour) || slot.hour < 0 || slot.hour > 23))
       throw new Error("Availability hours must be between 0 and 23.");
+    if (slot.minute !== undefined && slot.hour === undefined)
+      throw new Error("A minute requires an hour.");
+    if (slot.minute !== undefined && slot.minute !== 0 && slot.minute !== 30)
+      throw new Error("Availability minutes must be 0 or 30.");
   }
 }
 

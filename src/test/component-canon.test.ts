@@ -16,6 +16,7 @@ describe("shared component canon", () => {
   it("keeps visible native form controls inside reusable UI components", () => {
     const allowed = new Set([
       "components/ui/input.tsx",
+      "components/ui/file-input.tsx",
       "components/ui/textarea.tsx",
       "components/ui/color-input.tsx",
       // Hidden platform controls are intentional accessibility/file fallbacks.

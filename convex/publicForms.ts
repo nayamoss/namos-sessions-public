@@ -137,7 +137,7 @@ const publicFormSubmissionInput = v.object({
   title: v.string(),
   answers: v.record(v.string(), v.string()),
   abstractFieldKey: v.optional(v.string()),
-  participants: v.optional(v.array(v.object({ role: v.string(), answers: v.record(v.string(), v.string()), availability: v.optional(v.object({ unavailable: v.array(v.object({ date: v.number(), hour: v.optional(v.number()), part: v.optional(v.union(v.literal("morning"), v.literal("afternoon"), v.literal("evening"))) })), notes: v.optional(v.string()) })) }))),
+  participants: v.optional(v.array(v.object({ role: v.string(), answers: v.record(v.string(), v.string()), availability: v.optional(v.object({ unavailable: v.array(v.object({ date: v.number(), hour: v.optional(v.number()), minute: v.optional(v.union(v.literal(0), v.literal(30))), part: v.optional(v.union(v.literal("morning"), v.literal("afternoon"), v.literal("evening"))) })), notes: v.optional(v.string()) })) }))),
 });
 
 // Only the secret-authenticated Convex HTTP handoff may reach this write. Browser clients submit
@@ -210,7 +210,9 @@ export const submit = internalMutation({
             if (!Number.isFinite(slot.date) || slot.date < firstDate || slot.date > lastDate || slot.date !== Date.UTC(new Date(slot.date).getUTCFullYear(), new Date(slot.date).getUTCMonth(), new Date(slot.date).getUTCDate())) throw new Error("Availability must use a day within this event.");
             if (slot.hour === undefined && slot.part === undefined) throw new Error("Each unavailable slot needs an hour.");
             if (slot.hour !== undefined && (!Number.isInteger(slot.hour) || slot.hour < 0 || slot.hour > 23)) throw new Error("Availability hours must be between 0 and 23.");
-            const key = slot.hour !== undefined ? `${slot.date}:hour:${slot.hour}` : `${slot.date}:part:${slot.part}`;
+            if (slot.minute !== undefined && slot.hour === undefined) throw new Error("A minute requires an hour.");
+            if (slot.minute !== undefined && slot.minute !== 0 && slot.minute !== 30) throw new Error("Availability minutes must be 0 or 30.");
+            const key = slot.hour !== undefined ? `${slot.date}:hour:${slot.hour}:${slot.minute ?? "all"}` : `${slot.date}:part:${slot.part}`;
             if (keys.has(key)) throw new Error("Availability cannot include the same time twice.");
             keys.add(key);
           }

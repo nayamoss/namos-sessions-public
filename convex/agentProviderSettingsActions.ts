@@ -6,6 +6,7 @@ import { internal } from "./_generated/api";
 import { assertEventOrganizerAction } from "./emailDelivery";
 import { agentCredentialHint, encryptAgentApiKey } from "./agentProviderSecrets";
 import { resolveManagedAllowance } from "./agentBillingResolver";
+import { hasUsableManagedOpenAiKey } from "./agentProviderConfig";
 
 function safeVerificationError(status?: number) {
   if (status === 401 || status === 403) return "OpenAI rejected this API key.";
@@ -16,7 +17,7 @@ export const saveManaged = action({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
     const identity = await assertEventOrganizerAction(ctx, args.eventId);
-    if (!process.env.OPENAI_API_KEY) throw new Error("Namos-managed AI is not configured on this deployment.");
+    if (!hasUsableManagedOpenAiKey(process.env.OPENAI_API_KEY)) throw new Error("Namos-managed AI is not configured on this deployment.");
     const event = await ctx.runQuery(internal.agentProviderSettings.eventForBilling, { eventId: args.eventId });
     if (!event?.billingOwnerUserId) throw new Error("This event needs a billing owner before Namos-managed AI can be selected.");
     await resolveManagedAllowance(event.billingOwnerUserId);
@@ -31,7 +32,7 @@ export const disconnectByok = action({
     const identity = await assertEventOrganizerAction(ctx, args.eventId);
     const event = await ctx.runQuery(internal.agentProviderSettings.eventForBilling, { eventId: args.eventId });
     if (!event?.billingOwnerUserId) throw new Error("This event needs a billing owner before Namos-managed AI can be selected.");
-    if (!process.env.OPENAI_API_KEY) throw new Error("Namos-managed AI is not configured on this deployment.");
+    if (!hasUsableManagedOpenAiKey(process.env.OPENAI_API_KEY)) throw new Error("Namos-managed AI is not configured on this deployment.");
     await resolveManagedAllowance(event.billingOwnerUserId);
     await ctx.runMutation(internal.agentProviderSettings.upsertInternal, { eventId: args.eventId, mode: "managed", status: "ready", updatedByUserId: identity.subject });
     return { mode: "managed" as const, status: "ready" as const };

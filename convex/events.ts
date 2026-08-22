@@ -37,7 +37,7 @@ const eventFields = {
   theme: v.optional(v.string()),
   logoStorageKey: v.optional(v.string()),
   accentColor: v.optional(v.string()),
-  readinessCategories: v.optional(v.array(v.union(v.literal("agenda_conflicts"), v.literal("speaker_confirmations"), v.literal("onboarding_tasks"), v.literal("proposal_decisions"), v.literal("comms_delivery")))),
+  readinessCategories: v.optional(v.array(v.union(v.literal("agenda_conflicts"), v.literal("speaker_confirmations"), v.literal("onboarding_tasks"), v.literal("proposal_decisions"), v.literal("comms_delivery"), v.literal("recording_coverage")))),
   backgroundStorageKey: v.optional(v.string()),
   industry: v.optional(v.string()),
   exhibitorsEnabled: v.boolean(),
