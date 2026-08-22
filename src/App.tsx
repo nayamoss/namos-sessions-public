@@ -30,6 +30,7 @@ import { resolveOnboardingStatus } from "@/lib/onboarding-status";
 import { AnalyticsRuntime } from "@/components/AnalyticsConsent";
 import { track } from "@/lib/analytics";
 import { DemoWorkspaceBar } from "@/components/demo/DemoWorkspaceBar";
+import { setRouterNavigate } from "@/lib/clerk-router-bridge";
 import type { Event } from "@/data/types";
 const EventDetails = lazy(() => import("@/pages/settings/EventDetails"));
 const EventTeam = lazy(() => import("@/pages/settings/EventTeam"));
@@ -290,6 +291,17 @@ function EventsEntry() {
   );
 }
 
+// Gives ClerkProvider (in main.tsx, outside this Router) a real useNavigate() to route through
+// instead of falling back to a hard page reload. See src/lib/clerk-router-bridge.ts.
+function ClerkRouterBridge() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    setRouterNavigate((to, opts) => navigate(to, opts));
+    return () => setRouterNavigate(null);
+  }, [navigate]);
+  return null;
+}
+
 function LegacySettingsEntry() {
   const repo = useRepo();
   const navigate = useNavigate();
@@ -311,6 +323,7 @@ export default function App() {
         <Toaster />
         <Sonner />
         <BrowserRouter>
+          <ClerkRouterBridge />
           <AnalyticsRuntime />
           <DemoWorkspaceBar />
           <Suspense

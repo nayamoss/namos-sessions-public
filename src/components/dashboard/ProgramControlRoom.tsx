@@ -1,4 +1,4 @@
-import { AlertTriangle, CalendarClock, Check, Circle, ClipboardCheck, ClipboardList, FileWarning, MailWarning, Send, ShieldCheck, UserRoundX } from "lucide-react";
+import { AlertTriangle, CalendarClock, Check, Circle, ClipboardCheck, ClipboardList, FileWarning, MailWarning, Send, ShieldCheck, UserRoundX, Video } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, cardSurfaceClasses } from "@/components/ui/card";
@@ -14,6 +14,7 @@ const definitions: Array<{ kind: ControlRoomCategoryKind; label: string; icon: t
   { kind: "missing_assets", label: "Missing headshots or slides", icon: UserRoundX },
   { kind: "unscheduled", label: "Unscheduled accepted sessions", icon: CalendarClock },
   { kind: "conflicts", label: "Room or speaker conflicts", icon: AlertTriangle },
+  { kind: "recording_coverage", label: "Post-session recording coverage", icon: Video },
   { kind: "publication_blockers", label: "Publication blockers", icon: FileWarning },
 ];
 

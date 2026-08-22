@@ -21,6 +21,7 @@ import { ProfileSettingsDialog } from "@/components/ProfileSettingsDialog";
 import { FeedbackDialog } from "@/components/FeedbackDialog";
 import { resetAnalytics, setAnalyticsIdentity, track } from "@/lib/analytics";
 import { useOnboardingTourStore } from "@/lib/onboardingTourStore";
+import { useOptionalSettingsModal } from "@/components/settings/SettingsModalContext";
 
 /** Groups are separated by whitespace only — never a rule or divider. */
 const contentClass = cardSurfaceClasses("default", "bg-popover p-1.5 shadow-none");
@@ -35,6 +36,7 @@ type AccountMenuViewProps = {
   avatarUrl?: string;
   signOut?: ReactNode;
   onOpenProfileSettings?: () => void;
+  onOpenSettings?: () => void;
   profileSettings?: ReactNode;
 };
 
@@ -78,7 +80,7 @@ function AdminModeMenuItem({ eventSlug }: { eventSlug?: string }) {
 // Everything that's a destination for managing *your account/event*, not a feature shortcut,
 // nests under one "Settings" submenu — keeping the top-level list short instead of stacking
 // Profile settings / Event settings / Speaker portal as separate rows.
-function MenuLinks({ context, eventSlug, onOpenProfileSettings }: { context: "admin" | "portal"; eventSlug?: string; onOpenProfileSettings?: () => void }) {
+function MenuLinks({ context, eventSlug, onOpenProfileSettings, onOpenSettings }: { context: "admin" | "portal"; eventSlug?: string; onOpenProfileSettings?: () => void; onOpenSettings?: () => void }) {
   const profileSettings = onOpenProfileSettings ? (
     <DropdownMenuItem onSelect={onOpenProfileSettings} className={itemClass}>
       <UserRound className="h-4 w-4 shrink-0" />
@@ -86,30 +88,50 @@ function MenuLinks({ context, eventSlug, onOpenProfileSettings }: { context: "ad
     </DropdownMenuItem>
   ) : null;
 
+  if (onOpenSettings) {
+    return (
+      <DropdownMenuItem onSelect={onOpenSettings} className={itemClass}>
+        <Settings2 className="h-4 w-4 shrink-0" />
+        Settings
+      </DropdownMenuItem>
+    );
+  }
+
   if (context === "portal") {
     return (
       <>
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger className={itemClass}>
+        {onOpenSettings ? (
+          <DropdownMenuItem onSelect={onOpenSettings} className={itemClass}>
             <Settings2 className="h-4 w-4 shrink-0" />
             Settings
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent className={cn("w-52", contentClass)}>
-            {profileSettings}
-            <DropdownMenuItem asChild>
-              <Link to="/portal/profile" className={itemClass}>
-                <UserRound className="h-4 w-4 shrink-0" />
-                Speaker profile
-              </Link>
-            </DropdownMenuItem>
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
+          </DropdownMenuItem>
+        ) : profileSettings}
+        <DropdownMenuItem asChild>
+          <Link to="/portal/profile" className={itemClass}>
+            <UserRound className="h-4 w-4 shrink-0" />
+            Speaker profile
+          </Link>
+        </DropdownMenuItem>
         <AdminModeMenuItem eventSlug={eventSlug} />
       </>
     );
   }
 
-  return (
+  return onOpenSettings ? (
+    <>
+      <DropdownMenuItem onSelect={onOpenSettings} className={itemClass}>
+        <Settings2 className="h-4 w-4 shrink-0" />
+        Settings
+      </DropdownMenuItem>
+      {profileSettings}
+      <DropdownMenuItem asChild>
+        <Link to="/portal" className={itemClass} onClick={() => track("cta_converted", { destination: "portal" })}>
+          <Users className="h-4 w-4 shrink-0" />
+          Speaker portal
+        </Link>
+      </DropdownMenuItem>
+    </>
+  ) : (
     <DropdownMenuSub>
       <DropdownMenuSubTrigger className={itemClass}>
         <Settings2 className="h-4 w-4 shrink-0" />
@@ -130,7 +152,7 @@ function MenuLinks({ context, eventSlug, onOpenProfileSettings }: { context: "ad
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
-          <Link to="/portal" className={itemClass} onClick={() => track("cta_converted", { destination: "portal" })}>
+          <Link to="/portal" className={itemClass}>
             <Users className="h-4 w-4 shrink-0" />
             Speaker portal
           </Link>
@@ -140,7 +162,7 @@ function MenuLinks({ context, eventSlug, onOpenProfileSettings }: { context: "ad
   );
 }
 
-function AccountMenuView({ collapsed, context, userName, userInitials, avatarUrl, signOut, onOpenProfileSettings, profileSettings }: AccountMenuViewProps) {
+function AccountMenuView({ collapsed, context, userName, userInitials, avatarUrl, signOut, onOpenProfileSettings, onOpenSettings, profileSettings }: AccountMenuViewProps) {
   const [accountOpen, setAccountOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const startTour = useOnboardingTourStore((state) => state.startTour);
@@ -186,7 +208,7 @@ function AccountMenuView({ collapsed, context, userName, userInitials, avatarUrl
               <UserAvatar avatarUrl={avatarUrl} userInitials={userInitials} className="h-8 w-8 shrink-0" />
               <p className="min-w-0 flex-1 truncate text-sm font-medium">{userName}</p>
             </div>
-            <MenuLinks context={context} eventSlug={eventSlug} onOpenProfileSettings={onOpenProfileSettings} />
+            <MenuLinks context={context} eventSlug={eventSlug} onOpenProfileSettings={onOpenProfileSettings} onOpenSettings={onOpenSettings} />
             <div className="pt-1.5">
               {featureLinks}
               <ThemeToggleMenuItem />
@@ -223,7 +245,7 @@ function AccountMenuView({ collapsed, context, userName, userInitials, avatarUrl
           sideOffset={8}
           className={cn("w-[var(--radix-dropdown-menu-trigger-width)]", contentClass)}
         >
-          <MenuLinks context={context} eventSlug={eventSlug} onOpenProfileSettings={onOpenProfileSettings} />
+          <MenuLinks context={context} eventSlug={eventSlug} onOpenProfileSettings={onOpenProfileSettings} onOpenSettings={onOpenSettings} />
           <div className="pt-1.5">
             {featureLinks}
             <ThemeToggleMenuItem />
@@ -242,6 +264,7 @@ function ClerkAccountMenu({ collapsed, context }: { collapsed: boolean; context:
   // Optional: some pages/tests render chrome without a RepoProvider — degrade to Clerk's
   // firstName instead of throwing.
   const repo = useOptionalRepo();
+  const settingsModal = useOptionalSettingsModal();
   // The name set in onboarding lives on the userProfiles row, not Clerk's user record — this
   // Clerk instance has first/last name collection disabled, so `user.firstName` is never
   // populated by our own onboarding flow (only by an OAuth provider, if used).
@@ -296,6 +319,7 @@ function ClerkAccountMenu({ collapsed, context }: { collapsed: boolean; context:
       userInitials={userInitials}
       avatarUrl={avatarUrl}
       onOpenProfileSettings={() => setProfileSettingsOpen(true)}
+      onOpenSettings={settingsModal ? () => settingsModal.openSettings("event") : undefined}
       profileSettings={
         <ProfileSettingsDialog
           open={profileSettingsOpen}

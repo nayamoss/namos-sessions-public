@@ -120,15 +120,15 @@ export default function DemoLandingPage() {
         <div>
           <p className="text-sm font-semibold text-primary">Interactive conference program management demo</p>
           <h1 className="mt-4 max-w-3xl font-display text-5xl tracking-[-0.04em] text-balance sm:text-6xl">Follow a conference from CFP review to published schedule.</h1>
-          <p className="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">Inspect Namos Sessions as an organizer, reviewer, or speaker in a fully seeded event—no account setup required. This demo is read-only, so nothing you explore can change or publish anything.</p>
+          <p className="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">Try Namos Sessions as an organizer, reviewer, or speaker in a resettable event—no account setup required. Review proposals, make decisions, complete speaker work, resolve an agenda conflict, and publish from the same connected records.</p>
           <div className="mt-8 grid gap-3 sm:grid-cols-3" aria-label="Demo highlights">
             {["Real seeded event state", "Read-only walkthrough", "No external demo email"].map((item) => <div key={item} className="flex items-center gap-2 text-sm"><ShieldCheck className="h-4 w-4 text-primary" aria-hidden="true" />{item}</div>)}
           </div>
         </div>
-        <aside aria-label="Five-minute route">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">What the demo covers</h2>
+        <aside className={cardSurfaceClasses("muted", "p-5 sm:p-6")} aria-label="Five-minute route">
+          <h2 className="text-lg font-semibold">What the demo covers</h2>
           <ol className="mt-4 space-y-3 text-sm leading-6 text-muted-foreground">
-            <li>1. Inspect a proposal submitted through a conditional CFP form.</li><li>2. Explore review scores and acceptance decisions.</li><li>3. View speaker tasks, files, and event resources.</li><li>4. Examine schedule conflicts and program readiness.</li><li>5. Browse the published program workflow.</li>
+            <li>1. Review a proposal submitted through a conditional CFP form.</li><li>2. Record an acceptance decision without sending it early.</li><li>3. Complete a speaker task and upload a requested file.</li><li>4. Detect and resolve a speaker or room scheduling conflict.</li><li>5. Send the approved decision and publish the program.</li>
           </ol>
         </aside>
       </section>

@@ -10,6 +10,7 @@ type ControlRoomKind =
   | "missing_assets"
   | "unscheduled"
   | "conflicts"
+  | "recording_coverage"
   | "publication_blockers";
 
 type ControlRoomItem = {
@@ -31,7 +32,7 @@ export const get = query({
     const event = await ctx.db.get(eventId);
     if (!event) throw new Error("Event not found.");
 
-    const [submissions, speakers, tasks, assignments, evaluations, agenda, comms, templates, forms, embeds] =
+    const [submissions, speakers, tasks, assignments, evaluations, agenda, comms, templates, forms, embeds, recordings] =
       await Promise.all([
         ctx.db.query("submissions").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
         ctx.db.query("speakers").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
@@ -43,6 +44,7 @@ export const get = query({
         ctx.db.query("comms_templates").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
         ctx.db.query("submission_forms").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
         ctx.db.query("embeds").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
+        ctx.db.query("session_recordings").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
       ]);
     const documents = (await Promise.all(
       speakers.map((speaker) =>
@@ -66,6 +68,7 @@ export const get = query({
     const acceptedSpeakerIds = new Set(accepted.flatMap((submission) => submission.speakerId ? [String(submission.speakerId)] : []));
     const speakerName = (speaker: (typeof speakers)[number]) => `${speaker.firstName} ${speaker.lastName}`.trim();
     const now = Date.now();
+    const activeRecordings = new Map(recordings.filter((recording) => recording.role === "active").map((recording) => [recording.agendaItemId, recording]));
 
     const decisions: ControlRoomItem[] = submissions
       .filter((submission) => ["pending", "accept_queue", "maybe", "decline_queue"].includes(submission.status))
@@ -102,6 +105,21 @@ export const get = query({
       return { id: `${conflict.reason}-${first._id}-${second._id}`, kind: "conflicts", title: `${label}: ${first.title}`, detail: `Overlaps with ${second.title}.`, href: `${base}/program/agenda?view=conflicts&selected=${first._id}`, severity: "blocking" };
     });
 
+    const recordingCoverage: ControlRoomItem[] = agenda
+      .filter((item) => item.endTime < now)
+      .flatMap((item) => {
+        const recording = activeRecordings.get(item._id);
+        if (recording && recording.availability !== "unavailable") return [];
+        return [{
+          id: `recording-${item._id}`,
+          kind: "recording_coverage" as const,
+          title: recording ? `Unavailable recording: ${item.title}` : `Recording missing: ${item.title}`,
+          detail: "This completed session needs an attendee-ready recording.",
+          href: `${base}/program/recordings?selected=${item._id}&filter=${recording ? "attention" : "missing"}`,
+          severity: "attention" as const,
+        }];
+      });
+
     const publicationBlockers: ControlRoomItem[] = [
       ...conflicts.map((item) => ({ ...item, id: `publish-${item.id}`, kind: "publication_blockers" as const })),
       ...unscheduled.map((item) => ({ ...item, id: `publish-${item.id}`, kind: "publication_blockers" as const })),
@@ -109,7 +127,7 @@ export const get = query({
       ...agenda.filter((item) => !item.isPublished).slice(0, conflicts.length || unscheduled.length ? 0 : 1).map((item) => ({ id: `publish-agenda-${item._id}`, kind: "publication_blockers" as const, title: "Agenda is still a draft", detail: "Publish the reviewed agenda when all blockers are clear.", href: `${base}/program/agenda?selected=${item._id}`, severity: "attention" as const })),
     ];
 
-    const categories = { decisions, reviews, acceptance_emails: acceptanceEmails, overdue_tasks: overdueTasks, missing_assets: missingAssets, unscheduled, conflicts, publication_blockers: publicationBlockers };
+    const categories = { decisions, reviews, acceptance_emails: acceptanceEmails, overdue_tasks: overdueTasks, missing_assets: missingAssets, unscheduled, conflicts, recording_coverage: recordingCoverage, publication_blockers: publicationBlockers };
     // Seeded records make the Control Room useful immediately, but they must not make the
     // walkthrough look completed before a judge does anything. Public CFP submissions have no
     // `demo:seed:*` sourceRef, so the newest such record becomes this reset's guided record.

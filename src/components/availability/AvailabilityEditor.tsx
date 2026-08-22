@@ -14,7 +14,8 @@ export type AvailabilityDraft = {
 };
 
 const hours = Array.from({ length: 24 }, (_, hour) => hour);
-const conferenceHours = hours.filter((hour) => hour >= 7 && hour <= 21);
+const conferenceHours = hours;
+const halfHours = conferenceHours.flatMap((hour) => [{ hour, minute: 0 as const }, { hour, minute: 30 as const }]);
 const legacyHours = {
   morning: hours.filter((hour) => hour < 12),
   afternoon: hours.filter((hour) => hour >= 12 && hour < 17),
@@ -58,12 +59,13 @@ function timezoneLabel(timezone: string) {
   return (timezone.split("/").pop() ?? timezone).replaceAll("_", " ");
 }
 
-function hourLabel(hour: number) {
+function hourLabel(hour: number, minute = 0) {
   return new Intl.DateTimeFormat("en-US", {
     hour: "numeric",
+    minute: minute === 0 ? undefined : "2-digit",
     hourCycle: "h12",
     timeZone: "UTC",
-  }).format(Date.UTC(2026, 0, 1, hour));
+  }).format(Date.UTC(2026, 0, 1, hour, minute));
 }
 
 function dateKey(date: number) {
@@ -77,20 +79,21 @@ function zonedParts(epoch: number, timezone: string) {
     month: "2-digit",
     day: "2-digit",
     hour: "numeric",
+    minute: "numeric",
     hourCycle: "h23",
   }).formatToParts(epoch);
   const value = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value);
   const date = Date.UTC(value("year"), value("month") - 1, value("day"));
-  return { date, hour: value("hour") };
+  return { date, hour: value("hour"), minute: value("minute") };
 }
 
-function eventSlotEpoch(date: number, hour: number, timezone: string) {
-  return eventDateTimeToEpoch(dateKey(date), `${String(hour).padStart(2, "0")}:00`, timezone);
+function eventSlotEpoch(date: number, hour: number, minute: number, timezone: string) {
+  return eventDateTimeToEpoch(dateKey(date), `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`, timezone);
 }
 
 function localDateRangeLabel(date: number, timezone: string) {
-  const first = eventSlotEpoch(date, conferenceHours[0], timezone);
-  const last = eventSlotEpoch(date, conferenceHours[conferenceHours.length - 1], timezone);
+  const first = eventSlotEpoch(date, halfHours[0].hour, halfHours[0].minute, timezone);
+  const last = eventSlotEpoch(date, halfHours[halfHours.length - 1].hour, halfHours[halfHours.length - 1].minute, timezone);
   if (first === undefined || last === undefined) return dayLabel(date);
   const localTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const start = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: localTimezone }).format(first);
@@ -98,21 +101,23 @@ function localDateRangeLabel(date: number, timezone: string) {
   return start === end ? start : `${start} → ${end}`;
 }
 
-function slotKey(date: number, hour: number) {
-  return `${date}:${hour}`;
+function slotKey(date: number, hour: number, minute: number) {
+  return `${date}:${hour}:${minute}`;
 }
 
 function exactSlots(slots: AvailabilitySlot[]) {
   const normalized = new Map<string, AvailabilitySlot>();
   for (const slot of slots) {
-    const slotHours =
+    const slotTimes =
       slot.hour !== undefined
-        ? [slot.hour]
+        ? slot.minute !== undefined
+          ? [{ hour: slot.hour, minute: slot.minute }]
+          : [{ hour: slot.hour, minute: 0 as const }, { hour: slot.hour, minute: 30 as const }]
         : slot.part
-          ? legacyHours[slot.part]
+          ? legacyHours[slot.part].flatMap((hour) => [{ hour, minute: 0 as const }, { hour, minute: 30 as const }])
           : [];
-    for (const hour of slotHours)
-      normalized.set(slotKey(slot.date, hour), { date: slot.date, hour });
+    for (const { hour, minute } of slotTimes)
+      normalized.set(slotKey(slot.date, hour, minute), { date: slot.date, hour, minute });
   }
   return [...normalized.values()];
 }
@@ -164,33 +169,33 @@ export function AvailabilityEditor({
     [dates, visibleMonth],
   );
   const blocked = useMemo(
-    () => new Set(exactSlots(value.unavailable).map((slot) => slotKey(slot.date, slot.hour!))),
+    () => new Set(exactSlots(value.unavailable).map((slot) => slotKey(slot.date, slot.hour!, slot.minute!))),
     [value.unavailable],
   );
   const localTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const displayTimezone = timeView === "local" ? localTimezone : timezone;
-  const displayHour = (date: number, hour: number) => {
-    if (timeView === "conference") return hour;
-    const epoch = eventSlotEpoch(date, hour, timezone);
-    return epoch === undefined ? hour : zonedParts(epoch, localTimezone).hour;
+  const displayTime = (date: number, hour: number, minute: number) => {
+    if (timeView === "conference") return { hour, minute };
+    const epoch = eventSlotEpoch(date, hour, minute, timezone);
+    return epoch === undefined ? { hour, minute } : zonedParts(epoch, localTimezone);
   };
 
-  const setSlot = (date: number, hour: number, unavailable: boolean) => {
-    const key = slotKey(date, hour);
+  const setSlot = (date: number, hour: number, minute: 0 | 30, unavailable: boolean) => {
+    const key = slotKey(date, hour, minute);
     const normalized = slotsRef.current;
-    if (normalized.some((slot) => slotKey(slot.date, slot.hour!) === key) === unavailable) return;
+    if (normalized.some((slot) => slotKey(slot.date, slot.hour!, slot.minute!) === key) === unavailable) return;
     const next = unavailable
-      ? [...normalized, { date, hour }]
-      : normalized.filter((slot) => slotKey(slot.date, slot.hour!) !== key);
+      ? [...normalized, { date, hour, minute }]
+      : normalized.filter((slot) => slotKey(slot.date, slot.hour!, slot.minute!) !== key);
     slotsRef.current = next;
     onChange({ ...value, unavailable: next });
   };
-  const toggle = (date: number, hour: number) => setSlot(date, hour, !blocked.has(slotKey(date, hour)));
+  const toggle = (date: number, hour: number, minute: 0 | 30) => setSlot(date, hour, minute, !blocked.has(slotKey(date, hour, minute)));
   const toggleDay = (date: number) => {
     const normalized = exactSlots(value.unavailable);
-    const fullyUnavailable = hours.every((hour) => blocked.has(slotKey(date, hour)));
+    const fullyUnavailable = halfHours.every(({ hour, minute }) => blocked.has(slotKey(date, hour, minute)));
     const otherDays = normalized.filter((slot) => slot.date !== date);
-    const next = fullyUnavailable ? otherDays : [...otherDays, ...hours.map((hour) => ({ date, hour }))];
+    const next = fullyUnavailable ? otherDays : [...otherDays, ...halfHours.map(({ hour, minute }) => ({ date, hour, minute }))];
     slotsRef.current = next;
     onChange({
       ...value,
@@ -201,14 +206,17 @@ export function AvailabilityEditor({
     slotsRef.current = [];
     onChange({ ...value, unavailable: [] });
   };
-  const timetableRows = conferenceHours.map((hour) => ({ id: String(hour), hour }));
+  const timetableRows = halfHours.map(({ hour, minute }) => ({ id: `${hour}-${minute}`, hour, minute }));
   const timetableColumns: DataGridColumn<(typeof timetableRows)[number]>[] = [
     {
       key: "time",
       header: "Time",
       kind: "row-header",
       width: "72px",
-      cell: (row) => <span className="tabular-nums">{hourLabel(displayHour(visibleDates[0] ?? dates[0], row.hour))}</span>,
+      cell: (row) => {
+        const display = displayTime(visibleDates[0] ?? dates[0], row.hour, row.minute);
+        return <span className="tabular-nums">{hourLabel(display.hour, display.minute)}</span>;
+      },
     },
     ...visibleDates.map((date) => ({
       key: String(date),
@@ -217,7 +225,7 @@ export function AvailabilityEditor({
           type="button"
           onClick={() => toggleDay(date)}
           className="group w-full rounded-sm py-1 text-center focus-visible:outline-none"
-          aria-label={`${hours.every((hour) => blocked.has(slotKey(date, hour))) ? "Make" : "Mark"} ${dayLabel(date)} ${hours.every((hour) => blocked.has(slotKey(date, hour))) ? "available" : "unavailable all day"}`}
+          aria-label={`${halfHours.every(({ hour, minute }) => blocked.has(slotKey(date, hour, minute))) ? "Make" : "Mark"} ${dayLabel(date)} ${halfHours.every(({ hour, minute }) => blocked.has(slotKey(date, hour, minute))) ? "available" : "unavailable all day"}`}
         >
           <span className="block font-semibold text-foreground">{timeView === "local" ? localDateRangeLabel(date, timezone) : dayLabel(date)}</span>
           <span className="block text-[11px] font-normal text-muted-foreground">Block day</span>
@@ -227,11 +235,12 @@ export function AvailabilityEditor({
       align: "center" as const,
       width: "112px",
       cell: (row: (typeof timetableRows)[number]) => {
-        const unavailable = blocked.has(slotKey(date, row.hour));
-        const label = `${timeView === "local" ? localDateRangeLabel(date, timezone) : dayLabel(date)}, ${hourLabel(displayHour(date, row.hour))}: ${unavailable ? "unavailable" : "available"}`;
+        const unavailable = blocked.has(slotKey(date, row.hour, row.minute));
+        const display = displayTime(date, row.hour, row.minute);
+        const label = `${timeView === "local" ? localDateRangeLabel(date, timezone) : dayLabel(date)}, ${hourLabel(display.hour, display.minute)}: ${unavailable ? "unavailable" : "available"}`;
         return (
           <button
-            id={`${idPrefix}-${date}-${row.hour}`}
+            id={`${idPrefix}-${date}-${row.hour}-${row.minute}`}
             type="button"
             aria-pressed={unavailable}
             aria-label={label}
@@ -240,14 +249,14 @@ export function AvailabilityEditor({
               if (event.pointerType === "mouse" && event.button !== 0) return;
               event.preventDefault();
               paintMode.current = unavailable ? "clear" : "block";
-              setSlot(date, row.hour, !unavailable);
+              setSlot(date, row.hour, row.minute, !unavailable);
             }}
             onPointerEnter={(event) => {
               if (!paintMode.current || event.buttons === 0) return;
-              setSlot(date, row.hour, paintMode.current === "block");
+              setSlot(date, row.hour, row.minute, paintMode.current === "block");
             }}
             onClick={(event) => {
-              if (event.detail === 0) toggle(date, row.hour);
+              if (event.detail === 0) toggle(date, row.hour, row.minute);
             }}
             className={cn(
               "group flex h-9 w-full touch-none select-none items-center justify-center rounded-sm transition-colors focus-visible:outline-none",
@@ -330,7 +339,7 @@ export function AvailabilityEditor({
           appearance="matrix"
           rowActivation="none"
           minWidth={Math.max(480, 80 + visibleDates.length * 128)}
-          ariaLabel={`Hourly speaker availability for ${monthLabel(visibleMonth)}`}
+          ariaLabel={`Half-hour speaker availability for ${monthLabel(visibleMonth)}`}
         />
       </div>
 

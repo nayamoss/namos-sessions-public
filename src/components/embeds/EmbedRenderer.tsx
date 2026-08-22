@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { ChevronDown, MapPin, Search } from "lucide-react";
+import { ChevronDown, MapPin, Search, Video } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { PublicEmbedSession, PublicEmbedView } from "@/data/types";
@@ -64,6 +64,7 @@ function SessionRow({ session, embed, headingLevel = "h3" }: { session: PublicEm
         </p>
         <div className="min-w-0">
           <Heading className="font-medium">{session.title}</Heading>
+          {session.recording && <a className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-[var(--embed-primary)] underline underline-offset-4" href={session.recording.url} target="_blank" rel="noreferrer"><Video className="h-3.5 w-3.5" />Watch recording<span className="sr-only"> (opens in a new tab)</span></a>}
         </div>
         <p className="min-w-0 truncate text-sm text-muted-foreground">
           {session.speakerNames?.join(", ")}

@@ -1,7 +1,8 @@
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import schema from "./schema";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { hostedSource } from "./recordings";
 
 // convex-test loads every function module so it can route mutation/query calls; without this
@@ -58,6 +59,11 @@ describe("hostedSource host classification", () => {
   it("classifies an unrecognized HTTPS host as external", () => {
     const result = hostedSource("https://cdn.example.com/video.mp4");
     expect(result.provider).toBe("external");
+  });
+
+  it("does not embed lookalike provider hosts", () => {
+    expect(hostedSource("https://evil-youtube.com/watch?v=dQw4w9WgXcQ").provider).toBe("external");
+    expect(hostedSource("https://evilvimeo.com/76979871").provider).toBe("external");
   });
 
   it("rejects non-HTTPS URLs", () => {
@@ -206,6 +212,70 @@ describe("manager scale and bulk outcomes", () => {
   });
 });
 
+describe("manager pagination", () => {
+  it("returns event-scoped agenda rows through a cursor without playback URLs", async () => {
+    const t = convexTest(schema, modules);
+    const { organizerT, eventId, agendaItemId } = await seedEvent(t, { endTime: Date.now() - 1000 });
+    await t.run(async (ctx) => {
+      const first = await ctx.db.get(agendaItemId);
+      if (!first) throw new Error("Missing fixture session.");
+      const { _id: _dropId, _creationTime: _dropCreation, ...fields } = first;
+      await ctx.db.insert("agenda_items", { ...fields, title: "Second session", startTime: first.startTime + 10_000, endTime: first.endTime + 10_000, createdAt: Date.now(), updatedAt: Date.now() });
+    });
+    const firstPage = await organizerT.query(api.recordings.listPage, { eventId, paginationOpts: { numItems: 1, cursor: null } });
+    expect(firstPage.page).toHaveLength(1);
+    expect(firstPage.page[0]).not.toHaveProperty("sourceUrl");
+    expect(firstPage.isDone).toBe(false);
+    const secondPage = await organizerT.query(api.recordings.listPage, { eventId, paginationOpts: { numItems: 1, cursor: firstPage.continueCursor } });
+    expect(secondPage.page).toHaveLength(1);
+    expect(secondPage.page[0]._id).not.toBe(firstPage.page[0]._id);
+  });
+
+  it("applies search, lifecycle filters, source filters, and schedule ordering on the server page", async () => {
+    const t = convexTest(schema, modules);
+    const { organizerT, eventId, agendaItemId } = await seedEvent(t, { endTime: Date.now() - 1000 });
+    const publishedId = await organizerT.mutation(api.recordings.attachHosted, { eventId, agendaItemId, hostedUrl: "https://vimeo.com/76979871" });
+    await organizerT.mutation(api.recordings.publish, { eventId, recordingId: publishedId });
+    await t.run(async (ctx) => {
+      const first = await ctx.db.get(agendaItemId);
+      if (!first) throw new Error("Missing fixture session.");
+      const { _id: _dropId, _creationTime: _dropCreation, ...fields } = first;
+      await ctx.db.insert("agenda_items", { ...fields, title: "Unrecorded workshop", startTime: first.startTime + 10_000, endTime: first.endTime + 10_000, createdAt: Date.now(), updatedAt: Date.now() });
+    });
+
+    const missing = await organizerT.query(api.recordings.listPage, { eventId, paginationOpts: { numItems: 100, cursor: null }, status: "missing", timeZone: "UTC" });
+    expect(missing.page.map(row => row.title)).toEqual(["Unrecorded workshop"]);
+
+    const hosted = await organizerT.query(api.recordings.listPage, { eventId, paginationOpts: { numItems: 100, cursor: null }, source: "hosted", query: "opening", timeZone: "UTC", sort: "schedule_desc" });
+    expect(hosted.page).toHaveLength(1);
+    expect(hosted.page[0].title).toBe("Opening Keynote");
+    expect(hosted.page[0].recording?.publicationStatus).toBe("published");
+
+    await t.run(async (ctx) => {
+      await ctx.db.patch(publishedId, { availability: "unavailable" });
+    });
+    const unavailable = await organizerT.query(api.recordings.listPage, { eventId, paginationOpts: { numItems: 100, cursor: null }, status: "unavailable", timeZone: "UTC" });
+    expect(unavailable.page.map(row => row.title)).toEqual(["Opening Keynote"]);
+  });
+
+  it("keeps scanning indexed agenda pages until a sparse filtered page is filled", async () => {
+    const t = convexTest(schema, modules);
+    const { organizerT, eventId, agendaItemId } = await seedEvent(t, { endTime: Date.now() - 1000 });
+    const recordedAgendaItemId = await t.run(async (ctx) => {
+      const first = await ctx.db.get(agendaItemId);
+      if (!first) throw new Error("Missing fixture session.");
+      const { _id: _dropId, _creationTime: _dropCreation, ...fields } = first;
+      return ctx.db.insert("agenda_items", { ...fields, title: "Recorded after an unrecorded session", startTime: first.startTime + 10_000, endTime: first.endTime + 10_000, createdAt: Date.now(), updatedAt: Date.now() });
+    });
+    const recordingId = await organizerT.mutation(api.recordings.attachHosted, { eventId, agendaItemId: recordedAgendaItemId, hostedUrl: "https://vimeo.com/76979871" });
+    await organizerT.mutation(api.recordings.publish, { eventId, recordingId, overrideReason: "Fixture is safe to publish." });
+
+    const page = await organizerT.query(api.recordings.listPage, { eventId, paginationOpts: { numItems: 1, cursor: null }, status: "published" });
+    expect(page.page.map(row => row.title)).toEqual(["Recorded after an unrecorded session"]);
+    expect(page.isDone).toBe(true);
+  });
+});
+
 describe("staged replacement", () => {
   it("keeps the original active recording published until the replacement is itself published", async () => {
     const t = convexTest(schema, modules);
@@ -235,6 +305,29 @@ describe("staged replacement", () => {
   });
 });
 
+describe("draft asset cleanup", () => {
+  it("never deletes an old asset that is still referenced by a recording", async () => {
+    const t = convexTest(schema, modules);
+    const { eventId, agendaItemId } = await seedEvent(t, { endTime: Date.now() - 1000 });
+    const publishedAgendaItemId = await t.run(async (ctx) => {
+      const first = await ctx.db.get(agendaItemId);
+      if (!first) throw new Error("Missing fixture session.");
+      const { _id: _dropId, _creationTime: _dropCreation, ...fields } = first;
+      return ctx.db.insert("agenda_items", { ...fields, title: "Published direct upload fixture", startTime: first.startTime + 10_000, endTime: first.endTime + 10_000, createdAt: Date.now(), updatedAt: Date.now() });
+    });
+    await t.action(internal.recordingSeedActions.createDemoDirectUploads, { eventId, draftAgendaItemId: agendaItemId, publishedAgendaItemId });
+    const assetId = await t.run(async (ctx) => {
+      const asset = await ctx.db.query("event_assets").withIndex("by_event", q => q.eq("eventId", eventId)).first();
+      if (!asset) throw new Error("Seed action did not create an asset.");
+      await ctx.db.patch(asset._id, { createdAt: Date.now() - 25 * 60 * 60 * 1000, updatedAt: Date.now() - 25 * 60 * 60 * 1000 });
+      return asset._id;
+    });
+
+    await t.mutation(internal.recordings.cleanupUnusedAssets, {});
+    expect(await t.run(ctx => ctx.db.get(assetId))).not.toBeNull();
+  });
+});
+
 describe("migrateLegacy", () => {
   it("converts a valid legacy videoUrl into a private draft and is idempotent on rerun", async () => {
     const t = convexTest(schema, modules);
@@ -244,14 +337,14 @@ describe("migrateLegacy", () => {
     });
 
     const first = await organizerT.mutation(api.recordings.migrateLegacy, { eventId });
-    expect(first).toEqual({ created: 1, skipped: 0, invalid: 0 });
+    expect(first).toEqual({ created: 1, skipped: 0, invalid: 0, exceptions: [] });
 
     const detail = await organizerT.query(api.recordings.get, { eventId, agendaItemId });
     const migrated = detail.recordings.find((r) => r.legacySource === "agenda_video_url");
     expect(migrated?.publicationStatus).toBe("draft");
 
     const second = await organizerT.mutation(api.recordings.migrateLegacy, { eventId });
-    expect(second).toEqual({ created: 0, skipped: 1, invalid: 0 });
+    expect(second).toEqual({ created: 0, skipped: 1, invalid: 0, exceptions: [] });
   });
 
   it("counts an invalid legacy videoUrl instead of throwing", async () => {
@@ -261,6 +354,40 @@ describe("migrateLegacy", () => {
       await ctx.db.patch(agendaItemId, { videoUrl: "not a url" });
     });
     const result = await organizerT.mutation(api.recordings.migrateLegacy, { eventId });
-    expect(result).toEqual({ created: 0, skipped: 0, invalid: 1 });
+    expect(result).toMatchObject({ created: 0, skipped: 0, invalid: 1, exceptions: [{ agendaItemId, title: "Opening Keynote", value: "not a url" }] });
+  });
+});
+
+describe("public recording projection", () => {
+  async function seedEmbed(t: ReturnType<typeof convexTest>, eventId: Id<"events">, recording: boolean) {
+    return t.run((ctx) => ctx.db.insert("embeds", {
+      eventId, name: "Agenda", format: "styled_html", view: "agenda", enabled: true,
+      theme: "light", primaryColor: "#123456", dateFormat: "weekday_short", timeFormat: "12_hour", trackIds: [],
+      fields: {
+        agenda: { title: true, time: true, room: true, track: true, speakers: true, recording },
+        session: { title: true, time: true, room: true, track: true, speakers: true, recording },
+        speaker: { name: true, headshot: true, bio: true, links: true, sessions: true },
+      }, createdAt: Date.now(), updatedAt: Date.now(),
+    }));
+  }
+
+  it("only projects the active, published, available recording when the embed field is enabled", async () => {
+    const t = convexTest(schema, modules);
+    const { organizerT, eventId, agendaItemId } = await seedEvent(t, { endTime: Date.now() - 1000 });
+    const embedId = await seedEmbed(t, eventId, true);
+    const draftId = await organizerT.mutation(api.recordings.attachHosted, { eventId, agendaItemId, hostedUrl: "https://vimeo.com/76979871" });
+    expect((await t.query(api.publicEmbeds.getPublic, { embedId: String(embedId) }))?.sessions[0]?.recording).toBeUndefined();
+    await organizerT.mutation(api.recordings.publish, { eventId, recordingId: draftId });
+    const projected = await t.query(api.publicEmbeds.getPublic, { embedId: String(embedId) });
+    expect(projected?.sessions[0]?.recording).toMatchObject({ sourceType: "hosted", provider: "vimeo", url: "https://vimeo.com/76979871" });
+  });
+
+  it("does not project recordings when the saved embed has the recording field disabled", async () => {
+    const t = convexTest(schema, modules);
+    const { organizerT, eventId, agendaItemId } = await seedEvent(t, { endTime: Date.now() - 1000 });
+    const embedId = await seedEmbed(t, eventId, false);
+    const recordingId = await organizerT.mutation(api.recordings.attachHosted, { eventId, agendaItemId, hostedUrl: "https://vimeo.com/76979871" });
+    await organizerT.mutation(api.recordings.publish, { eventId, recordingId });
+    expect((await t.query(api.publicEmbeds.getPublic, { embedId: String(embedId) }))?.sessions[0]?.recording).toBeUndefined();
   });
 });

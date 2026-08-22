@@ -9,10 +9,11 @@ import type {
   AgendaPlacementConflict,
   AgendaItem,
   RecordingDetail,
-  RecordingBulkResult,
-  EventVideoAsset,
   RecordingId,
   RecordingManagerRow,
+  RecordingPage,
+  EventAsset,
+  RecordingBulkResult,
   AgentRun,
   AgentRunDetail,
   AgentUsageStats,
@@ -134,6 +135,7 @@ export const readOperations = [
   "agenda.detectConflicts",
   "agenda.checkPlacement",
   "recordings.list",
+  "recordings.listPage",
   "recordings.get",
   "recordings.listAssets",
   "tasks.list",
@@ -249,13 +251,16 @@ export type WriteOperation =
   | "agenda.remove"
   | "agenda.publishSchedule"
   | "recordings.attachHosted"
+  | "recordings.requestUpload"
   | "recordings.attachUpload"
   | "recordings.attachAsset"
   | "recordings.publish"
   | "recordings.unpublish"
   | "recordings.detach"
+  | "recordings.retry"
   | "recordings.bulkPublish"
   | "recordings.bulkUnpublish"
+  | "recordings.migrateLegacy"
   | "tasks.create"
   | "tasks.update"
   | "tasks.remove"
@@ -924,16 +929,20 @@ export function createRepository(transport: DataTransport): Repository {
     },
     recordings: {
       list: ({ eventId }) => transport.read<RecordingManagerRow[]>("recordings.list", { eventId }),
+      listPage: (input) => transport.read<RecordingPage>("recordings.listPage", input),
       get: ({ eventId, agendaItemId }) => transport.read<RecordingDetail>("recordings.get", { eventId, agendaItemId }),
-      listAssets: ({ eventId }) => transport.read<EventVideoAsset[]>("recordings.listAssets", { eventId }),
+      listAssets: ({ eventId }) => transport.read<EventAsset[]>("recordings.listAssets", { eventId }),
+      requestUpload: (input) => transport.write<{ uploadUrl: string }>("recordings.requestUpload", input),
       attachHosted: (input) => transport.write<RecordingId>("recordings.attachHosted", input),
       attachUpload: (input) => transport.write<RecordingId>("recordings.attachUpload", input),
       attachAsset: (input) => transport.write<RecordingId>("recordings.attachAsset", input),
       publish: (input) => transport.write<RecordingId>("recordings.publish", input),
       unpublish: (input) => transport.write<void>("recordings.unpublish", input),
       detach: (input) => transport.write<void>("recordings.detach", input),
+      retry: (input) => transport.write<RecordingId>("recordings.retry", input),
       bulkPublish: (input) => transport.write<RecordingBulkResult[]>("recordings.bulkPublish", input),
       bulkUnpublish: (input) => transport.write<RecordingBulkResult[]>("recordings.bulkUnpublish", input),
+      migrateLegacy: ({ eventId }) => transport.write<{ created: number; skipped: number; invalid: number; exceptions: Array<{ agendaItemId: string; title: string; value: string; reason: string }> }>("recordings.migrateLegacy", { eventId }),
     },
     eventMembers: {
       list: ({ eventId }) =>
