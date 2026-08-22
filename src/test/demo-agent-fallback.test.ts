@@ -26,7 +26,7 @@ describe("deterministic demo Operations Agent", () => {
     expect(runtime).toContain("internal.demoWorkspaces.getByEvent");
     expect(runtime).toContain("executeDeterministicDemoRun");
     expect(runtime.indexOf("if (demoWorkspace)")).toBeLessThan(runtime.indexOf("const apiKey = await resolveApiKey"));
-    expect(runtime).toContain("safeProviderError(error)");
+    expect(runtime).toContain("safeProviderError(error, providerMode)");
   });
 
   it("does not require a Clerk subscription or consume managed AI allowance for a deterministic demo run", async () => {

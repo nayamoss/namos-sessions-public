@@ -4,6 +4,7 @@ import { ArrowRight, CalendarDays, ChevronDown, ClipboardCheck, ClipboardList, M
 import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { AgentWorkspace } from "@/components/agent/AgentWorkspace";
+import { VoiceSessionPanel } from "@/components/voice/VoiceSessionPanel";
 import { Card } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
@@ -52,6 +53,7 @@ function RailSection({ title, storageKey, children }: { title: string; storageKe
 
 export default function DashboardHome() {
   const { event } = useCurrentEvent();
+  const [voiceOpen, setVoiceOpen] = useState(false);
 
   // `.data` is `undefined` until a query resolves, which is not the same thing
   // as "this event has nothing". Collapsing both into `[]` is what made an event
@@ -203,8 +205,12 @@ export default function DashboardHome() {
   );
 
   return (
-    <AppLayout title="Dashboard" utility={sidebarDetail} contentVariant="conversation">
-      <AgentWorkspace />
+    <AppLayout
+      title="Dashboard"
+      utility={voiceOpen ? <VoiceSessionPanel eventId={event.id} onClose={() => setVoiceOpen(false)} /> : sidebarDetail}
+      contentVariant="conversation"
+    >
+      <AgentWorkspace onVoiceOpen={() => setVoiceOpen(true)} />
     </AppLayout>
   );
 }

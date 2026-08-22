@@ -7,6 +7,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary.tsx";
 import { DataClientProviders } from "./data/client-providers.tsx";
 import { PublicEmbedRepoProvider } from "./data/provider.tsx";
 import { clerkAppearanceForTheme, clerkLocalization } from "./lib/clerk-appearance.ts";
+import { navigateViaRouter } from "./lib/clerk-router-bridge.ts";
 import App from "./App.tsx";
 import "./index.css";
 
@@ -24,14 +25,33 @@ if (!clerkConfigured && !publicDocsFallback && !publicEmbedRoute) {
 const root = createRoot(document.getElementById("root")!);
 function AuthenticatedApp() {
   const { resolvedTheme } = useTheme();
-  return <ClerkProvider publishableKey={publishableKey!} signInUrl="/sign-in" signUpUrl="/sign-up" appearance={clerkAppearanceForTheme(resolvedTheme)} localization={clerkLocalization}><DataClientProviders><ErrorBoundary fallback={<p>Something went wrong. Please refresh the page.</p>}><App /></ErrorBoundary></DataClientProviders></ClerkProvider>;
+  // Clerk's own sign-in/sign-up step navigation (e.g. Continue -> next factor, or back to
+  // /sign-in on error) falls back to a hard `window.location` reload unless it's told to route
+  // through React Router instead — that hard reload was wiping the whole app on every sign-in
+  // attempt. App owns its own <BrowserRouter> (kept that way so it stays self-contained for
+  // tests), so there's no Router in scope here to call useNavigate() with — routerPush/
+  // routerReplace go through the bridge in clerk-router-bridge.ts instead, which App wires up
+  // to a real useNavigate() once it mounts.
+  return (
+    <ClerkProvider
+      publishableKey={publishableKey!}
+      signInUrl="/sign-in"
+      signUpUrl="/sign-up"
+      appearance={clerkAppearanceForTheme(resolvedTheme)}
+      localization={clerkLocalization}
+      routerPush={(to) => navigateViaRouter(to)}
+      routerReplace={(to) => navigateViaRouter(to, { replace: true })}
+    >
+      <DataClientProviders><ErrorBoundary fallback={<p>Something went wrong. Please refresh the page.</p>}><App /></ErrorBoundary></DataClientProviders>
+    </ClerkProvider>
+  );
 }
 
 if (publicEmbedRoute) {
   root.render(
     <PublicEmbedRepoProvider>
       <ErrorBoundary fallback={<p>Something went wrong. Please refresh the page.</p>}>
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
           <BrowserRouter>
             <Suspense fallback={<main className="min-h-screen p-4 text-sm text-muted-foreground">Loading embed…</main>}>
               <Routes>
@@ -46,11 +66,11 @@ if (publicEmbedRoute) {
 } else if (publicDocsFallback) {
   root.render(
     <ErrorBoundary fallback={<p>Something went wrong. Please refresh the page.</p>}>
-      <ThemeProvider attribute="class" defaultTheme="system" enableSystem><Suspense fallback={<p className="p-6 text-sm text-muted-foreground">Loading API documentation…</p>}><PublicApiDocs /></Suspense></ThemeProvider>
+      <ThemeProvider attribute="class" defaultTheme="light" enableSystem><Suspense fallback={<p className="p-6 text-sm text-muted-foreground">Loading API documentation…</p>}><PublicApiDocs /></Suspense></ThemeProvider>
     </ErrorBoundary>
   );
 } else {
   root.render(
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem><AuthenticatedApp /></ThemeProvider>
+    <ThemeProvider attribute="class" defaultTheme="light" enableSystem><AuthenticatedApp /></ThemeProvider>
   );
 }

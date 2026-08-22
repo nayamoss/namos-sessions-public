@@ -24,7 +24,7 @@ export type EventStatus = "draft" | "published" | "archived";
 // events written before the multi-tenancy migration may not carry one yet. Every consumer that
 // deep-links into the organization CRM workspace (#268) must treat a missing value as "no
 // cross-event directory available for this event" rather than assume it is always present.
-export interface Event { id: EventId; name: string; slug: string; type?: string; websiteUrl?: string; location?: string; timezone: string; startDate: number; endDate: number; description?: string; contactEmail?: string; logoFileId?: string; programPublishedAt?: number; scheduleStartTime?: string; scheduleEndTime?: string; theme?: string; logoStorageKey?: string; accentColor?: string; backgroundStorageKey?: string; industry?: string; readinessCategories?: Array<"agenda_conflicts" | "speaker_confirmations" | "onboarding_tasks" | "proposal_decisions" | "comms_delivery">; exhibitorsEnabled: boolean; sponsorsEnabled: boolean; defaultOnboardingTemplateId?: string; status: EventStatus; organizationId?: string; }
+export interface Event { id: EventId; name: string; slug: string; type?: string; websiteUrl?: string; location?: string; timezone: string; startDate: number; endDate: number; description?: string; contactEmail?: string; logoFileId?: string; programPublishedAt?: number; scheduleStartTime?: string; scheduleEndTime?: string; theme?: string; logoStorageKey?: string; accentColor?: string; backgroundStorageKey?: string; industry?: string; readinessCategories?: Array<"agenda_conflicts" | "speaker_confirmations" | "onboarding_tasks" | "proposal_decisions" | "comms_delivery" | "recording_coverage">; exhibitorsEnabled: boolean; sponsorsEnabled: boolean; defaultOnboardingTemplateId?: string; status: EventStatus; organizationId?: string; }
 
 export type ApiScope = "events:read" | "submissions:read" | "submissions:write" | "speakers:read" | "agenda:read" | "tasks:read";
 export interface ApiKey { id: string; label: string; keyPrefix: string; scopes: ApiScope[]; createdAt: number; lastUsedAt?: number; revokedAt?: number; }
@@ -153,14 +153,28 @@ export interface ReviewerReminderBatch { status: "sent" | "failed" | "skipped"; 
 export interface AgendaItem { id: AgendaItemId; eventId: EventId; title: string; roomId: string; trackId?: string; submissionId?: SubmissionId; speakerIds: SpeakerId[]; startTime: number; endTime: number; videoUrl?: string; locationDetails?: string; calendarUid?: string; calendarSequence?: number; isPublished: boolean; }
 export type RecordingSourceType = "upload" | "asset" | "hosted";
 export type RecordingPublicationStatus = "draft" | "published";
-export interface EventVideoAsset { id: string; eventId: EventId; fileName: string; mimeType: string; sizeBytes: number; createdAt: number; }
+export interface EventAsset { id: string; eventId: EventId; kind: "video"; storageId: string; fileName: string; mimeType: string; sizeBytes: number; createdAt: number; updatedAt: number; }
 export type RecordingAvailability = "uploading" | "processing" | "ready" | "failed" | "unavailable";
 export interface RecordingSummary { id: RecordingId; sourceType: RecordingSourceType; fileName?: string; publicationStatus: RecordingPublicationStatus; updatedAt: number; provider?: "convex" | "youtube" | "vimeo" | "external"; availability?: RecordingAvailability; failureReason?: string; }
 export interface RecordingManagerRow extends AgendaItem { roomName: string; trackName?: string; speakerNames: string[]; recording?: RecordingSummary; replacement?: Omit<RecordingSummary, "publicationStatus">; }
+export interface RecordingPage { page: RecordingManagerRow[]; isDone: boolean; continueCursor: string; }
+export type RecordingManagerStatusFilter = "all" | "missing" | "draft" | "published" | "replacement" | "unavailable";
+export type RecordingManagerSourceFilter = "all" | "upload" | "asset" | "hosted";
+export type RecordingManagerSort = "schedule_asc" | "schedule_desc";
+export interface RecordingManagerFilters {
+  query?: string;
+  status?: RecordingManagerStatusFilter;
+  source?: RecordingManagerSourceFilter;
+  roomId?: string;
+  trackId?: string;
+  day?: string;
+  timeZone?: string;
+  sort?: RecordingManagerSort;
+}
 export interface SessionRecording extends RecordingSummary { eventId: EventId; agendaItemId: AgendaItemId; hostedUrl?: string; storageId?: string; assetId?: string; sourceUrl?: string; embedUrl?: string; role: "active" | "replacement" | "replaced"; publishedAt?: number; publishedByUserId?: string; createdAt: number; createdByUserId: string; }
 export interface RecordingActivity { id: string; action: string; detail?: string; createdAt: number; }
 export interface RecordingDetail { session: AgendaItem; recordings: SessionRecording[]; history?: RecordingActivity[]; }
-export interface RecordingBulkResult { recordingId: string; status: "published" | "unpublished" | "failed"; error?: string; }
+export interface RecordingBulkResult { recordingId: RecordingId; status: "published" | "unpublished" | "failed"; error?: string; }
 export interface SpeakerAgendaItem extends AgendaItem { roomName: string; trackName?: string; }
 export interface AgendaConflict { itemA: AgendaItemId; itemB: AgendaItemId; reason: "room_overlap" | "speaker_overlap" | "speaker_unavailable" | "track_overlap"; speakerId?: SpeakerId; }
 export interface AgendaPlacementConflict { reason: "room_overlap" | "speaker_overlap" | "speaker_unavailable" | "track_overlap"; blocking: boolean; message: string; }
@@ -185,7 +199,7 @@ export type InboundTriageStatus = "matched" | "unmatched" | "resolved";
 export interface InboundMessage { id: string; eventId: EventId; provider: "resend" | "ses"; messageId: string; inReplyTo?: string; references: string[]; fromEmail: string; subject: string; text: string; receivedAt: number; speakerId?: SpeakerId; submissionId?: SubmissionId; commsLogId?: string; triageStatus: InboundTriageStatus; createdAt: number; }
 export type InboundEmailDomainStatus = "pending" | "dns_verified" | "verified" | "failed";
 export interface InboundEmailDomain { id: string; eventId: EventId; provider: "resend" | "ses"; domain: string; aliasLocalPart: string; mode: "managed" | "custom"; status?: InboundEmailDomainStatus; expectedMx?: string; observedMx?: string[]; dnsVerifiedAt?: number; receiptVerifiedAt?: number; lastCheckedAt?: number; failureReason?: string; verifiedAt?: number; createdAt: number; updatedAt: number; }
-export type ControlRoomCategoryKind = "decisions" | "reviews" | "acceptance_emails" | "overdue_tasks" | "missing_assets" | "unscheduled" | "conflicts" | "publication_blockers";
+export type ControlRoomCategoryKind = "decisions" | "reviews" | "acceptance_emails" | "overdue_tasks" | "missing_assets" | "unscheduled" | "conflicts" | "recording_coverage" | "publication_blockers";
 export interface ControlRoomItem { id: string; kind: ControlRoomCategoryKind; title: string; detail: string; href: string; severity: "attention" | "blocking"; }
 export interface ControlRoomWalkthroughStep { id: string; label: string; complete: boolean; href: string; }
 export interface ControlRoomState { generatedAt: number; categories: Record<ControlRoomCategoryKind, ControlRoomItem[]>; walkthrough: ControlRoomWalkthroughStep[]; }
@@ -382,6 +396,8 @@ export type AvailabilitySlot = {
   date: number;
   /** Exact event-local hour for new records. */
   hour?: number;
+  /** Exact event-local minute for new records. Legacy hour-only slots block both halves. */
+  minute?: 0 | 30;
   /** Backward-compatible coarse value for records created before hourly availability. */
   part?: "morning" | "afternoon" | "evening";
 };
@@ -392,8 +408,8 @@ export type EmbedTheme = "light" | "dark" | "system";
 export type EmbedDateFormat = "weekday_long" | "weekday_short" | "numeric";
 export type EmbedTimeFormat = "12_hour" | "24_hour";
 export interface EmbedFieldOptions {
-  agenda: { title: boolean; time: boolean; room: boolean; track: boolean; speakers: boolean };
-  session: { title: boolean; time: boolean; room: boolean; track: boolean; speakers: boolean };
+  agenda: { title: boolean; time: boolean; room: boolean; track: boolean; speakers: boolean; recording: boolean };
+  session: { title: boolean; time: boolean; room: boolean; track: boolean; speakers: boolean; recording: boolean };
   speaker: { name: boolean; headshot: boolean; bio: boolean; links: boolean; sessions: boolean };
 }
 export interface Embed { id: EmbedId; eventId: EventId; name: string; format: "styled_html"; view: EmbedView; enabled: boolean; theme: EmbedTheme; primaryColor: string; dateFormat: EmbedDateFormat; timeFormat: EmbedTimeFormat; trackIds: string[]; fields: EmbedFieldOptions; createdAt: number; updatedAt: number; }
@@ -401,7 +417,7 @@ export type EmbedWrite = Omit<Embed, "id" | "createdAt" | "updatedAt"> & { id?: 
 export type PublicFeedFormat = "html" | "basic_html" | "json" | "xml" | "ical";
 export interface PublicFeed { id: PublicFeedId; eventId: EventId; embedId: EmbedId; name: string; format: PublicFeedFormat; enabled: boolean; token: string; revokedAt?: number; createdAt: number; updatedAt: number; }
 export type PublicFeedWrite = Omit<PublicFeed, "id" | "token" | "revokedAt" | "createdAt" | "updatedAt"> & { id?: PublicFeedId };
-export interface PublicEmbedSession { key: string; title: string; startTime?: number; endTime?: number; roomName?: string; trackKey?: string; trackName?: string; speakerNames?: string[]; }
+export interface PublicEmbedSession { key: string; title: string; startTime?: number; endTime?: number; roomName?: string; trackKey?: string; trackName?: string; speakerNames?: string[]; recording?: { url: string; sourceType: RecordingSourceType; provider?: RecordingSummary["provider"] }; }
 export interface PublicEmbedView { name: string; view: EmbedView; theme: EmbedTheme; primaryColor: string; dateFormat: EmbedDateFormat; timeFormat: EmbedTimeFormat; event: { name: string; timezone: string }; tracks: Array<{ key: string; name: string }>; sessions: PublicEmbedSession[]; speakers: Array<{ key: string; name: string; headshotUrl?: string; bio?: string; links?: PublicEmbedSpeakerLink[]; sessions?: Array<{ title: string; startTime?: number; roomName?: string }> }>; }
 export interface PublicEmbedShowcase {
   eventName: string;

@@ -15,6 +15,7 @@ const categories: Array<{ id: Category; label: string }> = [
   { id: "onboarding_tasks", label: "Onboarding tasks" },
   { id: "proposal_decisions", label: "Submission decisions" },
   { id: "comms_delivery", label: "Communication delivery" },
+  { id: "recording_coverage", label: "Recording coverage" },
 ];
 
 export default function ReadinessSettings() {

@@ -1,3 +1,143 @@
+# Sync namos-sessions-public from private main (RUN 12 — 2026-08-22)
+
+## Why
+
+Recurring job, requested explicitly. Run 11's PR (#46) was still open (not yet
+merged) when this run started, so this branch stacks on top of run 11's
+branch (`sync/private-main-delta-2026-08-21`) rather than on `main` directly —
+public's `main` tip and run 11's branch tip were identical (`ae6e93f`) at the
+time this run started, so there was nothing to reconcile between them.
+
+Private `main` moved from run 11's boundary (`271b9cb9`) to its current tip
+(`4ed4e32e`) — 22 new commits. Most notably: a cross-event recordings manager
+(schema additions for `session_recordings`/`recording_activity`, new Convex
+functions, program UI rework of `Recordings.tsx`, migration of legacy
+`agenda_items.videoUrl` values into the new model), a half-hour
+speaker-availability-slots feature (currently docs-only / planning stage — no
+application code shipped yet), several embed/settings-modal fixes (responsive
+iframe auto-resize, embed template gallery, settings modal size fix), a fix
+removing a `wrangler.jsonc` prod/dev Convex deployment mixup (this file is
+**out of scope** for this sync per SKILL.md step 3 — public's `wrangler.jsonc`
+already carries its own placeholder values and was not touched), and a fix
+(`src/main.tsx`, `src/App.tsx`, new `src/lib/clerk-router-bridge.ts`) making
+Clerk's sign-in flow route through React Router instead of hard-reloading the
+page.
+
+## What this run did
+
+Ported the full `src/`, `convex/`, `worker/`, `docs/features/` delta between
+run-11's boundary and private main's current tip (`4ed4e32e`), via whole-file
+checkout from the `private-webapp` git remote (had to `git fetch
+private-webapp main` first — the remote-tracking ref was stale from run 11),
+then scrubbed. `worker/` had no changes in this delta. 68 files touched
+(65 modified/added from the raw private diff, minus `convex/seed.ts` handled
+separately below as a manual merge rather than a blind checkout).
+
+## Public-only work preserved, not overwritten
+
+Checked `git log <run-11-boundary>..origin/main` and `git log
+ae6e93f..origin/main` before starting — **zero** new public-only commits since
+run 11's PR was opened. Public's `main` tip and run 11's branch tip
+(`sync/private-main-delta-2026-08-21`) were the same commit (`ae6e93f`), so
+there was nothing new to reconcile (no repeat of the `07779fb` ApiDocs.tsx
+situation this run — that commit is already folded into run 11's branch).
+
+## Excluded from this sync
+
+- **`wrangler.jsonc`** — out of scope per SKILL.md step 3 (not under `src/`,
+  `convex/`, `worker/`, `docs/features/`). Private's fix in this delta
+  (commit `cfd68b6a`) corrects a dev/prod Convex-deployment mixup using
+  private's real deployment names (`calculating-loris-761`,
+  `pastel-mosquito-479`) and real domains — none of that applies to public's
+  copy, which already carries its own placeholder values
+  (`your-project.convex.cloud`, `your-domain.example`, etc.) and was
+  correctly left untouched.
+- **`convex/seed.ts`** — **not** blindly checked out from private. Private's
+  copy still seeds a real-looking `AI.Engineer Sandbox Event — NYC` fixture
+  (same finding as runs 6 and 11). Instead, manually ported the structural
+  delta — the new `readinessCategories` field/backfill logic on the event
+  record, five additional agenda-item fixtures, and the new recording-seeding
+  block (hosted YouTube/Vimeo examples, a scheduled direct-upload demo action)
+  — onto public's own existing `Example Conference Fixture` placeholder
+  version, renaming private's fixture titles (`"Shipping reliable video"`,
+  `"Legacy recording review"`, etc.) to public's existing `"Example agenda
+  item {D..H}"` naming convention. One recording fixture
+  (`"Engineering systems clinic"`) referenced a private-only agenda item that
+  predates this diff and doesn't exist in public's fixture set at all; remapped
+  it onto public's `"Example agenda item A"` instead so the seed script stays
+  self-contained and functional. Confirmed via `npx tsc --noEmit` and
+  `npx vitest run` that this manual merge didn't break `convex/recordings.test.ts`
+  or the seed-dependent recordings UI tests.
+- **No new private-only test/asset dependencies found** this run (checked the
+  same pattern as run 11's `demo-media.test.ts` /
+  `release-closeout-contract.test.ts` exclusions — both files still correctly
+  absent from public, and the new test files this run added
+  (`agent-provider-config.test.ts`, `embed-responsive-resize.test.ts`,
+  `embed-template-gallery.test.tsx`, `recordings-page.test.tsx`,
+  `convex/recordings.test.ts` additions) don't reference any private-only
+  path, demo asset, or deploy config).
+- **`worker-configuration.d.ts`** — not touched, no changes in this delta's
+  file list.
+
+## Scrub performed
+
+Full `git diff --cached` grepped for `sk_live_`, `sk_test_`, `pk_live_`,
+`calculating-loris-761`, `pastel-mosquito-479`, `clerk.namos-sessions.xyz`,
+`app.namos-sessions.xyz`, plus the maintainer's personal email/domain
+strings (`zdklode86`/`protonmail`, `beeconomybuzz`) — zero matches after two
+fixes, both in newly-added planning docs:
+
+- `docs/features/public-embeds-responsive-resize/design.md` — three
+  occurrences of the real production domain `https://app.namos-sessions.xyz`
+  (used as the concrete example origin when explaining the embed's
+  `postMessage` origin-validation design) — substituted to
+  `https://your-project.example`, matching this repo's existing placeholder
+  convention.
+- `docs/features/speaker-availability-half-hour-slots/requirements.md` — one
+  occurrence of a full real URL
+  (`https://app.namos-sessions.xyz/events/ai-engineer-sandbox-event/program/availability`)
+  cited as the source of a bug report — substituted to
+  `https://your-project.example/events/example-conference-fixture/program/availability`.
+
+`convex/seed.ts` handled as a manual merge, not a blind checkout — see above;
+confirmed the final file still opens with public's own `"Example Conference
+Fixture"` name/slug, not private's real-looking fixture data.
+
+Note: `"AI.Engineer Sandbox Event"` / `"ai-engineer-sandbox-event"` strings
+still appear elsewhere in this repo (e.g. `docs/features/public-embeds-responsive-resize/plan.md`,
+`src/pages/public/ApiDocs.tsx`, several other pre-existing docs/tests) — these
+predate this run (confirmed present in `ae6e93f`, run 11's merged state,
+before this run touched anything) and are an already-accepted precedent from
+prior runs, not something newly introduced here. Not rescrubbed as part of
+this run's scope; flagging for awareness only.
+
+`worker-configuration.d.ts` was not touched — no changes in this run's file
+delta.
+
+## Verification
+
+- `npx tsc --noEmit` — clean, no errors.
+- `npx vitest run` — 845/858 passing; 13 failures across 5 test files
+  (`agent-workspace-contract.test.ts`, `app-layout.test.tsx`,
+  `component-canon.test.ts`, `control-sizing.test.tsx`,
+  `table-canon.test.ts`). Verified these are the exact same 5 files / 13
+  tests specified as pre-existing, by running the same 5 files directly
+  against `private-webapp/main` (`npx vitest run <files>` in the private
+  checkout) — identical 13/13 failures there too, confirming this sync
+  introduced nothing new.
+- `npm run build` — succeeds (bundle size warnings only, pre-existing and
+  unrelated to this sync).
+
+## Public-only commits — do not lose these (re-check yourself, this list grows)
+
+Run `git log origin/main..public/main --oneline` yourself before starting the
+next sync — this snapshot will have moved by then. As of this run: everything
+from run 11 (PR #46, once merged) and earlier, plus this run's own commit.
+This run found zero new public-only commits to reconcile (public's `main` and
+run 11's branch tip were identical when this run started).
+
+---
+
 # Sync namos-sessions-public from private main (RUN 11 — 2026-08-21)
 
 ## Why

@@ -25,6 +25,7 @@ function fixtureFor(operation: ReadOperation): unknown {
   if (operation === "events.list" || operation === "events.listMine" || operation === "events.listForPortal" || operation === "publicEmbeds.list") return [document];
   if (operation === "agentRuns.list") return [document];
   if (operation === "agentRuns.get") return { run: document, events: [document], proposals: [document] };
+  if (operation === "recordings.listPage") return { page: [document], isDone: true, continueCursor: "" };
   if (operation === "events.portalSpeakerIdentity") {
     return { event: document, speaker: { ...document, firstName: "Grace", lastName: "Hopper" }, publishedEvents: [document] };
   }

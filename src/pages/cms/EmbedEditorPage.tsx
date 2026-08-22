@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Check, ChevronsUpDown, ExternalLink, Save, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronsUpDown, ExternalLink, LayoutTemplate, Save, X } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { EmbedPreviewPanel } from "@/components/embeds/EmbedPreviewPanel";
+import { EmbedTemplateGallery } from "@/components/embeds/EmbedTemplateGallery";
 import { AppLayout } from "@/components/AppLayout";
 import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
+import { cardSurfaceClasses } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ColorInput } from "@/components/ui/color-input";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -29,8 +31,8 @@ import {
 } from "@/lib/public-embed";
 
 const fieldLabels: Record<keyof EmbedFieldOptions, Record<string, string>> = {
-  agenda: { title: "Title", time: "Time", room: "Room", track: "Track", speakers: "Speakers" },
-  session: { title: "Title", time: "Time", room: "Room", track: "Track", speakers: "Speakers" },
+  agenda: { title: "Title", time: "Time", room: "Room", track: "Track", speakers: "Speakers", recording: "Recording" },
+  session: { title: "Title", time: "Time", room: "Room", track: "Track", speakers: "Speakers", recording: "Recording" },
   speaker: { name: "Name", headshot: "Headshot", bio: "Biography", links: "Profile links", sessions: "Published sessions" },
 };
 
@@ -52,6 +54,8 @@ export default function EmbedEditorPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [choosingTemplate, setChoosingTemplate] = useState(!embedId);
+  const [editorStarted, setEditorStarted] = useState(Boolean(embedId));
 
   const listRoute = `/events/${event.slug}/cms/embeds`;
   const load = useCallback(() => {
@@ -134,6 +138,30 @@ export default function EmbedEditorPage() {
     return <AppLayout title="Embeds"><div className={cardSurfaceClasses("default", "h-96 animate-pulse bg-muted")} aria-label="Loading embed" /></AppLayout>;
   }
 
+  if (!embedId && choosingTemplate) {
+    return (
+      <AppLayout title="New embed">
+        <EmbedTemplateGallery
+          onSelect={(template) => {
+            setDraft({
+              ...defaultEmbed(event.id),
+              name: template.name,
+              view: template.view,
+            });
+            setEditorStarted(true);
+            setChoosingTemplate(false);
+          }}
+          onBlank={() => {
+            setDraft(defaultEmbed(event.id));
+            setEditorStarted(true);
+            setChoosingTemplate(false);
+          }}
+          onCancel={() => editorStarted ? setChoosingTemplate(false) : navigate(listRoute)}
+        />
+      </AppLayout>
+    );
+  }
+
   return (
     <AppLayout title={saved?.name || "New embed"}>
       <div className="space-y-3">
@@ -144,6 +172,11 @@ export default function EmbedEditorPage() {
               <Button variant="ghost" size="sm" onClick={() => dirty ? setConfirmLeave(true) : navigate(listRoute)}>
                 <ArrowLeft className="mr-1 h-4 w-4" /> Back
               </Button>
+              {!saved && (
+                <Button variant="ghost" size="sm" onClick={() => setChoosingTemplate(true)}>
+                  <LayoutTemplate className="mr-1 h-4 w-4" /> Templates
+                </Button>
+              )}
               {saved?.id && (
                 <Button variant="ghost" size="sm" asChild>
                   <a href={`/embed/${saved.id}`} target="_blank" rel="noreferrer">
@@ -296,4 +329,3 @@ export default function EmbedEditorPage() {
     </AppLayout>
   );
 }
-import { cardSurfaceClasses } from "@/components/ui/card";

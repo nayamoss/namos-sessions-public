@@ -42,6 +42,7 @@ async function deleteDemoFixture(ctx: MutationCtx, eventId: Id<"events">, organi
     const remaining = await ctx.db.query("crm_event_contacts").withIndex("by_contact", (q) => q.eq("contactId", contactId)).first();
     if (!remaining) await ctx.db.delete(contactId);
   }
+  const recordingAssets = await ctx.db.query("event_assets").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect();
   const forms = await ctx.db.query("submission_forms").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect();
   const documents = (await Promise.all(speakers.map((speaker) => ctx.db.query("speaker_documents").withIndex("by_speaker", (q) => q.eq("speakerId", speaker._id)).collect()))).flat();
   for (const document of documents) {
@@ -52,6 +53,9 @@ async function deleteDemoFixture(ctx: MutationCtx, eventId: Id<"events">, organi
     if (speaker.headshotStorageKey) {
       try { await ctx.storage.delete(speaker.headshotStorageKey as Id<"_storage">); } catch { /* Same compatibility case as documents. */ }
     }
+  }
+  for (const asset of recordingAssets) {
+    try { await ctx.storage.delete(asset.storageId); } catch { /* Draft cleanup must tolerate an already-pruned storage object. */ }
   }
   const fieldIds = new Set(forms.flatMap((form) => [...(form.sections ?? []), ...(form.pages ?? [])].flatMap((section) => section.fieldIds)));
   const apiTokens = await ctx.db.query("api_tokens").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect();
@@ -70,7 +74,7 @@ async function deleteDemoFixture(ctx: MutationCtx, eventId: Id<"events">, organi
   }
   const tables = [
     "notifications", "form_responses", "evaluations", "ai_assessments", "evaluation_assignments", "evaluation_plans",
-    "agenda_items_audit", "agenda_items", "speaker_availability", "onboarding_tasks",
+    "recording_activity", "session_recordings", "event_assets", "agenda_items_audit", "agenda_items", "speaker_availability", "onboarding_tasks",
     "agent_action_proposals", "communication_drafts", "agent_run_events", "agent_usage_records", "agent_runs", "agent_provider_settings",
     "comms_log", "comms_templates", "inbound_messages", "inbound_email_domains", "email_integrations",
     "content_oauth_pending", "content_oauth_states", "content_integrations", "submission_confirmation_requests",
@@ -80,7 +84,7 @@ async function deleteDemoFixture(ctx: MutationCtx, eventId: Id<"events">, organi
     "tags", "tracks", "rooms",
   ] as const;
   for (const table of tables) {
-    const index = table === "agenda_items_audit" ? "by_event_createdAt"
+    const index = table === "agenda_items_audit" || table === "recording_activity" ? "by_event_createdAt"
       : table === "agent_action_proposals" ? "by_event_status"
         : table === "inbound_messages" ? "by_event_receivedAt"
           : "by_event";
@@ -196,8 +200,14 @@ async function seedDemoFixture(ctx: MutationCtx, input: {
   const workshopRoomId = await ctx.db.insert("rooms", { eventId, name: "Workshop Studio", capacity: 80, sortOrder: 1 });
   const trackId = await ctx.db.insert("tracks", { eventId, name: "AI Operations", color: "#E56B5D", sortOrder: 0 });
   const startTime = now + 14 * 24 * 60 * 60 * 1_000 + 9 * 60 * 60 * 1_000;
-  await ctx.db.insert("agenda_items", { eventId, submissionId: conflictAId, title: "Opening program briefing", roomId, trackId, startTime, endTime: startTime + 60 * 60 * 1_000, speakerIds: [speakerId], isPublished: false, createdAt: now, updatedAt: now });
-  await ctx.db.insert("agenda_items", { eventId, submissionId: conflictBId, title: "Operations clinic", roomId: workshopRoomId, trackId, startTime: startTime + 30 * 60 * 1_000, endTime: startTime + 90 * 60 * 1_000, speakerIds: [secondSpeakerId], isPublished: false, createdAt: now, updatedAt: now });
+  const openingAgendaId = await ctx.db.insert("agenda_items", { eventId, submissionId: conflictAId, title: "Opening program briefing", roomId, trackId, startTime, endTime: startTime + 60 * 60 * 1_000, speakerIds: [speakerId], isPublished: false, createdAt: now, updatedAt: now });
+  const operationsAgendaId = await ctx.db.insert("agenda_items", { eventId, submissionId: conflictBId, title: "Operations clinic", roomId: workshopRoomId, trackId, startTime: startTime + 30 * 60 * 1_000, endTime: startTime + 90 * 60 * 1_000, speakerIds: [secondSpeakerId], isPublished: false, createdAt: now, updatedAt: now });
+  // The demo begins with an active draft and a staged replacement, so its organizer journey
+  // can exercise provider classification and promotion without fabricating a storage object.
+  await ctx.db.insert("session_recordings", { eventId, agendaItemId: openingAgendaId, sourceType: "hosted", hostedUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", provider: "youtube", availability: "ready", role: "active", publicationStatus: "draft", createdByUserId: "system:demo", createdAt: now, updatedAt: now });
+  const activeRecordingId = await ctx.db.insert("session_recordings", { eventId, agendaItemId: operationsAgendaId, sourceType: "hosted", hostedUrl: "https://vimeo.com/76979871", provider: "vimeo", availability: "ready", role: "active", publicationStatus: "published", publishedAt: now, publishedByUserId: "system:demo", createdByUserId: "system:demo", createdAt: now, updatedAt: now });
+  await ctx.db.insert("session_recordings", { eventId, agendaItemId: operationsAgendaId, sourceType: "hosted", hostedUrl: "https://www.youtube.com/watch?v=9bZkp7q19f0", provider: "youtube", availability: "ready", role: "replacement", publicationStatus: "draft", createdByUserId: "system:demo", createdAt: now, updatedAt: now });
+  await ctx.db.insert("recording_activity", { eventId, agendaItemId: operationsAgendaId, recordingId: activeRecordingId, action: "published", actorUserId: "system:demo", detail: "Seeded published recording", createdAt: now });
   await ctx.db.insert("comms_templates", { eventId, name: "Reviewed acceptance", kind: "acceptance", subject: "You’re accepted to {{eventName}}", body: "Hi {{speakerName}}, your session {{sessionTitle}} is accepted.", createdAt: now, updatedAt: now });
   const embedFields = { agenda: { title: true, time: true, room: true, track: true, speakers: true }, session: { title: true, time: true, room: true, track: true, speakers: true }, speaker: { name: true, headshot: true, bio: true, links: true, sessions: true } };
   await ctx.db.insert("embeds", { eventId, name: "Speaker gallery", format: "styled_html", view: "speaker_gallery", enabled: false, theme: "system", primaryColor: "#E56B5D", dateFormat: "weekday_long", timeFormat: "12_hour", trackIds: [], fields: embedFields, createdAt: now, updatedAt: now });
