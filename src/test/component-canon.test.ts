@@ -119,6 +119,8 @@ describe("shared component canon", () => {
       "components/availability/AvailabilityEditor.tsx",
       "components/editor/RichTextEditor.tsx",
       "components/embeds/EmbedRenderer.tsx",
+      // Template cards are button-shaped choices so their whole preview surface is the target.
+      "components/embeds/EmbedTemplateGallery.tsx",
       "components/forms/TemplateGallery.tsx",
       "components/settings/IntegrationCard.tsx",
       "components/shared/AddFieldPopover.tsx",
