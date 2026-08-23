@@ -28,8 +28,8 @@ describe("Recordings manager page", () => {
     const { container } = render(<MemoryRouter initialEntries={["/events/demo-event/program/recordings?filter=published&source=hosted"]}><Recordings /></MemoryRouter>);
     await waitFor(() => expect(screen.getAllByText("Published provider session").length).toBeGreaterThan(0));
     expect(screen.queryByText("Missing session")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Source: Hosted link/ })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Published" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Filters, 2 active" })).toBeVisible();
+    expect(screen.getByRole("button", { name: /Published$/ })).toBeVisible();
     expect(container.querySelectorAll("select")).toHaveLength(0);
     expect(screen.getByRole("region", { name: "Recording controls" })).toBeVisible();
   });
