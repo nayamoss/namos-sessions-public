@@ -160,6 +160,8 @@ describe("AppLayout", () => {
   });
 
   it("renders a page utility rail beside the content surface", () => {
+    const previousUtilityCollapsed = localStorage.getItem("sessionboard.utilityCollapsed");
+    localStorage.setItem("sessionboard.utilityCollapsed", "false");
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
@@ -188,12 +190,23 @@ describe("AppLayout", () => {
     expect(utility.parentElement).toBe(shell);
     expect(main).not.toContainElement(utility);
     expect(content.closest("main")).toBe(main);
+    expect(main).toHaveClass("lg:pl-[13.25rem]", "lg:pr-[23.25rem]");
+    expect(utility).toHaveClass("top-2.5", "h-[calc(100dvh-20px)]", "w-[22rem]");
+
+    const collapseUtility = utility.querySelector<HTMLButtonElement>('button[aria-label="Hide page utilities"]')!;
+    act(() => collapseUtility.click());
+    expect(utility).toHaveClass("w-14");
+    expect(main).toHaveClass("lg:pr-[4.75rem]");
+    expect(utility.querySelector('button[aria-label="Show page utilities"]')).toBeInTheDocument();
+    expect(utility.querySelector<HTMLElement>("[hidden]")).toHaveTextContent("Page utilities");
 
     act(() => root.unmount());
+    if (previousUtilityCollapsed === null) localStorage.removeItem("sessionboard.utilityCollapsed");
+    else localStorage.setItem("sessionboard.utilityCollapsed", previousUtilityCollapsed);
     container.remove();
   });
 
-  it("keeps multi-item navigation collapsible and opens Configure as a compact hub", () => {
+  it("keeps multi-item navigation collapsible without a redundant Configure destination", () => {
     window.localStorage.removeItem("namos-sidebar-section-state");
     const container = document.createElement("div");
     document.body.append(container);
@@ -211,16 +224,11 @@ describe("AppLayout", () => {
     const sections = [...container.querySelectorAll("nav section")];
     const programHeader = sections.find((section) => section.querySelector("h2")?.textContent === "Program")!;
     const programToggle = programHeader.querySelector("button")!;
-    const configureButton = container.querySelector<HTMLButtonElement>('button[aria-label="Configure"]')!;
 
-    // No active route inside either group, so both start collapsed.
+    // No active route inside the group, so it starts collapsed.
     expect(programToggle).toHaveAttribute("aria-expanded", "false");
-    expect(configureButton).toBeInTheDocument();
-    expect(configureButton.closest("section")?.querySelector("h2")).toBeNull();
-
-    act(() => configureButton.click());
-    expect(document.querySelector('[role="dialog"]')).toHaveTextContent("Event details");
-    expect(document.querySelector('[role="dialog"]')).toHaveTextContent("Embeds");
+    expect(container.querySelector('[aria-label="Configure"]')).not.toBeInTheDocument();
+    expect(container.textContent).not.toContain("Configure");
 
     act(() => programToggle.click());
     expect(programHeader.querySelector("button")).toHaveAttribute("aria-expanded", "true");

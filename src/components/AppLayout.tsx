@@ -15,7 +15,6 @@ import {
   PanelLeft,
   PanelRight,
   Search,
-  Settings2,
   Users,
   ContactRound,
   ShieldCheck,
@@ -43,7 +42,6 @@ import { EventSwitcher } from "@/components/EventSwitcher";
 import { useOptionalCurrentEvent } from "@/components/EventContext";
 import { RepoContext } from "@/data/repo";
 import { SettingsModalProvider } from "@/components/settings/SettingsModalContext";
-import { useOptionalSettingsModal } from "@/components/settings/SettingsModalContext";
 import { selectedBackend } from "@/data/backend";
 
 export type DashboardNavItem = {
@@ -114,13 +112,6 @@ const navSections: DashboardNavSection[] = [
       { to: "/cms/feeds", label: "Feeds", icon: Rss },
     ],
   },
-  // Configuration is a focused settings hub, not another long sidebar section.
-  // The single destination opens the modal and its internal navigation owns the
-  // individual settings surfaces.
-  {
-    label: "Configure",
-    items: [{ to: "/settings/event", label: "Configure", icon: Settings2 }],
-  },
 ];
 
 // Organization settings lives in the account menu at the bottom of the sidebar
@@ -142,7 +133,6 @@ function Navigation({
   sections: DashboardNavSection[];
 }) {
   const location = useLocation();
-  const settingsModal = useOptionalSettingsModal();
   const sidebar = useSidebarState();
   const collapsed = forceExpanded ? false : sidebar.collapsed;
   const [sectionState, setSectionState] = useState<Record<string, boolean>>(() => {
@@ -225,7 +215,6 @@ function Navigation({
             )}
             <div id={sectionId} hidden={!collapsed && !expanded} className={cn("space-y-1", !collapsed && "mt-1")}>
               {(collapsed ? section.items.slice(0, 1) : section.items).map((item) => {
-                const isConfigure = item.label === "Configure";
                 const active = item.end
                   ? location.pathname === basePath(item.to)
                   : location.pathname === basePath(item.to) || location.pathname.startsWith(`${basePath(item.to)}/`);
@@ -233,12 +222,6 @@ function Navigation({
                   "touch-target group relative flex items-center rounded-md text-base font-medium transition-colors",
                   collapsed ? "justify-center p-2" : "gap-3 px-3 py-2",
                   active ? "bg-muted text-foreground" : "text-foreground/75 hover:bg-muted hover:text-foreground",
-                );
-                if (isConfigure && settingsModal) return (
-                  <button key={item.to} type="button" title={collapsed ? item.label : undefined} aria-label={item.label} onClick={() => { settingsModal.openSettings("event"); onNavigate?.(); }} className={className}>
-                    <item.icon className="h-4 w-4 shrink-0" />
-                    {!collapsed && <span className="truncate">{item.label}</span>}
-                  </button>
                 );
                 return (
                   <Link
@@ -448,8 +431,8 @@ function DashboardLayoutInner({
       <main
         className={cn(
           "flex h-full min-w-0 flex-col overflow-hidden",
-          collapsed ? "lg:pl-[4.75rem]" : "lg:pl-[15.25rem]",
-          utility && !utilityCollapsed && "lg:pr-[23.75rem] xl:pr-[25.75rem]",
+          collapsed ? "lg:pl-[4.75rem]" : "lg:pl-[13.25rem]",
+          utility && (utilityCollapsed ? "lg:pr-[4.75rem]" : "lg:pr-[23.25rem] xl:pr-[25.25rem]"),
         )}
       >
         <header className="flex h-14 shrink-0 items-center gap-3 pl-14 pr-4 md:pl-16 md:pr-4 lg:px-3">
@@ -474,26 +457,31 @@ function DashboardLayoutInner({
         </div>
       </main>
       {utility && (
-        <button
-          type="button"
-          onClick={toggleUtilityCollapsed}
-          aria-label={utilityCollapsed ? "Show page utilities" : "Hide page utilities"}
-          aria-pressed={!utilityCollapsed}
-          title={utilityCollapsed ? "Show panel" : "Hide panel"}
-          className="fixed right-2.5 top-2.5 z-30 hidden h-9 w-9 items-center justify-center rounded-md bg-muted text-muted-foreground hover:text-foreground lg:flex"
-        >
-          <PanelRight className="h-4 w-4" />
-        </button>
-      )}
-      {utility && !utilityCollapsed && (
         <aside
           aria-label="Page utilities"
           className={cardSurfaceClasses(
             "default",
-            "fixed right-2.5 top-14 z-30 hidden h-[calc(100dvh-64px)] w-[22rem] flex-col overflow-y-auto p-4 sm:p-6 lg:flex xl:w-[24rem]",
+            cn(
+              "fixed right-2.5 top-2.5 z-30 hidden h-[calc(100dvh-20px)] flex-col overflow-hidden lg:flex",
+              utilityCollapsed ? "w-14" : "w-[22rem] xl:w-[24rem]",
+            ),
           )}
         >
-          {utility}
+          <div className={cn("flex h-14 shrink-0 items-center px-3", utilityCollapsed ? "justify-center" : "justify-start")}>
+            <button
+              type="button"
+              onClick={toggleUtilityCollapsed}
+              aria-label={utilityCollapsed ? "Show page utilities" : "Hide page utilities"}
+              aria-pressed={!utilityCollapsed}
+              title={utilityCollapsed ? "Show panel" : "Hide panel"}
+              className="touch-target rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <PanelRight className="h-4 w-4" />
+            </button>
+          </div>
+          <div hidden={utilityCollapsed} className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 sm:px-6 sm:pb-6">
+            {utility}
+          </div>
         </aside>
       )}
     </div>
