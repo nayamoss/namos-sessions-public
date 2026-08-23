@@ -17,20 +17,27 @@ describe("AppLayout", () => {
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
-    act(() => root.render(
-      <ClerkProvider publishableKey={TEST_CLERK_PUBLISHABLE_KEY}>
-        <MemoryRouter>
-          <AppLayout title="Abstracts">
-            <p>Grid content</p>
-          </AppLayout>
-        </MemoryRouter>
-      </ClerkProvider>,
-    ));
+    try {
+      act(() => root.render(
+        <ClerkProvider publishableKey={TEST_CLERK_PUBLISHABLE_KEY}>
+          <MemoryRouter>
+            <AppLayout title="Abstracts">
+              <p>Grid content</p>
+            </AppLayout>
+          </MemoryRouter>
+        </ClerkProvider>,
+      ));
 
-    // No floating "Organization settings" button sitting above the event switcher.
-    expect(container.querySelector('aside button[aria-label="Organization settings"]')).not.toBeInTheDocument();
-    act(() => root.unmount());
-    container.remove();
+      // No floating "Organization settings" button sitting above the event switcher.
+      expect(container.querySelector('aside button[aria-label="Organization settings"]')).not.toBeInTheDocument();
+    } finally {
+      // A leftover ClerkProvider from an assertion that throws mid-test would trip
+      // @clerk/clerk-react's own useMaxAllowedInstancesGuard for every test after this
+      // one — a module-level singleton counter that only decrements on unmount. Cleanup
+      // must run unconditionally, not just on the happy path.
+      act(() => root.unmount());
+      container.remove();
+    }
 
     const accountMenuSource = readFileSync(join(process.cwd(), "src/components/AccountMenu.tsx"), "utf8");
     // Organization settings remain reachable from the account menu while the compact event
@@ -43,84 +50,90 @@ describe("AppLayout", () => {
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
-    act(() => root.render(
-      <ClerkProvider publishableKey={TEST_CLERK_PUBLISHABLE_KEY}>
-        <MemoryRouter>
-          <AppLayout title="Abstracts">
-            <ContentToolbar
-              ariaLabel="Abstract controls"
-              search={<input aria-label="Search abstracts" />}
-              primaryAction={<button type="button">Add Abstract</button>}
-            />
-            <p>Grid content</p>
-          </AppLayout>
-        </MemoryRouter>
-      </ClerkProvider>,
-    ));
+    try {
+      act(() => root.render(
+        <ClerkProvider publishableKey={TEST_CLERK_PUBLISHABLE_KEY}>
+          <MemoryRouter>
+            <AppLayout title="Abstracts">
+              <ContentToolbar
+                ariaLabel="Abstract controls"
+                search={<input aria-label="Search abstracts" />}
+                primaryAction={<button type="button">Add Abstract</button>}
+              />
+              <p>Grid content</p>
+            </AppLayout>
+          </MemoryRouter>
+        </ClerkProvider>,
+      ));
 
-    const shellHeader = container.querySelector<HTMLElement>("header")!;
-    const content = container.querySelector<HTMLElement>('section[aria-label="Page content"]')!;
-    const shell = container.querySelector<HTMLElement>(".mobile-safe-shell")!;
+      const shellHeader = container.querySelector<HTMLElement>("header")!;
+      const content = container.querySelector<HTMLElement>('section[aria-label="Page content"]')!;
+      const shell = container.querySelector<HTMLElement>(".mobile-safe-shell")!;
 
-    expect(shell).toHaveClass("h-dvh");
-    expect(shellHeader.querySelector("h1")).toHaveTextContent("Abstracts");
-    expect(shellHeader.querySelectorAll("h1")).toHaveLength(1);
-    expect(shellHeader.querySelector("button, input, select, a")).not.toBeInTheDocument();
-    const workspaceUtilities = content.querySelector<HTMLElement>('nav[aria-label="Workspace utilities"]')!;
-    expect(workspaceUtilities.querySelector('button[aria-label="Open command palette"]')).toBeInTheDocument();
-    expect(workspaceUtilities.querySelector('button[aria-label="Notifications"]')).toBeInTheDocument();
-    expect(shellHeader.textContent).not.toContain("Add Abstract");
-    expect(shellHeader.querySelector('input[aria-label="Search abstracts"]')).not.toBeInTheDocument();
-    expect(content.textContent).toContain("Add Abstract");
-    expect(content.querySelector('input[aria-label="Search abstracts"]')).toBeInTheDocument();
-    // Dashboard is a single link with no group header — printing "Dashboard" as both
-    // a section label and the item beneath it would just repeat the word twice.
-    const dashboardSection = [...container.querySelectorAll("nav section")].find((section) => section.querySelector('a[href="/dashboard"]'));
-    const programSection = [...container.querySelectorAll("nav section")].find((section) => section.querySelector("h2")?.textContent === "Program");
-    expect(dashboardSection?.querySelector("h2")).not.toBeInTheDocument();
-    expect(dashboardSection?.textContent).not.toContain("Speaker Tracking");
-    expect(programSection?.querySelector('a[href="/program/speakers"]')).toHaveTextContent("Speaker CRM");
-    act(() => root.unmount());
-    container.remove();
+      expect(shell).toHaveClass("h-dvh");
+      expect(shellHeader.querySelector("h1")).toHaveTextContent("Abstracts");
+      expect(shellHeader.querySelectorAll("h1")).toHaveLength(1);
+      expect(shellHeader.querySelector("button, input, select, a")).not.toBeInTheDocument();
+      const workspaceUtilities = content.querySelector<HTMLElement>('nav[aria-label="Workspace utilities"]')!;
+      expect(workspaceUtilities.querySelector('button[aria-label="Open command palette"]')).toBeInTheDocument();
+      expect(workspaceUtilities.querySelector('button[aria-label="Notifications"]')).toBeInTheDocument();
+      expect(shellHeader.textContent).not.toContain("Add Abstract");
+      expect(shellHeader.querySelector('input[aria-label="Search abstracts"]')).not.toBeInTheDocument();
+      expect(content.textContent).toContain("Add Abstract");
+      expect(content.querySelector('input[aria-label="Search abstracts"]')).toBeInTheDocument();
+      // Dashboard is a single link with no group header — printing "Dashboard" as both
+      // a section label and the item beneath it would just repeat the word twice.
+      const dashboardSection = [...container.querySelectorAll("nav section")].find((section) => section.querySelector('a[href="/dashboard"]'));
+      const programSection = [...container.querySelectorAll("nav section")].find((section) => section.querySelector("h2")?.textContent === "Program");
+      expect(dashboardSection?.querySelector("h2")).not.toBeInTheDocument();
+      expect(dashboardSection?.textContent).not.toContain("Speaker Tracking");
+      expect(programSection?.querySelector('a[href="/program/speakers"]')).toHaveTextContent("Speaker CRM");
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
   });
 
   it("reuses the dashboard shell with role-specific portal navigation", () => {
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
-    act(() => root.render(
-      <ClerkProvider publishableKey={TEST_CLERK_PUBLISHABLE_KEY}>
-        <MemoryRouter initialEntries={["/portal/submissions"]}>
-          <DashboardLayout
-            accountContext="portal"
-            homeHref="/portal"
-            navSections={[{
-              label: "Speaker portal",
-              items: [
-                { to: "/portal", label: "Home", icon: Home, end: true },
-                { to: "/portal/submissions", label: "Submissions", icon: FileText },
-              ],
-            }]}
-            title="My submissions"
-          >
-            <p>Speaker content</p>
-          </DashboardLayout>
-        </MemoryRouter>
-      </ClerkProvider>,
-    ));
+    try {
+      act(() => root.render(
+        <ClerkProvider publishableKey={TEST_CLERK_PUBLISHABLE_KEY}>
+          <MemoryRouter initialEntries={["/portal/submissions"]}>
+            <DashboardLayout
+              accountContext="portal"
+              homeHref="/portal"
+              navSections={[{
+                label: "Speaker portal",
+                items: [
+                  { to: "/portal", label: "Home", icon: Home, end: true },
+                  { to: "/portal/submissions", label: "Submissions", icon: FileText },
+                ],
+              }]}
+              title="My submissions"
+            >
+              <p>Speaker content</p>
+            </DashboardLayout>
+          </MemoryRouter>
+        </ClerkProvider>,
+      ));
 
-    expect(container.querySelector("aside nav")).toHaveTextContent("Speaker portal");
-    expect(container.querySelector('a[href="/portal/submissions"]')).toHaveTextContent("Submissions");
-    expect(container.querySelector("header h1")).toHaveTextContent("My submissions");
-    expect(container.querySelectorAll("h1")).toHaveLength(1);
-    expect(container.querySelector('section[aria-label="Page content"]')).toHaveTextContent("Speaker content");
-    expect(container.querySelector('button[aria-label="Account menu"]')).toBeInTheDocument();
-    const mobileNavigation = container.querySelector<HTMLButtonElement>('button[aria-label="Open navigation"]')!;
-    expect(mobileNavigation).toBeInTheDocument();
-    act(() => mobileNavigation.click());
-    expect(document.querySelector('[role="dialog"]')).toHaveTextContent("Speaker portal");
-    act(() => root.unmount());
-    container.remove();
+      expect(container.querySelector("aside nav")).toHaveTextContent("Speaker portal");
+      expect(container.querySelector('a[href="/portal/submissions"]')).toHaveTextContent("Submissions");
+      expect(container.querySelector("header h1")).toHaveTextContent("My submissions");
+      expect(container.querySelectorAll("h1")).toHaveLength(1);
+      expect(container.querySelector('section[aria-label="Page content"]')).toHaveTextContent("Speaker content");
+      expect(container.querySelector('button[aria-label="Account menu"]')).toBeInTheDocument();
+      const mobileNavigation = container.querySelector<HTMLButtonElement>('button[aria-label="Open navigation"]')!;
+      expect(mobileNavigation).toBeInTheDocument();
+      act(() => mobileNavigation.click());
+      expect(document.querySelector('[role="dialog"]')).toHaveTextContent("Speaker portal");
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
   });
 
   it("shows one representative destination per section in the collapsed sidebar", () => {
@@ -130,33 +143,35 @@ describe("AppLayout", () => {
     const previousCollapsed = localStorage.getItem("sessionboard.sidebarCollapsed");
     localStorage.setItem("sessionboard.sidebarCollapsed", "true");
 
-    act(() => root.render(
-      <ClerkProvider publishableKey={TEST_CLERK_PUBLISHABLE_KEY}>
-        <MemoryRouter>
-          <DashboardLayout
-            accountContext="portal"
-            homeHref="/portal"
-            navSections={[
-              { label: "Program", items: [{ to: "/portal", label: "Home", icon: Home, end: true }, { to: "/portal/submissions", label: "Submissions", icon: FileText }] },
-              { label: "Resources", items: [{ to: "/portal/resources", label: "Resources", icon: FileText }, { to: "/portal/help", label: "Help", icon: Home }] },
-            ]}
-            title="My submissions"
-          >
-            <p>Speaker content</p>
-          </DashboardLayout>
-        </MemoryRouter>
-      </ClerkProvider>,
-    ));
+    try {
+      act(() => root.render(
+        <ClerkProvider publishableKey={TEST_CLERK_PUBLISHABLE_KEY}>
+          <MemoryRouter>
+            <DashboardLayout
+              accountContext="portal"
+              homeHref="/portal"
+              navSections={[
+                { label: "Program", items: [{ to: "/portal", label: "Home", icon: Home, end: true }, { to: "/portal/submissions", label: "Submissions", icon: FileText }] },
+                { label: "Resources", items: [{ to: "/portal/resources", label: "Resources", icon: FileText }, { to: "/portal/help", label: "Help", icon: Home }] },
+              ]}
+              title="My submissions"
+            >
+              <p>Speaker content</p>
+            </DashboardLayout>
+          </MemoryRouter>
+        </ClerkProvider>,
+      ));
 
-    const links = container.querySelectorAll("aside nav a");
-    expect(links).toHaveLength(2);
-    expect(links[0]).toHaveAttribute("aria-label", "Home");
-    expect(links[1]).toHaveAttribute("aria-label", "Resources");
-
-    act(() => root.unmount());
-    if (previousCollapsed === null) localStorage.removeItem("sessionboard.sidebarCollapsed");
-    else localStorage.setItem("sessionboard.sidebarCollapsed", previousCollapsed);
-    container.remove();
+      const links = container.querySelectorAll("aside nav a");
+      expect(links).toHaveLength(2);
+      expect(links[0]).toHaveAttribute("aria-label", "Home");
+      expect(links[1]).toHaveAttribute("aria-label", "Resources");
+    } finally {
+      act(() => root.unmount());
+      if (previousCollapsed === null) localStorage.removeItem("sessionboard.sidebarCollapsed");
+      else localStorage.setItem("sessionboard.sidebarCollapsed", previousCollapsed);
+      container.remove();
+    }
   });
 
   it("renders a page utility rail beside the content surface", () => {
@@ -165,45 +180,47 @@ describe("AppLayout", () => {
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
-    act(() => root.render(
-      <ClerkProvider publishableKey={TEST_CLERK_PUBLISHABLE_KEY}>
-        <MemoryRouter>
-          <DashboardLayout
-            accountContext="portal"
-            homeHref="/portal"
-            navSections={[]}
-            title="Workspace"
-            utility={<p>Page utilities</p>}
-          >
-            <p>Primary content</p>
-          </DashboardLayout>
-        </MemoryRouter>
-      </ClerkProvider>,
-    ));
+    try {
+      act(() => root.render(
+        <ClerkProvider publishableKey={TEST_CLERK_PUBLISHABLE_KEY}>
+          <MemoryRouter>
+            <DashboardLayout
+              accountContext="portal"
+              homeHref="/portal"
+              navSections={[]}
+              title="Workspace"
+              utility={<p>Page utilities</p>}
+            >
+              <p>Primary content</p>
+            </DashboardLayout>
+          </MemoryRouter>
+        </ClerkProvider>,
+      ));
 
-    const content = container.querySelector<HTMLElement>('section[aria-label="Page content"]')!;
-    const utility = container.querySelector<HTMLElement>('aside[aria-label="Page utilities"]')!;
-    const shell = container.querySelector<HTMLElement>(".mobile-safe-shell")!;
-    const main = container.querySelector<HTMLElement>("main")!;
-    expect(utility).toHaveTextContent("Page utilities");
-    expect(content).not.toContainElement(utility);
-    expect(utility.parentElement).toBe(shell);
-    expect(main).not.toContainElement(utility);
-    expect(content.closest("main")).toBe(main);
-    expect(main).toHaveClass("lg:pl-[13.25rem]", "lg:pr-[23.25rem]");
-    expect(utility).toHaveClass("top-2.5", "h-[calc(100dvh-20px)]", "w-[22rem]");
+      const content = container.querySelector<HTMLElement>('section[aria-label="Page content"]')!;
+      const utility = container.querySelector<HTMLElement>('aside[aria-label="Page utilities"]')!;
+      const shell = container.querySelector<HTMLElement>(".mobile-safe-shell")!;
+      const main = container.querySelector<HTMLElement>("main")!;
+      expect(utility).toHaveTextContent("Page utilities");
+      expect(content).not.toContainElement(utility);
+      expect(utility.parentElement).toBe(shell);
+      expect(main).not.toContainElement(utility);
+      expect(content.closest("main")).toBe(main);
+      expect(main).toHaveClass("lg:pl-[13.25rem]", "lg:pr-[23.25rem]");
+      expect(utility).toHaveClass("top-2.5", "h-[calc(100dvh-20px)]", "w-[22rem]");
 
-    const collapseUtility = utility.querySelector<HTMLButtonElement>('button[aria-label="Hide page utilities"]')!;
-    act(() => collapseUtility.click());
-    expect(utility).toHaveClass("w-14");
-    expect(main).toHaveClass("lg:pr-[4.75rem]");
-    expect(utility.querySelector('button[aria-label="Show page utilities"]')).toBeInTheDocument();
-    expect(utility.querySelector<HTMLElement>("[hidden]")).toHaveTextContent("Page utilities");
-
-    act(() => root.unmount());
-    if (previousUtilityCollapsed === null) localStorage.removeItem("sessionboard.utilityCollapsed");
-    else localStorage.setItem("sessionboard.utilityCollapsed", previousUtilityCollapsed);
-    container.remove();
+      const collapseUtility = utility.querySelector<HTMLButtonElement>('button[aria-label="Hide page utilities"]')!;
+      act(() => collapseUtility.click());
+      expect(utility).toHaveClass("w-14");
+      expect(main).toHaveClass("lg:pr-[4.75rem]");
+      expect(utility.querySelector('button[aria-label="Show page utilities"]')).toBeInTheDocument();
+      expect(utility.querySelector<HTMLElement>("[hidden]")).toHaveTextContent("Page utilities");
+    } finally {
+      act(() => root.unmount());
+      if (previousUtilityCollapsed === null) localStorage.removeItem("sessionboard.utilityCollapsed");
+      else localStorage.setItem("sessionboard.utilityCollapsed", previousUtilityCollapsed);
+      container.remove();
+    }
   });
 
   it("keeps multi-item navigation collapsible without a redundant Configure destination", () => {
@@ -211,30 +228,32 @@ describe("AppLayout", () => {
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
-    act(() => root.render(
-      <ClerkProvider publishableKey={TEST_CLERK_PUBLISHABLE_KEY}>
-        <MemoryRouter initialEntries={["/events"]}>
-          <AppLayout title="Abstracts">
-            <p>Grid content</p>
-          </AppLayout>
-        </MemoryRouter>
-      </ClerkProvider>,
-    ));
+    try {
+      act(() => root.render(
+        <ClerkProvider publishableKey={TEST_CLERK_PUBLISHABLE_KEY}>
+          <MemoryRouter initialEntries={["/events"]}>
+            <AppLayout title="Abstracts">
+              <p>Grid content</p>
+            </AppLayout>
+          </MemoryRouter>
+        </ClerkProvider>,
+      ));
 
-    const sections = [...container.querySelectorAll("nav section")];
-    const programHeader = sections.find((section) => section.querySelector("h2")?.textContent === "Program")!;
-    const programToggle = programHeader.querySelector("button")!;
+      const sections = [...container.querySelectorAll("nav section")];
+      const programHeader = sections.find((section) => section.querySelector("h2")?.textContent === "Program")!;
+      const programToggle = programHeader.querySelector("button")!;
 
-    // No active route inside the group, so it starts collapsed.
-    expect(programToggle).toHaveAttribute("aria-expanded", "false");
-    expect(container.querySelector('[aria-label="Configure"]')).not.toBeInTheDocument();
-    expect(container.textContent).not.toContain("Configure");
+      // No active route inside the group, so it starts collapsed.
+      expect(programToggle).toHaveAttribute("aria-expanded", "false");
+      expect(container.querySelector('[aria-label="Configure"]')).not.toBeInTheDocument();
+      expect(container.textContent).not.toContain("Configure");
 
-    act(() => programToggle.click());
-    expect(programHeader.querySelector("button")).toHaveAttribute("aria-expanded", "true");
-
-    act(() => root.unmount());
-    container.remove();
+      act(() => programToggle.click());
+      expect(programHeader.querySelector("button")).toHaveAttribute("aria-expanded", "true");
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
   });
 
   it("renders organization members in a table with explicit status and role columns", async () => {
@@ -265,27 +284,30 @@ describe("AppLayout", () => {
       },
     } as unknown as Repository;
 
-    await act(async () => {
-      root.render(
-        <ClerkProvider publishableKey={TEST_CLERK_PUBLISHABLE_KEY}>
-          <MemoryRouter>
-            <RepoContext.Provider value={repo}>
-              <OrganizationSettings />
-            </RepoContext.Provider>
-          </MemoryRouter>
-        </ClerkProvider>,
-      );
-    });
+    try {
+      await act(async () => {
+        root.render(
+          <ClerkProvider publishableKey={TEST_CLERK_PUBLISHABLE_KEY}>
+            <MemoryRouter>
+              <RepoContext.Provider value={repo}>
+                <OrganizationSettings />
+              </RepoContext.Provider>
+            </MemoryRouter>
+          </ClerkProvider>,
+        );
+      });
 
-    const table = container.querySelector('table[aria-label="Organization team members"]');
-    expect(table).toBeInTheDocument();
-    expect(table?.querySelectorAll('th[scope="col"]')).toHaveLength(4);
-    expect(table).toHaveTextContent("Member");
-    expect(table).toHaveTextContent("Status");
-    expect(table).toHaveTextContent("Role");
-    expect(table).toHaveTextContent("Pending invite");
-    expect(table).toHaveTextContent("Active");
-    act(() => root.unmount());
-    container.remove();
+      const table = container.querySelector('table[aria-label="Organization team members"]');
+      expect(table).toBeInTheDocument();
+      expect(table?.querySelectorAll('th[scope="col"]')).toHaveLength(4);
+      expect(table).toHaveTextContent("Member");
+      expect(table).toHaveTextContent("Status");
+      expect(table).toHaveTextContent("Role");
+      expect(table).toHaveTextContent("Pending invite");
+      expect(table).toHaveTextContent("Active");
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
   });
 });

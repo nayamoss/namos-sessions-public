@@ -437,15 +437,15 @@ function DashboardLayoutInner({
       >
         <header className="flex h-14 shrink-0 items-center gap-3 pl-14 pr-4 md:pl-16 md:pr-4 lg:px-3">
           <div className="min-w-0 flex-1"><PageHeader title={title} /></div>
-          {bodyToolbar && contentVariant !== "conversation" && (
-            <nav aria-label="Workspace utilities" className="flex shrink-0 items-center gap-2">
-              {bodyToolbar}
-            </nav>
-          )}
         </header>
         <div className="flex min-h-0 min-w-0 flex-1 px-3 pb-3 md:px-4 md:pb-4">
           <PageContentSurface variant={contentVariant} className="min-w-0">
             <div className={cn("min-w-0 flex-1", contentVariant === "conversation" ? "flex min-h-0 overflow-hidden" : "p-4 md:p-5 lg:overflow-y-auto")}>
+              {bodyToolbar && contentVariant !== "conversation" && (
+                <nav aria-label="Workspace utilities" className="mb-3 flex shrink-0 items-center justify-end gap-2">
+                  {bodyToolbar}
+                </nav>
+              )}
               {children}
             </div>
             {detail && (
