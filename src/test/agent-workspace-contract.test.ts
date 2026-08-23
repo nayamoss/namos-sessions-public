@@ -9,7 +9,7 @@ const composer = readFileSync("src/components/agent/AgentComposer.tsx", "utf8");
 
 describe("Operations Agent workspace", () => {
   it("uses one live workspace from both organizer entry points", () => {
-    expect(dashboard).toContain("<AgentWorkspace />");
+    expect(dashboard).toMatch(/<AgentWorkspace(?:\s+onVoiceOpen=\{[^}]+\})?\s*\/>/);
     expect(operationsRoute).toContain("<AgentWorkspace />");
     expect(dashboard).not.toContain("ComposerStub");
     expect(dashboard).not.toContain("not available yet");
