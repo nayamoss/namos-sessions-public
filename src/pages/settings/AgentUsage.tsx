@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { useCurrentEvent } from "@/components/EventContext";
 import { ContentToolbar } from "@/components/shared/ContentToolbar";
+import { DataGrid } from "@/components/shared/DataGrid";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Card } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
@@ -133,32 +134,25 @@ function ModelBreakdownChart({ stats }: { stats: AgentUsageStats }) {
 
 function ProviderTable({ stats }: { stats: AgentUsageStats }) {
   if (stats.providerBreakdown.length === 0) return null;
+  const rows = stats.providerBreakdown.map((row) => ({ ...row, id: row.provider }));
   return (
     <Card className="p-4">
       <p className="text-sm font-semibold">Provider details</p>
-      <div className="mt-3 overflow-x-auto">
-        <table className="w-full min-w-[520px] text-left text-sm">
-          <thead>
-            <tr className="text-xs font-medium text-muted-foreground">
-              <th className="pb-2 pr-4">Provider</th>
-              <th className="pb-2 pr-4">Requests</th>
-              <th className="pb-2 pr-4">Input tokens</th>
-              <th className="pb-2 pr-4">Output tokens</th>
-              <th className="pb-2">Billable</th>
-            </tr>
-          </thead>
-          <tbody>
-            {stats.providerBreakdown.map((row) => (
-              <tr key={row.provider} className="text-sm">
-                <td className="py-1.5 pr-4 font-medium capitalize">{row.provider}</td>
-                <td className="py-1.5 pr-4 tabular-nums">{row.requests.toLocaleString()}</td>
-                <td className="py-1.5 pr-4 tabular-nums">{row.inputTokens.toLocaleString()}</td>
-                <td className="py-1.5 pr-4 tabular-nums">{row.outputTokens.toLocaleString()}</td>
-                <td className="py-1.5 tabular-nums">{row.billableRequests.toLocaleString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="mt-3">
+        <DataGrid
+          rows={rows}
+          columns={[
+            { key: "provider", header: "Provider", cell: (row) => <span className="font-medium capitalize">{row.provider}</span> },
+            { key: "requests", header: "Requests", align: "right", cell: (row) => <span className="tabular-nums">{row.requests.toLocaleString()}</span> },
+            { key: "inputTokens", header: "Input tokens", align: "right", cell: (row) => <span className="tabular-nums">{row.inputTokens.toLocaleString()}</span> },
+            { key: "outputTokens", header: "Output tokens", align: "right", cell: (row) => <span className="tabular-nums">{row.outputTokens.toLocaleString()}</span> },
+            { key: "billableRequests", header: "Billable", align: "right", cell: (row) => <span className="tabular-nums">{row.billableRequests.toLocaleString()}</span> },
+          ]}
+          empty="No provider usage in this range."
+          rowActivation="none"
+          ariaLabel="AI provider usage"
+          appearance="embedded"
+        />
       </div>
     </Card>
   );
@@ -215,11 +209,11 @@ function LoadingState() {
   return (
     <div aria-busy="true" aria-label="Loading AI usage" className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-24 animate-pulse rounded-xl bg-muted" />)}
+        {Array.from({ length: 4 }).map((_, i) => <Card key={i} className="h-24 animate-pulse" />)}
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
-        <div className="h-64 animate-pulse rounded-xl bg-muted" />
-        <div className="h-64 animate-pulse rounded-xl bg-muted" />
+        <Card className="h-64 animate-pulse" />
+        <Card className="h-64 animate-pulse" />
       </div>
     </div>
   );
