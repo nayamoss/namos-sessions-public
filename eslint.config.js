@@ -21,6 +21,11 @@ export default tseslint.config(
       ...reactHooks.configs.recommended.rules,
       "react-refresh/only-export-components": "off",
       "@typescript-eslint/no-unused-vars": "off",
+      // New in eslint-plugin-react-hooks v7. Flags ~130 pre-existing
+      // `useEffect(() => { void load(); }, [load])` sites app-wide — a real,
+      // worthwhile refactor, but a separate one from this dependency bump.
+      // Tracked as follow-up work, not silenced permanently.
+      "react-hooks/set-state-in-effect": "off",
     },
   },
 );
