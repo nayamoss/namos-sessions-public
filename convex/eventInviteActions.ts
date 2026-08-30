@@ -179,7 +179,7 @@ export const remove = action({
       try {
         await revokeClerkInvitation(target.clerkInvitationId, secretKey);
       } catch (cause) {
-        throw new Error(`Could not revoke the Clerk invitation: ${clerkFailure(cause, "Unknown Clerk error.")}`);
+        throw new Error(`Could not revoke the Clerk invitation: ${clerkFailure(cause, "Unknown Clerk error.")}`, { cause });
       }
     }
     await ctx.runMutation(internal.eventMembers.removeAfterClerkRevoke, {

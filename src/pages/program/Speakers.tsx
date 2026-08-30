@@ -1549,7 +1549,7 @@ export default function Speakers() {
   const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
   const searchRef = useRef<HTMLInputElement>(null);
   const addButtonRef = useRef<HTMLButtonElement>(null);
-  const rowToRestoreFocus = useRef<string>();
+  const rowToRestoreFocus = useRef<string>(undefined);
 
   const query = params.get("q") ?? "";
   const view = parseSpeakerOperationsView(params.get("view"));

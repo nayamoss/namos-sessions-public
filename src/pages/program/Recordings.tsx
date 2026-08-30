@@ -63,7 +63,7 @@ function RecordingDetailPane({ eventId, agendaItemId, onClose, onChanged }: { ev
   const [uploadPercent, setUploadPercent] = useState<number>();
   const [overrideReason, setOverrideReason] = useState("");
   const [detachCandidate, setDetachCandidate] = useState<SessionRecording>();
-  const uploadRequest = useRef<XMLHttpRequest>();
+  const uploadRequest = useRef<XMLHttpRequest>(undefined);
   const fileRef = useRef<HTMLInputElement>(null);
   const load = useCallback(async () => {
     setLoading(true); setError(undefined);

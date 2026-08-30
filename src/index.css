@@ -1,8 +1,12 @@
 @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Tailwind v4: @tailwind base/components/utilities was removed in favor of a single
+   @import, and JS config (tailwind.config.ts) is no longer auto-detected — it must be
+   loaded explicitly via @config so the existing theme extensions (colors, fontSize,
+   keyframes, etc.) keep applying instead of silently falling back to Tailwind's
+   defaults. */
+@import "tailwindcss";
+@config "../tailwind.config.ts";
 
 /* Compact density: 14px root (87.5% of the 16px browser default) matches the
    UI-chrome baseline of dense SaaS dashboards (Linear, Notion, Airtable,

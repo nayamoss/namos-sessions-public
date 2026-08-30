@@ -1,4 +1,4 @@
-import { AtSign, Bot, Mail, Slack } from "lucide-react";
+import { AtSign, Bot, Mail, MessageSquare } from "lucide-react";
 import { siAirtable, siNotion, siResend, type SimpleIcon } from "simple-icons";
 import { cn } from "@/lib/utils";
 
@@ -34,6 +34,22 @@ const iconDefinitions: Partial<Record<IntegrationProvider, IconDefinition>> = {
     surfaceClassName: "bg-muted",
   },
 };
+
+// Neither lucide-react (dropped all brand/logo icons in its 1.x major) nor simple-icons
+// (dropped the Slack mark specifically) ships a Slack logo any more, so there's no verified
+// SVG path to draw here. Stand in with a generic chat icon in Slack's brand purple until a
+// real Slack mark source is picked — don't hand-copy path data for a trademarked logo from
+// memory into this file.
+function SlackMark() {
+  return (
+    <MessageSquare
+      className="h-5 w-5 text-[#611f69] dark:text-[#e5b7ea]"
+      fill="currentColor"
+      strokeWidth={0}
+      aria-hidden="true"
+    />
+  );
+}
 
 function SimpleBrandMark({ definition }: { definition: IconDefinition }) {
   const { icon } = definition;
@@ -110,7 +126,7 @@ export function IntegrationBrandIcon({
       ) : provider === "operations_agent" ? (
         <Bot className={cn("text-primary", size === "small" ? "h-4 w-4" : "h-5 w-5")} />
       ) : provider === "slack" ? (
-        <Slack className={cn("text-[#611f69] dark:text-[#e5b7ea]", size === "small" ? "h-4 w-4" : "h-5 w-5")} />
+        <SlackMark />
       ) : definition ? (
         <SimpleBrandMark definition={definition} />
       ) : null}

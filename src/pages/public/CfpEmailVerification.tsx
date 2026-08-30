@@ -65,7 +65,7 @@ export function useCfpEmailVerification(email: string) {
       try {
         const attempt = await signIn.create({ identifier: trimmed });
         const factor = attempt.supportedFirstFactors?.find((candidate) => candidate.strategy === "email_code");
-        if (!factor || !("emailAddressId" in factor)) throw new Error("This email can't be verified by code.");
+        if (!factor || !("emailAddressId" in factor)) throw new Error("This email can't be verified by code.", { cause });
         await signIn.prepareFirstFactor({ strategy: "email_code", emailAddressId: factor.emailAddressId });
         setUsingSignIn(true);
         setStatus("code-sent");

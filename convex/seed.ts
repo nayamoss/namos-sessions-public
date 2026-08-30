@@ -147,10 +147,9 @@ export const demo = internalMutation({
       }
       return ctx.db.insert("submissions", { eventId, formId: cfpForm!._id, speakerId: speakers[index % speakers.length], title, status: statuses[index % statuses.length], answers, submittedAt: seededAt, createdAt: seededAt, updatedAt: now });
     }));
-    let closedSubmission = currentSubmissions.find((submission) => submission.title === "Closed-form demo proposal");
+    const closedSubmission = currentSubmissions.find((submission) => submission.title === "Closed-form demo proposal");
     if (!closedSubmission) {
-      const id = await ctx.db.insert("submissions", { eventId, formId: closedForm._id, speakerId: speakers[0], title: "Closed-form demo proposal", status: "pending", answers: { email: "speaker-1@seed.invalid", fieldValues: { [String(titleField)]: "Closed-form demo proposal", [String(formatField)]: "Talk", [String(abstractField)]: "A proposal that demonstrates the closed-submissions lock.", [String(audienceField)]: "Program reviewers" }, fieldLabels: { [String(titleField)]: "Session title", [String(formatField)]: "Session format", [String(abstractField)]: "Abstract", [String(audienceField)]: "Audience" }, participantFieldLabels: {}, participantValues: [] }, submittedAt: seededAt, createdAt: seededAt, updatedAt: now });
-      closedSubmission = await ctx.db.get(id);
+      await ctx.db.insert("submissions", { eventId, formId: closedForm._id, speakerId: speakers[0], title: "Closed-form demo proposal", status: "pending", answers: { email: "speaker-1@seed.invalid", fieldValues: { [String(titleField)]: "Closed-form demo proposal", [String(formatField)]: "Talk", [String(abstractField)]: "A proposal that demonstrates the closed-submissions lock.", [String(audienceField)]: "Program reviewers" }, fieldLabels: { [String(titleField)]: "Session title", [String(formatField)]: "Session format", [String(abstractField)]: "Abstract", [String(audienceField)]: "Audience" }, participantFieldLabels: {}, participantValues: [] }, submittedAt: seededAt, createdAt: seededAt, updatedAt: now });
     }
 
     const currentEvaluations = await ctx.db.query("evaluations").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect();
