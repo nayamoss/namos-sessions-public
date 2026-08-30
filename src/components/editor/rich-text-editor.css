@@ -1,3 +1,8 @@
+/* Tailwind v4: @apply in a CSS file that isn't the main entry needs an explicit
+   @reference to the stylesheet that defines the theme (custom colors, etc.), or
+   those utility classes resolve as unknown. */
+@reference "../../index.css";
+
 .tiptap {
   @apply w-full min-h-64 p-3 rounded bg-white;
   outline: none;

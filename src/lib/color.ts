@@ -15,7 +15,7 @@ export function hexToHslTriplet(hex: string): string | null {
   if (maximum === minimum) return `0 0% ${Math.round(lightness * 100)}%`;
   const delta = maximum - minimum;
   const saturation = delta / (1 - Math.abs(2 * lightness - 1));
-  let hue = 0;
+  let hue: number;
   if (maximum === red) hue = ((green - blue) / delta) % 6;
   else if (maximum === green) hue = (blue - red) / delta + 2;
   else hue = (red - green) / delta + 4;

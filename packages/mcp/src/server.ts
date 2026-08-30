@@ -37,14 +37,14 @@ export async function buildServer(client: Client): Promise<McpServer> {
   try {
     events = await client.events.list();
   } catch (error) {
-    throw new Error(`NAMOS_SESSIONS_TOKEN is invalid, revoked, or lacks events:read: ${messageFor(error)}`);
+    throw new Error(`NAMOS_SESSIONS_TOKEN is invalid, revoked, or lacks events:read: ${messageFor(error)}`, { cause: error });
   }
   const eventId = events[0]?.id ?? "mcp-scope-probe";
 
   const readable = new Set<ResourceName>(["events"]);
   await Promise.all((Object.keys(resourceScopes) as ResourceName[]).filter((name) => name !== "events").map(async (name) => {
     try { await readResource(client, name, eventId); readable.add(name); }
-    catch (error) { if (!isForbidden(error)) throw new Error(`Unable to initialize ${name} resource: ${messageFor(error)}`); }
+    catch (error) { if (!isForbidden(error)) throw new Error(`Unable to initialize ${name} resource: ${messageFor(error)}`, { cause: error }); }
   }));
 
   // A deliberately nonexistent id is safe: the REST handler checks scope before lookup and
@@ -54,9 +54,10 @@ export async function buildServer(client: Client): Promise<McpServer> {
     await client.submissions.updateStatus("__namos_mcp_scope_probe__", "draft", { idempotencyKey: randomUUID() });
     canWrite = true;
   } catch (error) {
-    if (isForbidden(error)) canWrite = false;
-    else if (error instanceof NamosSessionsApiError && error.status === 404) canWrite = true;
-    else throw new Error(`Unable to initialize update_submission_status tool: ${messageFor(error)}`);
+    if (isForbidden(error)) {
+      // already false
+    } else if (error instanceof NamosSessionsApiError && error.status === 404) canWrite = true;
+    else throw new Error(`Unable to initialize update_submission_status tool: ${messageFor(error)}`, { cause: error });
   }
 
   const server = new McpServer({ name: "namos-sessions", version: "0.1.0" });

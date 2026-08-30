@@ -34,7 +34,7 @@ export function SettingsModalProvider({ children }: { children: ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const liveEventSlug = useOptionalCurrentEvent()?.event.slug;
-  const lastEventSlug = useRef<string>();
+  const lastEventSlug = useRef<string>(undefined);
   if (liveEventSlug) {
     lastEventSlug.current = liveEventSlug;
     sessionStorage.setItem(LAST_EVENT_SLUG_KEY, liveEventSlug);
@@ -43,7 +43,7 @@ export function SettingsModalProvider({ children }: { children: ReactNode }) {
   const initialTab = settingsTabFromPath(location.pathname);
   const [tab, setTab] = useState<SettingsTabId>(initialTab ?? "event");
   const [open, setOpen] = useState(Boolean(initialTab));
-  const returnPath = useRef<string>();
+  const returnPath = useRef<string>(undefined);
   const hasUnsavedChanges = useRef(false);
   const setHasUnsavedChanges = useCallback((value: boolean) => {
     hasUnsavedChanges.current = value;

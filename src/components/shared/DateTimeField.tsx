@@ -53,7 +53,7 @@ export const DateTimeField = forwardRef<HTMLButtonElement, {
           </Button>
         </PopoverTrigger>
         <PopoverContent data-onboarding-popover="true" className="w-auto rounded-[12px] border-0 p-0 shadow-none" align="start">
-          <Calendar mode="single" selected={Number.isNaN(date.getTime()) ? undefined : date} onSelect={applyDate} initialFocus />
+          <Calendar mode="single" selected={Number.isNaN(date.getTime()) ? undefined : date} onSelect={applyDate} autoFocus />
         </PopoverContent>
       </Popover>
       <Input

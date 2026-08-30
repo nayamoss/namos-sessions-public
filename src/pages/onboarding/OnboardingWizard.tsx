@@ -170,7 +170,7 @@ export default function OnboardingWizard() {
   const [nameTouched, setNameTouched] = useState(false);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string>();
-  const avatarPreviewRef = useRef<string>();
+  const avatarPreviewRef = useRef<string>(undefined);
   avatarPreviewRef.current = avatarPreview;
   const stepRef = useRef<HTMLDivElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);

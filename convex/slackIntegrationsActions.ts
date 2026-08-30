@@ -96,7 +96,7 @@ export const testNotification = action({
       return { sent: true as const, slackMessageTs: result.ts };
     } catch (error) {
       if (error instanceof SlackApiError && !error.retryable) await ctx.runMutation(internal.slackIntegrations.markWorkspaceError, { workspaceId: workspace._id, error: safeSlackError(error) });
-      throw new Error("The Slack test message could not be delivered. Check the workspace and channel connection.");
+      throw new Error("The Slack test message could not be delivered. Check the workspace and channel connection.", { cause: error });
     }
   },
 });
