@@ -33,7 +33,14 @@ function toConvexError(cause: unknown): ConvexError<string> {
   return new ConvexError("Something went wrong.");
 }
 
+// `Handler`'s params are deliberately `any`, not `unknown`: this wraps every differently-shaped
+// query/mutation handler in the codebase, and a narrower constraint here would make handlers
+// typed against their own specific ctx/args (the overwhelming majority) fail to satisfy it — the
+// real type safety for callers comes from the `as typeof rawQuery`/`as typeof withDemoGuard`
+// casts below, not from this generic constraint.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- see comment above
 function withFriendlyErrors<Handler extends (ctx: any, args: any) => any>(handler: Handler): Handler {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- forwards to `handler` untouched, whatever its real ctx/args type is
   return (async (ctx: any, args: any) => {
     try {
       return await handler(ctx, args);
@@ -43,6 +50,10 @@ function withFriendlyErrors<Handler extends (ctx: any, args: any) => any>(handle
   }) as Handler;
 }
 
+// `config` accepts either of Convex's own overloaded `query()` shapes (a bare handler function,
+// or a config object with validators + handler) — `any` sidesteps re-deriving that union here;
+// the exported type is `typeof rawQuery`, so callers still get Convex's real overloaded signature.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- see comment above
 export const query: typeof rawQuery = ((config: any) =>
   typeof config === "function"
     ? rawQuery(withFriendlyErrors(config))
@@ -58,6 +69,7 @@ const withDemoGuard = customMutation(baseMutation, customCtx(async (ctx) => {
   return {};
 }));
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- see comment above
 export const mutation: typeof withDemoGuard = ((config: any) =>
   withDemoGuard({
     ...config,
