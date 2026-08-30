@@ -13,6 +13,18 @@ review, scheduling, and communications.
 > primary application repository. Instructions for deploying **your own copy** of this repo
 > live here — see [`docs/deployment/one-click.md`](docs/deployment/one-click.md).
 
+## Deploy your own copy
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/nayamoss/namos-sessions-public)
+[![Deploy to DO](https://www.deploytodo.com/do-btn-blue.svg)](https://cloud.digitalocean.com/apps/new?repo=https://github.com/nayamoss/namos-sessions-public/tree/main)
+[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/nayamoss/namos-sessions-public)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fnayamoss%2Fnamos-sessions-public&env=CONVEX_DEPLOY_KEY%2CVITE_CLERK_PUBLISHABLE_KEY&envDescription=Add%20a%20production%20Convex%20deploy%20key%20and%20your%20Clerk%20publishable%20key.&envLink=https%3A%2F%2Fgithub.com%2Fnayamoss%2Fnamos-sessions-public%2Fblob%2Fmain%2Fdocs%2Fdeployment%2Fone-click.md)
+
+Railway support is configured in [`railway.json`](railway.json), but its one-click button remains
+unavailable until a maintainer publishes the template. The generated
+`https://railway.com/new/template/<template-id>` URL belongs here and in the deployment guide;
+see the [provider-specific setup and security requirements](docs/deployment/one-click.md).
+
 ## What it includes
 
 **Event setup**
